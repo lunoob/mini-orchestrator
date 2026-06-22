@@ -244,11 +244,13 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   "maxReviewRounds": 4,
   "implementer": {
     "name": "implementer",
-    "command": "cursor --model composer"
+    "command": "cursor --model composer",
+    "agentReadyPattern": "Cursor Agent"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.5"
+    "command": "codex --model gpt-5.5",
+    "agentReadyPattern": "codex"
   },
   "prompts": {
     "implement": "./prompts/implement.md",
@@ -271,6 +273,10 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 ```
 
 `prompts.controllerImplementer` 与 `prompts.controllerReReview` 为可选项，省略时使用上述默认路径。
+
+`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
+
+常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
 
 `skills.*` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。
 
@@ -310,7 +316,7 @@ npm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE`，仅以 `herdr agent wait --status idle` 判断任务结束。
+- 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE`，以 `herdr agent wait --status working` 确认任务被接收、再以 `idle` 判断任务结束。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区与 planning 文件。
 - 当前为整次实现的 review 轮询，尚未拆分为 superpowers 的 per-task 门禁。

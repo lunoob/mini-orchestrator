@@ -4,11 +4,13 @@
   "maxReviewRounds": 4,
   "implementer": {
     "name": "implementer",
-    "command": "cursor --model composer"
+    "command": "cursor --model composer",
+    "agentReadyPattern": "Cursor Agent"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.5"
+    "command": "codex --model gpt-5.5",
+    "agentReadyPattern": "codex"
   },
   "prompts": {
     "implement": "./prompts/implement.md",

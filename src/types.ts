@@ -1,4 +1,6 @@
 export type AgentConfig = {
+  /** herdr wait output --match：等待启动输出中出现该文本后再发送首条 prompt */
+  agentReadyPattern?: string
   command: string
   name: string
 }

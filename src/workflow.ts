@@ -5,11 +5,12 @@ import { isFlagEnabled } from "./cli.js"
 import { loadConfig, loadImplementSkills, loadPrompts, loadReviseSkills } from "./config.js"
 import { getHeadShaSafe, getReviewBaselineSha, isGitRepo } from "./git.js"
 import {
+  agentWaitOptions,
   getCurrentPane,
   readAgentOutput,
-  sendTask,
+  sendTaskAndWait,
   startAgent,
-  waitForIdle,
+  waitForAgentReady,
 } from "./herdr.js"
 import {
   parseNeedsCheckAction,
@@ -106,7 +107,7 @@ const sendControllerRevise = async (
   controllerNotes: string,
   reviewOutput: string,
 ) => {
-  await sendTask(
+  await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.controllerImplementer, {
       controllerNotes,
@@ -114,8 +115,8 @@ const sendControllerRevise = async (
       reviseSkills: runtime.reviseSkills,
       round: String(round),
     }),
+    agentWaitOptions(runtime.config.implementer),
   )
-  await waitForIdle(runtime.implementerPane)
 }
 
 const conductReview = async (
@@ -148,8 +149,11 @@ const conductReview = async (
           specPath: runtime.config.specPath,
         })
 
-  await sendTask(runtime.reviewerPane, prompt)
-  await waitForIdle(runtime.reviewerPane)
+  await sendTaskAndWait(
+    runtime.reviewerPane,
+    prompt,
+    agentWaitOptions(runtime.config.reviewer),
+  )
 
   const reviewOutput = await readAgentOutput(runtime.reviewerPane, 280)
   printSection(`Review Round ${round}`, reviewOutput)
@@ -210,15 +214,15 @@ const sendReviseAfterFail = async (
     console.log("Review failed — sending back to implementer.")
   }
 
-  await sendTask(
+  await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.revise, {
       reviewOutput,
       reviseSkills: runtime.reviseSkills,
       round: String(round),
     }),
+    agentWaitOptions(runtime.config.implementer),
   )
-  await waitForIdle(runtime.implementerPane)
 }
 
 const runReviewLoop = async (
@@ -369,12 +373,16 @@ export const runWorkflow = async (args: ParsedArgs) => {
   }
 
   const implementerPane = await startAgent(config.projectDir, config.implementer)
+  await waitForAgentReady(implementerPane, agentWaitOptions(config.implementer))
+
   const reviewerPane = reuseCurrentPane
     ? await getCurrentPane()
     : await startAgent(config.projectDir, config.reviewer)
 
   if (reuseCurrentPane) {
     console.log(`Reusing current pane as reviewer: ${reviewerPane}`)
+  } else {
+    await waitForAgentReady(reviewerPane, agentWaitOptions(config.reviewer))
   }
 
   const runtime: WorkflowRuntime = {
@@ -389,15 +397,15 @@ export const runWorkflow = async (args: ParsedArgs) => {
     reviseSkills,
   }
 
-  await sendTask(
+  await sendTaskAndWait(
     implementerPane,
     render(prompts.implement, {
       implementSkills,
       maxReviewRounds: String(config.maxReviewRounds),
       specPath: config.specPath,
     }),
+    agentWaitOptions(config.implementer),
   )
-  await waitForIdle(implementerPane)
 
   await runReviewLoop(runtime, configPath, 1, reuseCurrentPane)
 }
