@@ -29,7 +29,11 @@
 - **Extra：** spec 未要求的多做功能、过度设计
 - **Misunderstood：** 做了错误的东西或错误方式
 
-若某项无法仅从 diff 验证，标为 ⚠️ 并说明 controller 应核查什么。
+若某项无法仅从 diff 验证，在 **Spec Compliance** 下单独列出：
+
+- ⚠️ Cannot verify from diff: [项 + controller 应核查什么]
+
+**这不是实现缺陷**，不代表 implementer 必须改代码；编排器会暂停并交由 controller / 人类核查。
 
 ## Part 2: Code Quality（代码质量）
 
@@ -83,5 +87,10 @@
 
 ## 状态信号（编排器读取）
 
-- **通过**（spec ✅ 且 quality Approved，且无 Critical/Important 问题）：输出 `STATUS: REVIEW_PASS`
-- **不通过**：输出 `STATUS: REVIEW_FAIL`
+按下列优先级选择**一个**状态（互斥）：
+
+- **通过**（spec ✅、quality Approved、无 Critical/Important、无 ⚠️ Cannot verify）：`STATUS: REVIEW_PASS`
+- **需人工核查**（无 Critical/Important、spec 未 ❌、quality 非 Needs fixes，但存在 ⚠️ Cannot verify）：`STATUS: REVIEW_NEEDS_CHECK`
+- **不通过**（存在 Missing/Extra/Misunderstood、Critical、Important，或 quality Needs fixes）：`STATUS: REVIEW_FAIL`
+
+若同时有需修复项与 ⚠️ 项，输出 `STATUS: REVIEW_FAIL`（修复项优先）。

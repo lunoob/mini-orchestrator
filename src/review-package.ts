@@ -1,34 +1,48 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { runGitCommand } from "./git.js"
+import { GIT_EMPTY_TREE_SHA, runGitCommand } from "./git.js"
 
 export const generateReviewPackage = async (
   projectDir: string,
-  baseSha: string,
-  headSha: string,
+  baseSha: string | undefined,
+  headSha: string | undefined,
   round: number,
 ) => {
   const dir = path.join(projectDir, ".orchestrator")
   await mkdir(dir, { recursive: true })
 
   const filePath = path.join(dir, `review-round-${round}-${Date.now()}.md`)
+  const baseLabel = baseSha ?? "(workflow start — no commits yet)"
+  const headLabel = headSha ?? "(no HEAD)"
   const sections: string[] = [
     `# Review Package — Round ${round}`,
     "",
-    `Base: ${baseSha}`,
-    `Head: ${headSha}`,
+    `Base: ${baseLabel}`,
+    `Head: ${headLabel}`,
     "",
   ]
 
-  const log = await runGitCommand(projectDir, ["log", "--oneline", `${baseSha}..${headSha}`])
-  sections.push("## Commits", "", log || "(no commits in range)", "")
+  if (headSha) {
+    const effectiveBase = baseSha ?? GIT_EMPTY_TREE_SHA
+    const range = `${effectiveBase}..${headSha}`
 
-  const stat = await runGitCommand(projectDir, ["diff", "--stat", `${baseSha}..${headSha}`])
-  sections.push("## Diff Stat", "", "```", stat || "(empty)", "```", "")
+    const log = await runGitCommand(projectDir, ["log", "--oneline", range])
+    sections.push("## Commits", "", log || "(no commits in range)", "")
 
-  const diff = await runGitCommand(projectDir, ["diff", "-U10", `${baseSha}..${headSha}`])
-  sections.push("## Diff", "", "```diff", diff || "(empty)", "```", "")
+    const stat = await runGitCommand(projectDir, ["diff", "--stat", range])
+    sections.push("## Diff Stat", "", "```", stat || "(empty)", "```", "")
+
+    const diff = await runGitCommand(projectDir, ["diff", "-U10", range])
+    sections.push("## Diff", "", "```diff", diff || "(empty)", "```", "")
+  } else {
+    sections.push(
+      "## Commits",
+      "",
+      "(no commits — implementer may have only uncommitted changes)",
+      "",
+    )
+  }
 
   const status = await runGitCommand(projectDir, ["status", "--porcelain"])
   if (status) {

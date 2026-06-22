@@ -30,6 +30,10 @@ description: 收到 code review 反馈后、动手修改前使用——要求技
 | **Important** | 本轮必须修，再输出 `STATUS: IMPLEMENT_DONE` |
 | **Minor** | 顺手就修；否则记入 `progress.md` 留待后续 |
 
+## ⚠️ Cannot verify from diff
+
+这类项表示 reviewer **证据不足**，不是代码缺陷清单。不要为它们盲目改代码；若编排器因 `REVIEW_NEEDS_CHECK` 暂停，应等待 controller / 人类补充核查后再继续。
+
 ## 可以 Push Back 的情况
 
 - 建议会破坏现有功能

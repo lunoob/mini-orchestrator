@@ -49,11 +49,20 @@ flowchart LR
     B --> C[生成 review package]
     C --> D[Reviewer 双 verdict 审查]
     D -->|REVIEW_PASS| E[完成]
+    D -->|REVIEW_NEEDS_CHECK| H[暂停 — 人工/controller 核查]
     D -->|REVIEW_FAIL| F[Implementer 按优先级修复]
     F --> B
 ```
 
-每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包（commit 列表 + stat + 完整 diff + 未提交变更），reviewer **先读该文件**再审查，避免把大段 diff 粘贴进 orchestrator context。
+每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包。基线为工作流启动时的 `HEAD`（若当时尚无 commit，则在 review 时从空树对比到当前 `HEAD`）。reviewer **先读该文件**再审查。
+
+### 审查结果（三种）
+
+| 状态 | 含义 | 编排器行为 |
+|------|------|------------|
+| `REVIEW_PASS` | spec ✅、quality Approved、无阻塞项、无可核查 ⚠️ | 结束 |
+| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | **暂停**，抛错并输出 ⚠️ 清单，不打回 implementer |
+| `REVIEW_FAIL` | 存在需修复项（spec ❌、quality Needs fixes、Critical/Important） | 发回 implementer revise |
 
 ### 双 Verdict
 
@@ -198,7 +207,8 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 ## 当前限制
 
-- 通过 `STATUS: REVIEW_PASS` / `STATUS: REVIEW_FAIL` 及结构化双 verdict 判断流程。
-- 非 git 项目无法生成 review package，reviewer 将审查工作区与 planning 文件。
+- 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程。
+- `REVIEW_NEEDS_CHECK` 会终止工作流并输出 reviewer 的 ⚠️ 清单，需人工或 controller 介入后继续。
+- 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区与 planning 文件。
 - 当前为整次实现的 review 轮询，尚未拆分为 superpowers 的 per-task 门禁。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

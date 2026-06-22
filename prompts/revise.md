@@ -1,4 +1,4 @@
-第 {{round}} 轮 review 未通过。
+第 {{round}} 轮 review 未通过（存在需 implementer 修复的 Critical / Important 或 spec / quality 问题）。
 
 请先读取 `task_plan.md` 与 `progress.md` 恢复进度，再按下方反馈修改。
 
