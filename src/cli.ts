@@ -5,12 +5,14 @@ import type { ParsedArgs } from "./types.js"
 export const wantsHelp = (argv: string[]) => argv.includes("--help") || argv.includes("-h")
 
 export const printHelp = () => {
-  console.log(`Usage: run-post-spec.ts --config <path> [options]
+  console.log(`Usage:
+  run-post-spec.ts --config <path> [options]
+  run-post-spec.ts --resume-from <path> --needs-check-action <action> [options]
 
 在 Herdr pane 内串起 implementer 与 reviewer agent 工作流。
 
 Options:
-  --config <path>           workflow 配置文件路径（必填）
+  --config <path>           workflow 配置文件路径（首次启动必填；resume 时可省略）
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --specPath <path>         spec 文件路径，覆盖配置中的 specPath
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
@@ -22,7 +24,8 @@ Options:
   -h, --help                显示此帮助信息
 
 CLI 参数优先级高于 workflow 配置文件中的同名字段。
-至少需要为 projectDir、specPath 各提供一种来源（配置或 CLI）。
+首次启动时，至少需要为 projectDir、specPath 各提供一种来源（配置或 CLI）。
+resume 时可从 checkpoint 读取 configPath，因此可省略 --config。
 
 Examples:
   npx tsx run-post-spec.ts --config workflow.local.json

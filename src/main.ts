@@ -14,7 +14,11 @@ export const main = async () => {
   assertHerdrEnv()
 
   const args = parseArgs(argv)
-  args.config = getConfigPath(args)
+  if (args.config) {
+    args.config = getConfigPath(args)
+  } else if (!args["resume-from"]) {
+    throw new Error("Missing required argument --config /absolute/path/to/workflow.json")
+  }
 
   await runWorkflow(args)
 }
