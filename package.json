@@ -1,0 +1,16 @@
+{
+  "name": "mini-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "最小可运行的 TypeScript 编排脚本，串起 implementer 与 reviewer agent",
+  "scripts": {
+    "start": "tsx run-post-spec.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
