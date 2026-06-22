@@ -1,0 +1,18 @@
+{
+  "projectDir": "/absolute/path/to/project",
+  "specPath": "/absolute/path/to/spec.md",
+  "maxReviewRounds": 4,
+  "implementer": {
+    "name": "implementer",
+    "command": "cursor --model composer"
+  },
+  "reviewer": {
+    "name": "reviewer",
+    "command": "codex --model gpt-5.5"
+  },
+  "prompts": {
+    "implement": "./prompts/implement.md",
+    "review": "./prompts/review.md",
+    "revise": "./prompts/revise.md"
+  }
+}
