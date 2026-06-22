@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 
-import type { AgentConfig, PaneIdResult } from "./types.js"
+import type { AgentConfig, AgentStartResult, PaneCurrentResult } from "./types.js"
 import { splitCommand } from "./utils.js"
 
 const run = (command: string, args: string[]) =>
@@ -33,7 +33,7 @@ export const runHerdr = async (args: string[]) => {
 
 export const getCurrentPane = async () => {
   const output = await runHerdr(["pane", "current"])
-  const parsed = JSON.parse(output) as PaneIdResult
+  const parsed = JSON.parse(output) as PaneCurrentResult
   return parsed.result.pane.pane_id
 }
 
@@ -48,8 +48,8 @@ export const startAgent = async (projectDir: string, agent: AgentConfig) => {
     "--",
     ...splitCommand(agent.command),
   ])
-  const parsed = JSON.parse(output) as PaneIdResult
-  return parsed.result.pane.pane_id
+  const parsed = JSON.parse(output) as AgentStartResult
+  return parsed.result.agent.pane_id
 }
 
 export const sendTask = async (paneId: string, prompt: string) => {

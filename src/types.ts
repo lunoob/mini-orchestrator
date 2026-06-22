@@ -26,11 +26,32 @@ export type WorkflowConfig = {
   specPath: string
 }
 
-export type PaneIdResult = {
+export type HerdrPaneInfo = {
+  agent_status: string
+  cwd: string
+  focused: boolean
+  foreground_cwd: string
+  pane_id: string
+  revision: number
+  tab_id: string
+  terminal_id: string
+  workspace_id: string
+}
+
+export type AgentStartResult = {
+  id: string
   result: {
-    pane: {
-      pane_id: string
-    }
+    agent: HerdrPaneInfo & { name: string }
+    argv: string[]
+    type: "agent_started"
+  }
+}
+
+export type PaneCurrentResult = {
+  id: string
+  result: {
+    pane: HerdrPaneInfo
+    type: "pane_current"
   }
 }
 
