@@ -10,7 +10,7 @@
 
 以下 skill 内容已由编排器注入。编码全过程必须严格遵循：
 
-1. **planning-with-files**：读 spec 后先建 `task_plan.md`，全程用 planning 文件跟踪进度（勿用 TodoWrite 替代）
+1. **planning-with-files**：读 spec 后先建 planning 文件，全程用 planning 文件跟踪进度（勿用 TodoWrite 替代）；优先使用 slug 模式，即放在 `.planning/` 目录下（如 `.planning/<slug>/task_plan.md`），不要放在项目根目录
 2. **TDD 铁律**：没有先失败的测试，就不写生产代码
 
 {{implementSkills}}
