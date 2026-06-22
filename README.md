@@ -11,6 +11,14 @@
 
 ```text
 mini-orchestrator/
+├── src
+│   ├── cli.ts
+│   ├── config.ts
+│   ├── herdr.ts
+│   ├── main.ts
+│   ├── types.ts
+│   ├── utils.ts
+│   └── workflow.ts
 ├── prompts
 │   ├── implement.md
 │   ├── review.md
@@ -38,6 +46,7 @@ cp workflow.example.json workflow.local.json
 
 ```bash
 npx tsx run-post-spec.ts --config workflow.local.json
+npx tsx run-post-spec.ts --help
 ```
 
 也可以用别名（默认读取当前目录下的 `workflow.local.json`）：
@@ -70,6 +79,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | `--specPath` | 否 | spec 文件路径，覆盖配置中的 `specPath` |
 | `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds` |
 | `--reuse-current-pane` | 否 | 复用当前 herdr pane 作为 reviewer，不新建 reviewer pane |
+| `-h`, `--help` | 否 | 显示使用帮助（不需要 `HERDR_ENV=1`） |
 
 ## 配置说明
 
