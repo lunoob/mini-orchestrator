@@ -7,6 +7,7 @@ const DEFAULT_READY_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_MATCH_TIMEOUT_MS = 60_000
 const DEFAULT_WORKING_TIMEOUT_MS = 60_000
 const IDLE_TIMEOUT_MS = 1_800_000
+const DELAY_MS = 800
 
 export type AgentWaitOptions = {
   agentReadyPattern?: string
@@ -15,8 +16,10 @@ export type AgentWaitOptions = {
   workingTimeoutMs?: number
 }
 
-const run = (command: string, args: string[]) =>
-  new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve, reject) => {
+const run = async (command: string, args: string[]) => {
+  // avoid command too fast
+  await new Promise(resolve => setTimeout(resolve, DELAY_MS))
+  return new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve, reject) => {
     const child = spawn(command, args, {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -35,6 +38,7 @@ const run = (command: string, args: string[]) =>
     child.on("error", reject)
     child.on("close", (code) => resolve({ code, stdout, stderr }))
   })
+}
 
 export const runHerdr = async (args: string[]) => {
   const { code, stderr, stdout } = await run("herdr", args)
