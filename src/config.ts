@@ -4,10 +4,13 @@ import path from "node:path"
 
 import type { LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
 
-const PLANNING_WITH_FILES_SKILL = "~/.agents/skills/planning-with-files/SKILL.md"
+const PLANNING_WITH_FILES_SKILL_PATHS = {
+  claude: "~/.claude/plugins/marketplaces/planning-with-files/skills/planning-with-files/SKILL.md",
+  codex: "~/.codex/skills/planning-with-files/SKILL.md",
+  cursor: "~/.cursor/skills/planning-with-files/SKILL.md",
+} as const
 
-const DEFAULT_IMPLEMENT_SKILLS = [
-  PLANNING_WITH_FILES_SKILL,
+const DEFAULT_IMPLEMENT_SKILL_SUFFIXES = [
   "./skills/implementing-from-spec/SKILL.md",
   "./skills/test-driven-development/SKILL.md",
 ]
@@ -25,6 +28,27 @@ const parseMaxReviewRounds = (value: string) => {
     throw new Error(`Invalid maxReviewRounds: ${value}`)
   }
   return rounds
+}
+
+const detectImplementerEnvironment = (command: string) => {
+  const normalized = command.trim().toLowerCase()
+  const firstToken = normalized.split(/\s+/)[0] ?? ""
+  const executable = path.basename(firstToken)
+
+  if (executable.includes("codex")) return "codex"
+  if (executable.includes("cursor")) return "cursor"
+  if (executable.includes("claude")) return "claude"
+  return undefined
+}
+
+const getDefaultImplementSkills = (config: WorkflowConfig) => {
+  const detected = detectImplementerEnvironment(config.implementer.command)
+  const planningSkill =
+    detected === undefined
+      ? PLANNING_WITH_FILES_SKILL_PATHS.codex
+      : PLANNING_WITH_FILES_SKILL_PATHS[detected]
+
+  return [planningSkill, ...DEFAULT_IMPLEMENT_SKILL_SUFFIXES]
 }
 
 export const loadConfig = async (configPath: string, args: ParsedArgs) => {
@@ -108,7 +132,7 @@ const skillSectionTitle = (skillPath: string) => {
 }
 
 export const loadImplementSkills = async (config: WorkflowConfig, configDir: string) => {
-  const skillPaths = config.skills?.implement ?? DEFAULT_IMPLEMENT_SKILLS
+  const skillPaths = config.skills?.implement ?? getDefaultImplementSkills(config)
   return loadSkillSections(configDir, skillPaths)
 }
 

@@ -147,7 +147,7 @@ start-orchestrator \
 
 | 阶段 | Skill | 路径 | 说明 |
 |------|-------|------|------|
-| implement | planning-with-files | `~/.agents/skills/planning-with-files/SKILL.md` | 外部依赖，从 spec 派生 `task_plan.md` |
+| implement | planning-with-files | 自动按 implementer 环境选择 | 外部依赖，从 spec 派生 `task_plan.md` |
 | implement | implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 实现流程、自审清单 |
 | implement | test-driven-development | `./skills/test-driven-development/SKILL.md` | TDD 铁律 |
 | revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
@@ -156,7 +156,13 @@ start-orchestrator \
 
 ### planning-with-files（外部依赖）
 
-编排器**不会**把该 skill 复制进本仓库，而是在运行时读取 `~/.agents/skills/planning-with-files/SKILL.md` 并注入 implement prompt。请确保该路径存在且已在真实项目的 Cursor 中完成适配（hooks 自动更新 `task_plan.md` / `progress.md`）。
+编排器**不会**把该 skill 复制进本仓库，而是会根据 `implementer.command` 自动选择对应环境中的安装路径，并在运行时读取 `SKILL.md` 注入 implement prompt：
+
+- `codex` → `~/.codex/skills/planning-with-files/SKILL.md`
+- `claude` → `~/.claude/plugins/marketplaces/planning-with-files/skills/planning-with-files/SKILL.md`
+- `cursor` → `~/.cursor/skills/planning-with-files/SKILL.md`
+
+若 `implementer.command` 无法识别，当前默认回退到 Codex 路径。若你在 `workflow.json` 显式配置了 `skills.implement`，则会完全按配置加载，不再使用自动探测。
 
 引用说明见 [`skills/planning-with-files/DEPENDENCY.md`](skills/planning-with-files/DEPENDENCY.md)。
 
@@ -253,7 +259,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   },
   "skills": {
     "implement": [
-      "~/.agents/skills/planning-with-files/SKILL.md",
+      "~/.codex/skills/planning-with-files/SKILL.md",
       "./skills/implementing-from-spec/SKILL.md",
       "./skills/test-driven-development/SKILL.md"
     ],
