@@ -1,7 +1,7 @@
 import path from "node:path"
 
 import { isFlagEnabled } from "./cli.js"
-import { loadConfig, loadPrompts } from "./config.js"
+import { loadConfig, loadImplementSkills, loadPrompts } from "./config.js"
 import type { ParsedArgs } from "./types.js"
 import {
   getCurrentPane,
@@ -16,6 +16,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
   const configPath = path.resolve(args.config)
   const config = await loadConfig(configPath, args)
   const prompts = await loadPrompts(config, path.dirname(configPath))
+  const implementSkills = await loadImplementSkills(config, path.dirname(configPath))
 
   const reuseCurrentPane = isFlagEnabled(args, "reuse-current-pane")
 
@@ -31,8 +32,9 @@ export const runWorkflow = async (args: ParsedArgs) => {
   await sendTask(
     implementerPane,
     render(prompts.implement, {
-      specPath: config.specPath,
+      implementSkills,
       maxReviewRounds: String(config.maxReviewRounds),
+      specPath: config.specPath,
     }),
   )
   await waitForIdle(implementerPane)

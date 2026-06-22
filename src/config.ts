@@ -1,7 +1,16 @@
-import { readFile } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 import type { LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
+
+const PLANNING_WITH_FILES_SKILL = "~/.agents/skills/planning-with-files/SKILL.md"
+
+const DEFAULT_IMPLEMENT_SKILLS = [
+  PLANNING_WITH_FILES_SKILL,
+  "./skills/implementing-from-spec/SKILL.md",
+  "./skills/test-driven-development/SKILL.md",
+]
 
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
@@ -51,4 +60,47 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
   const review = await readPrompt(configDir, config.prompts.review)
   const revise = await readPrompt(configDir, config.prompts.revise)
   return { implement, review, revise }
+}
+
+const stripSkillFrontmatter = (content: string) => {
+  const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/)
+  return match ? match[1].trim() : content.trim()
+}
+
+const expandHome = (skillPath: string) => {
+  if (skillPath === "~") return os.homedir()
+  if (skillPath.startsWith("~/")) return path.join(os.homedir(), skillPath.slice(2))
+  return skillPath
+}
+
+export const resolveSkillPath = (configDir: string, skillPath: string) => {
+  const expanded = expandHome(skillPath)
+  return path.isAbsolute(expanded) ? expanded : path.resolve(configDir, expanded)
+}
+
+const loadSkill = async (configDir: string, skillPath: string) => {
+  const resolvedPath = resolveSkillPath(configDir, skillPath)
+  try {
+    await access(resolvedPath)
+  } catch {
+    throw new Error(`Skill not found: ${skillPath} (resolved to ${resolvedPath})`)
+  }
+  const content = await readFile(resolvedPath, "utf8")
+  return stripSkillFrontmatter(content)
+}
+
+const skillSectionTitle = (skillPath: string) => {
+  const dirname = path.basename(path.dirname(skillPath))
+  return dirname === ".agents" ? path.basename(path.dirname(path.dirname(skillPath))) : dirname
+}
+
+export const loadImplementSkills = async (config: WorkflowConfig, configDir: string) => {
+  const skillPaths = config.skills?.implement ?? DEFAULT_IMPLEMENT_SKILLS
+  const sections = await Promise.all(
+    skillPaths.map(async (skillPath) => {
+      const body = await loadSkill(configDir, skillPath)
+      return `### ${skillSectionTitle(skillPath)}\n\n${body}`
+    }),
+  )
+  return sections.join("\n\n---\n\n")
 }

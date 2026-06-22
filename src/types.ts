@@ -9,12 +9,17 @@ export type PromptConfig = {
   revise: string
 }
 
+export type SkillsConfig = {
+  implement?: string[]
+}
+
 export type WorkflowConfig = {
   implementer: AgentConfig
   maxReviewRounds: number
   projectDir: string
   prompts: PromptConfig
   reviewer: AgentConfig
+  skills?: SkillsConfig
   specPath: string
 }
 

@@ -14,5 +14,12 @@
     "implement": "./prompts/implement.md",
     "review": "./prompts/review.md",
     "revise": "./prompts/revise.md"
+  },
+  "skills": {
+    "implement": [
+      "~/.agents/skills/planning-with-files/SKILL.md",
+      "./skills/implementing-from-spec/SKILL.md",
+      "./skills/test-driven-development/SKILL.md"
+    ]
   }
 }
