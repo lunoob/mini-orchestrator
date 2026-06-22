@@ -24,7 +24,7 @@ type WorkflowConfig = {
   specPath: string
 }
 
-type StartAgentResult = {
+type PaneIdResult = {
   result: {
     pane: {
       pane_id: string
@@ -40,8 +40,16 @@ const main = async () => {
   const config = await loadConfig(configPath)
   const prompts = await loadPrompts(config, path.dirname(configPath))
 
+  const reuseCurrentPane = isFlagEnabled(args, "reuse-current-pane")
+
   const implementerPane = await startAgent(config.projectDir, config.implementer)
-  const reviewerPane = await startAgent(config.projectDir, config.reviewer)
+  const reviewerPane = reuseCurrentPane
+    ? await getCurrentPane()
+    : await startAgent(config.projectDir, config.reviewer)
+
+  if (reuseCurrentPane) {
+    console.log(`Reusing current pane as reviewer: ${reviewerPane}`)
+  }
 
   await sendTask(
     implementerPane,
@@ -110,6 +118,12 @@ function parseArgs(argv: string[]) {
   return args
 }
 
+function isFlagEnabled(args: Record<string, string>, key: string) {
+  const value = args[key]
+  if (value === undefined) return false
+  return value !== "false"
+}
+
 function getConfigPath(args: Record<string, string>) {
   const configPath = args["config"]
   if (configPath) return path.resolve(configPath)
@@ -148,6 +162,12 @@ function render(template: string, values: Record<string, string>) {
   return template.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => values[key] ?? "")
 }
 
+async function getCurrentPane() {
+  const output = await runHerdr(["pane", "current"])
+  const parsed = JSON.parse(output) as PaneIdResult
+  return parsed.result.pane.pane_id
+}
+
 async function startAgent(projectDir: string, agent: AgentConfig) {
   const output = await runHerdr([
     "agent",
@@ -159,7 +179,7 @@ async function startAgent(projectDir: string, agent: AgentConfig) {
     "--",
     ...splitCommand(agent.command),
   ])
-  const parsed = JSON.parse(output) as StartAgentResult
+  const parsed = JSON.parse(output) as PaneIdResult
   return parsed.result.pane.pane_id
 }
 
