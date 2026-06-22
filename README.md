@@ -10,7 +10,7 @@
 ## 目录结构
 
 ```text
-/Users/simon/Items/herdr-orchestrator
+mini-orchestrator/
 ├── prompts
 │   ├── implement.md
 │   ├── review.md
@@ -24,7 +24,7 @@
 先复制示例配置：
 
 ```bash
-cp /Users/simon/Items/herdr-orchestrator/workflow.example.json /Users/simon/Items/herdr-orchestrator/workflow.local.json
+cp workflow.example.json workflow.local.json
 ```
 
 然后修改：
@@ -37,11 +37,43 @@ cp /Users/simon/Items/herdr-orchestrator/workflow.example.json /Users/simon/Item
 最后在 `HERDR_ENV=1` 的环境里执行：
 
 ```bash
-npx tsx /Users/simon/Items/herdr-orchestrator/run-post-spec.ts \
-  --config /Users/simon/Items/herdr-orchestrator/workflow.local.json
+npx tsx run-post-spec.ts --config workflow.local.json
 ```
 
+也可以用别名（默认读取当前目录下的 `workflow.local.json`）：
+
+```bash
+start-orchestrator
+start-orchestrator --reuse-current-pane --specPath ./spec.md
+```
+
+### 复用当前 pane 作为 reviewer
+
+如果希望 review 阶段直接使用当前 herdr pane（不再额外 `agent start` 一个 reviewer pane），在 reviewer pane 里运行脚本并加上 `--reuse-current-pane`：
+
+```bash
+npx tsx run-post-spec.ts \
+  --config workflow.local.json \
+  --reuse-current-pane
+```
+
+脚本会调用 `herdr pane current` 获取当前 pane 的 `pane_id`，并向该 pane 发送 review prompt。此模式下只会新建 implementer pane；`workflow.json` 里的 `reviewer` 配置不会被用来启动 agent，但建议保留以便切换回默认模式。
+
+## CLI 参数
+
+CLI 参数优先级高于 workflow 配置文件中的同名字段。
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--config` | 是 | workflow 配置文件的绝对或相对路径 |
+| `--projectDir` | 否 | 项目目录，覆盖配置中的 `projectDir` |
+| `--specPath` | 否 | spec 文件路径，覆盖配置中的 `specPath` |
+| `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds` |
+| `--reuse-current-pane` | 否 | 复用当前 herdr pane 作为 reviewer，不新建 reviewer pane |
+
 ## 配置说明
+
+`projectDir`、`specPath`、`maxReviewRounds` 可在配置文件中设置，也可通过 CLI 传入（CLI 优先）。至少需要为每个字段提供一种来源。
 
 ```json
 {

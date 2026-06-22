@@ -37,7 +37,7 @@ const main = async () => {
 
   const args = parseArgs(process.argv.slice(2))
   const configPath = getConfigPath(args)
-  const config = await loadConfig(configPath)
+  const config = await loadConfig(configPath, args)
   const prompts = await loadPrompts(config, path.dirname(configPath))
 
   const reuseCurrentPane = isFlagEnabled(args, "reuse-current-pane")
@@ -131,20 +131,44 @@ function getConfigPath(args: Record<string, string>) {
   throw new Error("Missing required argument --config /absolute/path/to/workflow.json")
 }
 
-async function loadConfig(configPath: string) {
+async function loadConfig(configPath: string, args: Record<string, string>) {
   const content = await readFile(configPath, "utf8")
-  const config = JSON.parse(content) as WorkflowConfig
+  const fileConfig = JSON.parse(content) as Partial<WorkflowConfig>
 
-  if (!config.projectDir) throw new Error("workflow config is missing projectDir")
-  if (!config.specPath) throw new Error("workflow config is missing specPath")
-  if (!config.prompts?.implement) throw new Error("workflow config is missing prompts.implement")
-  if (!config.prompts?.review) throw new Error("workflow config is missing prompts.review")
-  if (!config.prompts?.revise) throw new Error("workflow config is missing prompts.revise")
+  const projectDir = resolveOptionalPath(args.projectDir) ?? fileConfig.projectDir
+  const specPath = resolveOptionalPath(args.specPath) ?? fileConfig.specPath
+  const maxReviewRounds =
+    args.maxReviewRounds !== undefined
+      ? parseMaxReviewRounds(args.maxReviewRounds)
+      : Number(fileConfig.maxReviewRounds ?? 4)
+
+  if (!projectDir) throw new Error("projectDir is required (workflow config or --projectDir)")
+  if (!specPath) throw new Error("specPath is required (workflow config or --specPath)")
+  if (!fileConfig.prompts?.implement) throw new Error("workflow config is missing prompts.implement")
+  if (!fileConfig.prompts?.review) throw new Error("workflow config is missing prompts.review")
+  if (!fileConfig.prompts?.revise) throw new Error("workflow config is missing prompts.revise")
+  if (!fileConfig.implementer) throw new Error("workflow config is missing implementer")
+  if (!fileConfig.reviewer) throw new Error("workflow config is missing reviewer")
 
   return {
-    ...config,
-    maxReviewRounds: Number(config.maxReviewRounds || 4),
+    ...fileConfig,
+    implementer: fileConfig.implementer,
+    maxReviewRounds,
+    projectDir,
+    prompts: fileConfig.prompts,
+    reviewer: fileConfig.reviewer,
+    specPath,
+  } as WorkflowConfig
+}
+
+const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
+
+const parseMaxReviewRounds = (value: string) => {
+  const rounds = Number(value)
+  if (!Number.isInteger(rounds) || rounds < 1) {
+    throw new Error(`Invalid maxReviewRounds: ${value}`)
   }
+  return rounds
 }
 
 async function loadPrompts(config: WorkflowConfig, configDir: string) {
