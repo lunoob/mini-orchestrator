@@ -15,6 +15,10 @@ Options:
   --specPath <path>         spec 文件路径，覆盖配置中的 specPath
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
   --reuse-current-pane      复用当前 herdr pane 作为 reviewer，不新建 reviewer pane
+  --needs-check-mode <mode> needs_check 交互模式：interactive（默认）| llm
+  --resume-from <path>      从 needs_check checkpoint 恢复工作流
+  --needs-check-action <a>  恢复时的选择：approve | revise | retry-review | abort
+  --needs-check-notes <text> revise / retry-review 时必填的补充说明
   -h, --help                显示此帮助信息
 
 CLI 参数优先级高于 workflow 配置文件中的同名字段。
@@ -24,6 +28,9 @@ Examples:
   npx tsx run-post-spec.ts --config workflow.local.json
   start-orchestrator --reuse-current-pane --specPath ./spec.md
   npx tsx run-post-spec.ts --config workflow.local.json --projectDir . --maxReviewRounds 6
+  start-orchestrator --needs-check-mode llm --specPath ./plan.md
+  start-orchestrator --resume-from .orchestrator/needs-check-round-1-*.json \\
+    --needs-check-action retry-review --needs-check-notes "已本地验证通过"
 
 Environment:
   HERDR_ENV=1               必须在 Herdr pane 内运行（--help 除外）

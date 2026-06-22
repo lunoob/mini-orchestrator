@@ -14,6 +14,9 @@ const DEFAULT_IMPLEMENT_SKILLS = [
 
 const DEFAULT_REVISE_SKILLS = ["./skills/receiving-code-review/SKILL.md"]
 
+const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = "./prompts/controller-implementer.md"
+const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = "./prompts/controller-re-review.md"
+
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
 const parseMaxReviewRounds = (value: string) => {
@@ -61,7 +64,15 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
   const implement = await readPrompt(configDir, config.prompts.implement)
   const review = await readPrompt(configDir, config.prompts.review)
   const revise = await readPrompt(configDir, config.prompts.revise)
-  return { implement, review, revise }
+  const controllerImplementer = await readPrompt(
+    configDir,
+    config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
+  )
+  const controllerReReview = await readPrompt(
+    configDir,
+    config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
+  )
+  return { controllerImplementer, controllerReReview, implement, review, revise }
 }
 
 const stripSkillFrontmatter = (content: string) => {

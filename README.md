@@ -15,11 +15,13 @@ Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的
 ```text
 mini-orchestrator/
 ├── src
+│   ├── checkpoint.ts
 │   ├── cli.ts
 │   ├── config.ts
 │   ├── git.ts
 │   ├── herdr.ts
 │   ├── main.ts
+│   ├── needs-check.ts
 │   ├── review-package.ts
 │   ├── types.ts
 │   ├── utils.ts
@@ -27,7 +29,9 @@ mini-orchestrator/
 ├── prompts
 │   ├── implement.md
 │   ├── review.md
-│   └── revise.md
+│   ├── revise.md
+│   ├── controller-implementer.md
+│   └── controller-re-review.md
 ├── skills
 │   ├── implementing-from-spec/
 │   │   └── SKILL.md
@@ -44,14 +48,26 @@ mini-orchestrator/
 ## Review 流程
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[记录 baseline SHA] --> B[Implementer 实现 + commit]
     B --> C[生成 review package]
     C --> D[Reviewer 双 verdict 审查]
     D -->|REVIEW_PASS| E[完成]
-    D -->|REVIEW_NEEDS_CHECK| H[暂停 — 人工/controller 核查]
     D -->|REVIEW_FAIL| F[Implementer 按优先级修复]
     F --> B
+    D -->|REVIEW_NEEDS_CHECK| G{needs-check-mode}
+    G -->|interactive| H[终端询问 4 选 1]
+    G -->|llm| I[写 checkpoint 并退出 exit 2]
+    I --> J[外层 agent 问用户]
+    J --> K[--resume-from 恢复]
+    H --> L{用户选择}
+    K --> L
+    L -->|approve| E
+    L -->|abort| M[终止]
+    L -->|revise| N[发 controller 说明给 implementer]
+    L -->|retry-review| O[同轮带补充上下文重审]
+    N --> B
+    O --> D
 ```
 
 每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包。基线为工作流启动时的 `HEAD`（若当时尚无 commit，则在 review 时从空树对比到当前 `HEAD`）。reviewer **先读该文件**再审查。
@@ -61,8 +77,30 @@ flowchart LR
 | 状态 | 含义 | 编排器行为 |
 |------|------|------------|
 | `REVIEW_PASS` | spec ✅、quality Approved、无阻塞项、无可核查 ⚠️ | 结束 |
-| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | **暂停**，抛错并输出 ⚠️ 清单，不打回 implementer |
+| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | 暂停并询问用户（见下） |
 | `REVIEW_FAIL` | 存在需修复项（spec ❌、quality Needs fixes、Critical/Important） | 发回 implementer revise |
+
+### REVIEW_NEEDS_CHECK 交互
+
+Reviewer 无法从 diff 单独验证的项**不等于实现缺陷**。编排器会暂停并展示 4 个选项：
+
+| 选项 | 含义 |
+|------|------|
+| `approve` | 人工确认通过，结束工作流 |
+| `revise` | 补充说明后发回 implementer（需填写说明） |
+| `retry-review` | 带补充上下文让 reviewer **同轮**重审（需填写说明，不计入新轮次） |
+| `abort` | 中止工作流 |
+
+**默认模式（`--needs-check-mode interactive`）**：脚本在终端打印选项并等待输入，选完后继续执行。
+
+**LLM 模式（`--needs-check-mode llm`）**：脚本写入 `projectDir/.orchestrator/needs-check-round-*.json` checkpoint，输出 `STATUS: ORCHESTRATOR_NEEDS_CHECK` 与 `CHECKPOINT: <path>`，以 **exit code 2** 退出。外层 agent 询问用户后，用 `--resume-from` 带上用户选择继续：
+
+```bash
+start-orchestrator \
+  --resume-from "$PROJECT_DIR/.orchestrator/needs-check-round-1-....json" \
+  --needs-check-action retry-review \
+  --needs-check-notes "已在本地跑通 E2E，行为符合 spec"
+```
 
 ### 双 Verdict
 
@@ -150,6 +188,10 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | `--specPath` | 否 | spec 文件路径，覆盖配置中的 `specPath` |
 | `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds` |
 | `--reuse-current-pane` | 否 | 复用当前 herdr pane 作为 reviewer，不新建 reviewer pane |
+| `--needs-check-mode` | 否 | `interactive`（默认）或 `llm` |
+| `--resume-from` | 否 | 从 needs_check checkpoint 恢复（需配合 `--needs-check-action`） |
+| `--needs-check-action` | 否 | `approve` \| `revise` \| `retry-review` \| `abort` |
+| `--needs-check-notes` | 否 | `revise` / `retry-review` 时必填的补充说明 |
 | `-h`, `--help` | 否 | 显示使用帮助（不需要 `HERDR_ENV=1`） |
 
 ## 配置说明
@@ -204,11 +246,12 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   - `{{round}}`
   - `{{reviewOutput}}`
   - `{{reviseSkills}}`
+- `controller-implementer.md` / `controller-re-review.md` — needs_check 分支专用
 
 ## 当前限制
 
 - 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程。
-- `REVIEW_NEEDS_CHECK` 会终止工作流并输出 reviewer 的 ⚠️ 清单，需人工或 controller 介入后继续。
+- `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区与 planning 文件。
 - 当前为整次实现的 review 轮询，尚未拆分为 superpowers 的 per-task 门禁。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

@@ -4,6 +4,8 @@ export type AgentConfig = {
 }
 
 export type PromptConfig = {
+  controllerImplementer?: string
+  controllerReReview?: string
   implement: string
   review: string
   revise: string
@@ -35,6 +37,8 @@ export type PaneIdResult = {
 export type ParsedArgs = Record<string, string>
 
 export type LoadedPrompts = {
+  controllerImplementer: string
+  controllerReReview: string
   implement: string
   review: string
   revise: string
