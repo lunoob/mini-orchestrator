@@ -12,6 +12,8 @@ const DEFAULT_IMPLEMENT_SKILLS = [
   "./skills/test-driven-development/SKILL.md",
 ]
 
+const DEFAULT_REVISE_SKILLS = ["./skills/receiving-code-review/SKILL.md"]
+
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
 const parseMaxReviewRounds = (value: string) => {
@@ -96,6 +98,15 @@ const skillSectionTitle = (skillPath: string) => {
 
 export const loadImplementSkills = async (config: WorkflowConfig, configDir: string) => {
   const skillPaths = config.skills?.implement ?? DEFAULT_IMPLEMENT_SKILLS
+  return loadSkillSections(configDir, skillPaths)
+}
+
+export const loadReviseSkills = async (config: WorkflowConfig, configDir: string) => {
+  const skillPaths = config.skills?.revise ?? DEFAULT_REVISE_SKILLS
+  return loadSkillSections(configDir, skillPaths)
+}
+
+const loadSkillSections = async (configDir: string, skillPaths: string[]) => {
   const sections = await Promise.all(
     skillPaths.map(async (skillPath) => {
       const body = await loadSkill(configDir, skillPath)

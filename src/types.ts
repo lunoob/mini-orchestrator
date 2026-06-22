@@ -11,6 +11,7 @@ export type PromptConfig = {
 
 export type SkillsConfig = {
   implement?: string[]
+  revise?: string[]
 }
 
 export type WorkflowConfig = {

@@ -19,5 +19,10 @@
 
 - 最多会经历 {{maxReviewRounds}} 轮 review；始终面向通过 review 的目标工作
 - 若 spec 或需求不清楚，先提问，不要猜测
+- **及时 commit**：每完成一个可交付阶段就 commit，便于 review 生成 diff 审查包
 - 完成全部实现且通过提交前自审后，输出 `STATUS: IMPLEMENT_DONE`
 - 若 review 驳回，根据反馈修改后再次输出 `STATUS: IMPLEMENT_DONE`
+
+## 自审（输出 IMPLEMENT_DONE 前）
+
+对照 spec 与已加载的 `implementing-from-spec` skill 自审清单，确认 **Spec Compliance** 与 **Code Quality** 两项均达标。

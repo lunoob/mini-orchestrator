@@ -3,9 +3,12 @@
 一个最小可运行的 TypeScript 编排脚本，用来串起：
 
 1. implementer agent 读 spec，按 skills 规划进度并 TDD 编码
-2. reviewer agent 做 code review
-3. review 失败时回到 implementer 继续修改
-4. 最多循环固定轮数
+2. 编排器生成 **review package**（git diff 文件），交给 reviewer
+3. reviewer 做 **双 verdict 审查**（规格合规 + 代码质量），按 Critical/Important/Minor 分级反馈
+4. review 失败时回到 implementer，按 `receiving-code-review` skill 修复
+5. 最多循环固定轮数
+
+Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的 `requesting-code-review` / `subagent-driven-development` / `receiving-code-review`。
 
 ## 目录结构
 
@@ -14,8 +17,10 @@ mini-orchestrator/
 ├── src
 │   ├── cli.ts
 │   ├── config.ts
+│   ├── git.ts
 │   ├── herdr.ts
 │   ├── main.ts
+│   ├── review-package.ts
 │   ├── types.ts
 │   ├── utils.ts
 │   └── workflow.ts
@@ -28,21 +33,55 @@ mini-orchestrator/
 │   │   └── SKILL.md
 │   ├── planning-with-files/
 │   │   └── DEPENDENCY.md      # 外部 skill 引用说明（不含正文）
+│   ├── receiving-code-review/
+│   │   └── SKILL.md           # 接收 review 反馈（源自 superpowers）
 │   └── test-driven-development/
 │       └── SKILL.md
 ├── run-post-spec.ts
 └── workflow.example.json
 ```
 
+## Review 流程
+
+```mermaid
+flowchart LR
+    A[记录 baseline SHA] --> B[Implementer 实现 + commit]
+    B --> C[生成 review package]
+    C --> D[Reviewer 双 verdict 审查]
+    D -->|REVIEW_PASS| E[完成]
+    D -->|REVIEW_FAIL| F[Implementer 按优先级修复]
+    F --> B
+```
+
+每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包（commit 列表 + stat + 完整 diff + 未提交变更），reviewer **先读该文件**再审查，避免把大段 diff 粘贴进 orchestrator context。
+
+### 双 Verdict
+
+| Verdict | 含义 |
+|---------|------|
+| **Spec Compliance** | 实现是否满足 spec（不多做、不少做） |
+| **Task quality** | 代码质量是否可接受 |
+
+两项均通过且无 Critical/Important 问题时，reviewer 输出 `STATUS: REVIEW_PASS`。
+
+### 严重程度
+
+| 级别 | 处理 |
+|------|------|
+| Critical | 必须在本轮修复 |
+| Important | 必须在本轮修复 |
+| Minor | 顺手修或记入 progress，不阻塞 |
+
 ## Skill 依赖
 
-implement 阶段会按顺序加载并注入以下 skills 到 prompt（路径可在 `workflow.json` 的 `skills.implement` 中覆盖）：
+| 阶段 | Skill | 路径 | 说明 |
+|------|-------|------|------|
+| implement | planning-with-files | `~/.agents/skills/planning-with-files/SKILL.md` | 外部依赖，从 spec 派生 `task_plan.md` |
+| implement | implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 实现流程、自审清单 |
+| implement | test-driven-development | `./skills/test-driven-development/SKILL.md` | TDD 铁律 |
+| revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
 
-| Skill | 路径 | 内置 | 说明 |
-|-------|------|------|------|
-| planning-with-files | `~/.agents/skills/planning-with-files/SKILL.md` | 否 | 从 spec 派生 `task_plan.md`，用 planning 文件持久化进度；需在 Cursor 中完成 hooks 适配 |
-| implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 是 | 实现流程、自审清单、`IMPLEMENT_DONE` 标准 |
-| test-driven-development | `./skills/test-driven-development/SKILL.md` | 是 | 红-绿-重构 TDD 铁律（源自 [superpowers](https://github.com/obra/superpowers)） |
+`skills.implement` 与 `skills.revise` 均可在 `workflow.json` 中覆盖。
 
 ### planning-with-files（外部依赖）
 
@@ -131,27 +170,35 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
       "~/.agents/skills/planning-with-files/SKILL.md",
       "./skills/implementing-from-spec/SKILL.md",
       "./skills/test-driven-development/SKILL.md"
+    ],
+    "revise": [
+      "./skills/receiving-code-review/SKILL.md"
     ]
   }
 }
 ```
 
-`skills.implement` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。省略该字段时使用与上文相同的默认列表。
+`skills.*` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。
 
 ## Prompt 模板变量
 
 - `implement.md`
   - `{{specPath}}`
   - `{{maxReviewRounds}}`
-  - `{{implementSkills}}` — 编排器注入的 skill 正文（含外部 planning-with-files）
+  - `{{implementSkills}}`
 - `review.md`
   - `{{round}}`
+  - `{{specPath}}`
+  - `{{baseSha}}` / `{{headSha}}`
+  - `{{diffFileSection}}` — diff 文件路径或降级说明
 - `revise.md`
   - `{{round}}`
   - `{{reviewOutput}}`
+  - `{{reviseSkills}}`
 
 ## 当前限制
 
-- 通过 `STATUS: IMPLEMENT_DONE`、`STATUS: REVIEW_PASS`、`STATUS: REVIEW_FAIL` 判断流程。
-- 当前只支持一条固定工作流，不是通用任务编排引擎。
+- 通过 `STATUS: REVIEW_PASS` / `STATUS: REVIEW_FAIL` 及结构化双 verdict 判断流程。
+- 非 git 项目无法生成 review package，reviewer 将审查工作区与 planning 文件。
+- 当前为整次实现的 review 轮询，尚未拆分为 superpowers 的 per-task 门禁。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

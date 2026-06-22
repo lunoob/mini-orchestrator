@@ -44,3 +44,6 @@ Thumbs.db
 
 # Local workflow config (copy from workflow.example.json)
 workflow.local.json
+
+# Orchestrator scratch (review packages, etc.)
+.orchestrator/

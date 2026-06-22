@@ -20,6 +20,9 @@
       "~/.agents/skills/planning-with-files/SKILL.md",
       "./skills/implementing-from-spec/SKILL.md",
       "./skills/test-driven-development/SKILL.md"
+    ],
+    "revise": [
+      "./skills/receiving-code-review/SKILL.md"
     ]
   }
 }
