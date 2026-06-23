@@ -163,8 +163,30 @@ export const sendTask = async (paneId: string, prompt: string) => {
   await runHerdr(["pane", "send-keys", paneId, "enter"])
 }
 
-export const waitForIdle = async (paneId: string) => {
-  await runHerdr(["agent", "wait", paneId, "--status", "idle", "--timeout", String(IDLE_TIMEOUT_MS)])
+export const waitForIdle = async (paneId: string): Promise<void> => {
+  // 1. 使用 herdr 内置等待机制等待 idle（保留原逻辑）
+  await runHerdr([
+    "agent",
+    "wait",
+    paneId,
+    "--status",
+    "idle",
+    "--timeout",
+    String(IDLE_TIMEOUT_MS),
+  ])
+
+  // 2. 再等 2 秒，避免检测到瞬时状态变化
+  await new Promise(resolve => setTimeout(resolve, 2000))
+
+  // 3. 调用 herdr agent list 获取当前实际状态，验证是否真的 idle
+  const output = await runHerdr(["agent", "list"])
+  const parsed = JSON.parse(output) as AgentListResult
+  const agent = parsed.result.agents.find(a => a.pane_id === paneId)
+
+  if (agent?.agent_status === "idle") return
+
+  // 4. 并非真正 idle——递归重试
+  return waitForIdle(paneId)
 }
 
 const waitForWorkingAfterSend = async (
