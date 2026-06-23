@@ -4,12 +4,12 @@ import path from "node:path"
 import { GIT_EMPTY_TREE_SHA, runGitCommand } from "./git.js"
 
 export const generateReviewPackage = async (
+  dir: string,
   projectDir: string,
   baseSha: string | undefined,
   headSha: string | undefined,
   round: number,
 ) => {
-  const dir = path.join(projectDir, ".orchestrator")
   await mkdir(dir, { recursive: true })
 
   const filePath = path.join(dir, `review-round-${round}-${Date.now()}.md`)

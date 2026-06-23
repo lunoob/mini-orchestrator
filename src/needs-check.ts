@@ -122,12 +122,13 @@ export const promptNeedsCheckInteractive = async (
 }
 
 export const pauseForLlmNeedsCheck = async (
+  dir: string,
   checkpointInput: NeedsCheckCheckpointInput,
   round: number,
   verdict: ReviewVerdict,
   reviewOutput: string,
 ) => {
-  const checkpointPath = await writeNeedsCheckCheckpoint(checkpointInput.projectDir, checkpointInput)
+  const checkpointPath = await writeNeedsCheckCheckpoint(dir, checkpointInput)
 
   printNeedsCheckSummary(round, verdict, reviewOutput)
 
@@ -159,12 +160,13 @@ export const resolveNeedsCheckDecision = async (
   verdict: ReviewVerdict,
   reviewOutput: string,
   checkpointInput: NeedsCheckCheckpointInput,
+  dir: string,
 ): Promise<NeedsCheckDecision> => {
   const fromArgs = decisionFromArgs(args)
   if (fromArgs) return fromArgs
 
   if (mode === "llm") {
-    await pauseForLlmNeedsCheck(checkpointInput, round, verdict, reviewOutput)
+    await pauseForLlmNeedsCheck(dir, checkpointInput, round, verdict, reviewOutput)
   }
 
   return promptNeedsCheckInteractive(round, verdict, reviewOutput)

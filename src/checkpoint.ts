@@ -23,10 +23,9 @@ export type NeedsCheckCheckpoint = {
 export type NeedsCheckCheckpointInput = Omit<NeedsCheckCheckpoint, "createdAt" | "version">
 
 export const writeNeedsCheckCheckpoint = async (
-  projectDir: string,
+  dir: string,
   data: NeedsCheckCheckpointInput,
 ) => {
-  const dir = path.join(projectDir, ".orchestrator")
   await mkdir(dir, { recursive: true })
 
   const filePath = path.join(dir, `needs-check-round-${data.round}-${Date.now()}.json`)

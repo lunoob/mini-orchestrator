@@ -1,9 +1,11 @@
 import path from "node:path"
+import { readFile } from "node:fs/promises"
 
 import { readNeedsCheckCheckpoint } from "./checkpoint.js"
 import { isFlagEnabled } from "./cli.js"
 import { loadConfig, loadImplementSkills, loadPrompts, loadReviseSkills } from "./config.js"
 import { getHeadShaSafe, getReviewBaselineSha, isGitRepo } from "./git.js"
+import { createSession } from "./session.js"
 import {
   agentWaitOptions,
   getCurrentPane,
@@ -62,6 +64,7 @@ const formatBaselineLabel = (baseSha: string | undefined) =>
   baseSha ?? "(workflow start — no commits yet)"
 
 const prepareReviewContext = async (
+  sessionDir: string,
   projectDir: string,
   baseSha: string | undefined,
   round: number,
@@ -71,7 +74,7 @@ const prepareReviewContext = async (
   }
 
   const headSha = await getHeadShaSafe(projectDir)
-  const diffFile = await generateReviewPackage(projectDir, baseSha, headSha, round)
+  const diffFile = await generateReviewPackage(sessionDir, projectDir, baseSha, headSha, round)
   return {
     baseSha: formatBaselineLabel(baseSha),
     diffFile,
@@ -122,9 +125,10 @@ const sendControllerRevise = async (
 const conductReview = async (
   runtime: WorkflowRuntime,
   round: number,
+  sessionDir: string,
   options: ReviewLoopOptions = {},
 ) => {
-  const reviewContext = await prepareReviewContext(runtime.config.projectDir, runtime.baseSha, round)
+  const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.baseSha, round)
   if (reviewContext.diffFile) {
     console.log(`Review package: ${reviewContext.diffFile}`)
   }
@@ -168,6 +172,7 @@ const handleNeedsCheck = async (
   reviewOutput: string,
   verdict: ReviewVerdict,
   reuseCurrentPane: boolean,
+  sessionDir: string,
 ): Promise<NeedsCheckOutcome> => {
   const decision = await resolveNeedsCheckDecision(
     runtime.args,
@@ -176,6 +181,7 @@ const handleNeedsCheck = async (
     verdict,
     reviewOutput,
     buildCheckpointInput(runtime, configPath, round, reviewOutput, verdict, reuseCurrentPane),
+    sessionDir,
   )
 
   switch (decision.action) {
@@ -230,6 +236,7 @@ const runReviewLoop = async (
   configPath: string,
   startRound: number,
   reuseCurrentPane: boolean,
+  sessionDir: string,
   initialOptions?: ReviewLoopOptions,
 ) => {
   for (let round = startRound; round <= runtime.config.maxReviewRounds; round += 1) {
@@ -239,7 +246,7 @@ const runReviewLoop = async (
     while (retrySameRound) {
       retrySameRound = false
 
-      const { reviewOutput, verdict } = await conductReview(runtime, round, activeLoopOptions ?? {})
+      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, activeLoopOptions ?? {})
       activeLoopOptions = undefined
 
       if (verdict.kind === "pass") {
@@ -260,6 +267,7 @@ const runReviewLoop = async (
           reviewOutput,
           verdict,
           reuseCurrentPane,
+          sessionDir,
         )
 
         if (outcome.type === "approved") return
@@ -288,6 +296,7 @@ const runReviewLoop = async (
 
 const runWorkflowResume = async (args: ParsedArgs) => {
   const checkpointPath = path.resolve(args["resume-from"])
+  const sessionDir = path.dirname(checkpointPath)
   const checkpoint = await readNeedsCheckCheckpoint(checkpointPath)
 
   const action = parseNeedsCheckAction(args["needs-check-action"])
@@ -329,10 +338,10 @@ const runWorkflowResume = async (args: ParsedArgs) => {
       throw new Error(`Workflow aborted after needs_check in round ${checkpoint.round}.`)
     case "revise":
       await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
-      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane)
+      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir)
       return
     case "retry-review":
-      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, {
+      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, {
         controllerReviewNotes: notes,
         lastReviewOutput: checkpoint.reviewOutput,
       })
@@ -399,6 +408,13 @@ export const runWorkflow = async (args: ParsedArgs) => {
     reviseSkills,
   }
 
+  const configContent = await readFile(configPath, "utf8")
+  const specContent = await readFile(config.specPath, "utf8")
+  const { sessionDir } = await createSession(
+    config.projectDir, configPath, configContent, config.specPath, specContent, args,
+  )
+  console.log(`Session: ${sessionDir}`)
+
   await sendTaskAndWait(
     implementerPane,
     render(prompts.implement, {
@@ -409,5 +425,5 @@ export const runWorkflow = async (args: ParsedArgs) => {
     agentWaitOptions(config.implementer),
   )
 
-  await runReviewLoop(runtime, configPath, 1, reuseCurrentPane)
+  await runReviewLoop(runtime, configPath, 1, reuseCurrentPane, sessionDir)
 }
