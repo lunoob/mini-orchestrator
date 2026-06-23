@@ -214,10 +214,12 @@ export const sendTaskAndWait = async (
   paneId: string,
   prompt: string,
   options: AgentWaitOptions = {},
-) => {
+): Promise<string> => {
   await sendTask(paneId, prompt)
   await waitForWorkingAfterSend(paneId, prompt, options)
   await waitForIdle(paneId)
+
+  return readAgentOutput(paneId, 280)
 }
 
 export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({

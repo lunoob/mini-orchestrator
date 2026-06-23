@@ -18,7 +18,7 @@
 ## 工作约束
 
 - 最多会经历 {{maxReviewRounds}} 轮 review；始终面向通过 review 的目标工作
-- 若 spec 或需求不清楚，先提问，不要猜测
+- 若 spec 或需求不清楚，先提问并输出 `STATUS: IMPLEMENT_ASK`（编排器会暂停等待人工处理），不要猜测
 - **及时 commit**：每完成一个可交付阶段就 commit，便于 review 生成 diff 审查包
 - 完成全部实现且通过提交前自审后，输出 `STATUS: IMPLEMENT_DONE`
 - 若 review 驳回，根据反馈修改后再次输出 `STATUS: IMPLEMENT_DONE`

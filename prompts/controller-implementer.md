@@ -19,4 +19,5 @@
 - 仅处理 Controller 说明与 reviewer 中**已确认的问题**；`⚠️ Cannot verify` 项若 Controller 未要求修改，不要猜测性大改
 - **planning-with-files**：处理后更新 `task_plan.md` / `progress.md`
 - **TDD**：若需新行为，先写失败测试
+- 若不清楚 Controller 或 reviewer 的要求，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题，不要猜测
 - 完成后输出 `STATUS: IMPLEMENT_DONE`

@@ -1,3 +1,11 @@
+export type ImplementStatus = "done" | "needs_input" | "unknown"
+
+export const parseImplementStatus = (output: string): ImplementStatus => {
+  if (hasStatus(output, "IMPLEMENT_DONE")) return "done"
+  if (hasStatus(output, "IMPLEMENT_ASK")) return "needs_input"
+  return "unknown"
+}
+
 export const assertHerdrEnv = () => {
   if (process.env.HERDR_ENV === "1") return
   throw new Error("HERDR_ENV is not set to 1. Please run this inside a herdr pane.")

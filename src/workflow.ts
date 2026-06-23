@@ -9,7 +9,6 @@ import { createSession } from "./session.js"
 import {
   agentWaitOptions,
   getCurrentPane,
-  readAgentOutput,
   sendTaskAndWait,
   startAgent,
   waitForAgentReady,
@@ -22,7 +21,7 @@ import {
 } from "./needs-check.js"
 import { generateReviewPackage } from "./review-package.js"
 import type { LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
-import { parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
+import { parseImplementStatus, parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
 
 type WorkflowRuntime = {
   args: ParsedArgs
@@ -110,7 +109,7 @@ const sendControllerRevise = async (
   controllerNotes: string,
   reviewOutput: string,
 ) => {
-  await sendTaskAndWait(
+  const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.controllerImplementer, {
       controllerNotes,
@@ -120,6 +119,18 @@ const sendControllerRevise = async (
     }),
     agentWaitOptions(runtime.config.implementer),
   )
+
+  const implementStatus = parseImplementStatus(output)
+  if (implementStatus === "needs_input") {
+    throw new Error(
+      `Implementer has questions during controller revise round ${round} — needs human input.`,
+    )
+  }
+  if (implementStatus === "unknown") {
+    console.warn(
+      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
+    )
+  }
 }
 
 const conductReview = async (
@@ -153,13 +164,11 @@ const conductReview = async (
           specPath: runtime.config.specPath,
         })
 
-  await sendTaskAndWait(
+  const reviewOutput = await sendTaskAndWait(
     runtime.reviewerPane,
     prompt,
     agentWaitOptions(runtime.config.reviewer),
   )
-
-  const reviewOutput = await readAgentOutput(runtime.reviewerPane, 280)
   printSection(`Review Round ${round}`, reviewOutput)
 
   return { reviewOutput, verdict: parseReviewVerdict(reviewOutput) }
@@ -220,7 +229,7 @@ const sendReviseAfterFail = async (
     console.log("Review failed — sending back to implementer.")
   }
 
-  await sendTaskAndWait(
+  const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.revise, {
       reviewOutput,
@@ -229,6 +238,18 @@ const sendReviseAfterFail = async (
     }),
     agentWaitOptions(runtime.config.implementer),
   )
+
+  const implementStatus = parseImplementStatus(output)
+  if (implementStatus === "needs_input") {
+    throw new Error(
+      `Implementer has questions during revise round ${round} — needs human input.`,
+    )
+  }
+  if (implementStatus === "unknown") {
+    console.warn(
+      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
+    )
+  }
 }
 
 const runReviewLoop = async (
@@ -415,7 +436,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
   )
   console.log(`Session: ${sessionDir}`)
 
-  await sendTaskAndWait(
+  const implementOutput = await sendTaskAndWait(
     implementerPane,
     render(prompts.implement, {
       implementSkills,
@@ -424,6 +445,18 @@ export const runWorkflow = async (args: ParsedArgs) => {
     }),
     agentWaitOptions(config.implementer),
   )
+
+  const implementStatus = parseImplementStatus(implementOutput)
+  if (implementStatus === "needs_input") {
+    printSection("Implementer Needs Input", implementOutput)
+    throw new Error("Implementer has questions — needs human input before review.")
+  }
+  if (implementStatus === "unknown") {
+    console.warn(
+      "Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
+        "The implementation may be incomplete. Proceeding to review anyway.",
+    )
+  }
 
   await runReviewLoop(runtime, configPath, 1, reuseCurrentPane, sessionDir)
 }
