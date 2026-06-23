@@ -60,7 +60,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   const maxReviewRounds =
     args.maxReviewRounds !== undefined
       ? parseMaxReviewRounds(args.maxReviewRounds)
-      : Number(fileConfig.maxReviewRounds ?? 4)
+      : Number(fileConfig.maxReviewRounds ?? 8)
 
   if (!projectDir) throw new Error("projectDir is required (workflow config or --projectDir)")
   if (!specPath) throw new Error("specPath is required (workflow config or --specPath)")
