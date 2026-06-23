@@ -40,6 +40,19 @@ export type HerdrPaneInfo = {
   workspace_id: string
 }
 
+export type AgentListEntry = HerdrPaneInfo & {
+  agent: string
+  name?: string
+}
+
+export type AgentListResult = {
+  id: string
+  result: {
+    agents: AgentListEntry[]
+    type: "agent_list"
+  }
+}
+
 export type AgentStartResult = {
   id: string
   result: {

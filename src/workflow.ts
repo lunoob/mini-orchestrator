@@ -372,7 +372,9 @@ export const runWorkflow = async (args: ParsedArgs) => {
     console.log("Needs-check mode: llm (pause with checkpoint on REVIEW_NEEDS_CHECK)")
   }
 
-  const implementerPane = await startAgent(config.projectDir, config.implementer)
+  const implementerPane = await startAgent(config.projectDir, config.implementer, {
+    ensureUniqueName: true,
+  })
   await waitForAgentReady(implementerPane, agentWaitOptions(config.implementer))
 
   const reviewerPane = reuseCurrentPane

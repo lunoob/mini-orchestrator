@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 
-import type { AgentConfig, AgentStartResult, PaneCurrentResult } from "./types.js"
+import type { AgentConfig, AgentListResult, AgentStartResult, PaneCurrentResult } from "./types.js"
 import { splitCommand } from "./utils.js"
 
 const DEFAULT_READY_TIMEOUT_MS = 120_000
@@ -71,11 +71,38 @@ export const getCurrentPane = async () => {
   return parsed.result.pane.pane_id
 }
 
-export const startAgent = async (projectDir: string, agent: AgentConfig) => {
+export const listAgentNames = async () => {
+  const output = await runHerdr(["agent", "list"])
+  const parsed = JSON.parse(output) as AgentListResult
+  const names = new Set<string>()
+  for (const entry of parsed.result.agents) {
+    if (entry.name) names.add(entry.name)
+  }
+  return names
+}
+
+export const generateUniqueAgentName = (baseName: string, takenNames: ReadonlySet<string>) => {
+  if (!takenNames.has(baseName)) return baseName
+
+  let suffix = 1
+  while (takenNames.has(`${baseName}-${suffix}`)) suffix++
+  return `${baseName}-${suffix}`
+}
+
+export const resolveUniqueAgentName = async (baseName: string) => {
+  const takenNames = await listAgentNames()
+  return generateUniqueAgentName(baseName, takenNames)
+}
+
+export type StartAgentOptions = {
+  ensureUniqueName?: boolean
+}
+
+const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: string) => {
   const output = await runHerdr([
     "agent",
     "start",
-    agent.name,
+    name,
     "--cwd",
     projectDir,
     "--no-focus",
@@ -84,6 +111,22 @@ export const startAgent = async (projectDir: string, agent: AgentConfig) => {
   ])
   const parsed = JSON.parse(output) as AgentStartResult
   return parsed.result.agent.pane_id
+}
+
+export const startAgent = async (
+  projectDir: string,
+  agent: AgentConfig,
+  options: StartAgentOptions = {},
+) => {
+  let name = agent.name
+  if (options.ensureUniqueName) {
+    name = await resolveUniqueAgentName(agent.name)
+    if (name !== agent.name) {
+      console.log(`Agent name "${agent.name}" is taken; using "${name}" instead.`)
+    }
+  }
+
+  return startAgentWithName(projectDir, agent, name)
 }
 
 export const waitForAgentReady = async (paneId: string, options: AgentWaitOptions = {}) => {
