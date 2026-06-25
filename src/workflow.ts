@@ -409,7 +409,9 @@ export const runWorkflow = async (args: ParsedArgs) => {
 
   const reviewerPane = reuseCurrentPane
     ? await getCurrentPane()
-    : await startAgent(config.projectDir, config.reviewer)
+    : await startAgent(config.projectDir, config.reviewer, {
+        ensureUniqueName: true,
+      })
 
   if (reuseCurrentPane) {
     console.log(`Reusing current pane as reviewer: ${reviewerPane}`)
