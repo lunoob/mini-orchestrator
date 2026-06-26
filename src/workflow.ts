@@ -217,6 +217,37 @@ const handleNeedsCheck = async (
   }
 }
 
+type PostReviewStatus = "REVIEW_PASS" | "REVIEW_NEEDS_CHECK"
+
+const sendPostReviewCheck = async (
+  runtime: WorkflowRuntime,
+  round: number,
+  reviewStatus: PostReviewStatus,
+) => {
+  console.log(`Review ${reviewStatus} — sending implementer to verify TypeScript and lint checks.`)
+
+  const output = await sendTaskAndWait(
+    runtime.implementerPane,
+    render(runtime.prompts.postReviewCheck, {
+      reviewStatus,
+      round: String(round),
+    }),
+    agentWaitOptions(runtime.config.implementer),
+  )
+
+  const implementStatus = parseImplementStatus(output)
+  if (implementStatus === "needs_input") {
+    throw new Error(
+      `Implementer has questions during post-review check round ${round} — needs human input.`,
+    )
+  }
+  if (implementStatus === "unknown") {
+    console.warn(
+      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
+    )
+  }
+}
+
 const sendReviseAfterFail = async (
   runtime: WorkflowRuntime,
   round: number,
@@ -271,6 +302,7 @@ const runReviewLoop = async (
       activeLoopOptions = undefined
 
       if (verdict.kind === "pass") {
+        await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
         console.log(`\nWorkflow finished: review passed in round ${round}.`)
         if (verdict.specCompliant !== null || verdict.qualityApproved !== null) {
           console.log(
@@ -281,6 +313,7 @@ const runReviewLoop = async (
       }
 
       if (verdict.kind === "needs_check") {
+        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK")
         const outcome = await handleNeedsCheck(
           runtime,
           configPath,

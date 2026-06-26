@@ -31,7 +31,8 @@ mini-orchestrator/
 │   ├── review.md
 │   ├── revise.md
 │   ├── controller-implementer.md   # needs_check → revise 专用
-│   └── controller-re-review.md     # needs_check → retry-review 专用
+│   ├── controller-re-review.md     # needs_check → retry-review 专用
+│   └── post-review-check.md        # REVIEW_PASS / NEEDS_CHECK 后 typecheck / lint
 ├── skills/
 │   ├── implementing-from-spec/
 │   │   └── SKILL.md
@@ -60,12 +61,14 @@ flowchart TD
     A[记录 baseline SHA] --> B[Implementer 实现]
     B --> C[生成 review package]
     C --> D[Reviewer 双 verdict 审查]
-    D -->|REVIEW_PASS| E[完成 exit 0]
+    D -->|REVIEW_PASS| E0[Implementer 跑 typecheck / lint]
+    E0 --> E[完成 exit 0]
     D -->|REVIEW_FAIL| F[Implementer revise]
     F --> G{已达最大轮数?}
     G -->|否| C
     G -->|是| H[失败 exit 1]
-    D -->|REVIEW_NEEDS_CHECK| I{needs-check-mode}
+    D -->|REVIEW_NEEDS_CHECK| I0[Implementer 跑 typecheck / lint]
+    I0 --> I{needs-check-mode}
     I -->|interactive| J[终端询问 4 选 1]
     I -->|llm| K[写 checkpoint 并退出 exit 2]
     K --> L[外层 agent 问用户]
@@ -96,8 +99,8 @@ flowchart TD
 
 | 状态 | 含义 | 编排器行为 |
 |------|------|------------|
-| `REVIEW_PASS` | spec ✅、quality Approved、无阻塞项、无可核查 ⚠️ | 结束 |
-| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | 暂停并询问用户（见下） |
+| `REVIEW_PASS` | spec ✅、quality Approved、无阻塞项、无可核查 ⚠️ | implementer 校验 typecheck / lint（若有）→ 结束 |
+| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | implementer 校验 typecheck / lint（若有）→ 暂停并询问用户（见下） |
 | `REVIEW_FAIL` | 存在需修复项（spec ❌、quality Needs fixes、Critical/Important） | 发回 implementer revise，进入下一轮 review |
 
 编排器通过解析 reviewer 输出中的 `STATUS:` 行及结构化 verdict（Spec Compliance、Task quality、Issues 分级）判断上述状态。
@@ -125,6 +128,12 @@ start-orchestrator \
 ```
 
 恢复时 `--config` 可省略（checkpoint 内保存了 `configPath`）；`revise` 从下一轮继续 review，`retry-review` 在同一轮用 `controller-re-review` prompt 重审。
+
+### Review 通过后静态检查
+
+当 reviewer 输出 `REVIEW_PASS` 或 `REVIEW_NEEDS_CHECK` 后，编排器会向 implementer 发送 `post-review-check` prompt，要求其自行探测并运行项目的 TypeScript 类型检查与 lint（若存在对应配置或 `package.json` script）。implementer 负责修复问题并重复校验；编排器**不解析**检查输出，仅以 `IMPLEMENT_DONE` / `IMPLEMENT_ASK` 判断任务是否结束。
+
+`REVIEW_NEEDS_CHECK` 时，静态检查在暂停询问用户**之前**执行，避免把类型或 lint 问题留给人工核查。
 
 ### 双 Verdict
 
@@ -257,7 +266,8 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
     "review": "./prompts/review.md",
     "revise": "./prompts/revise.md",
     "controllerImplementer": "./prompts/controller-implementer.md",
-    "controllerReReview": "./prompts/controller-re-review.md"
+    "controllerReReview": "./prompts/controller-re-review.md",
+    "postReviewCheck": "./prompts/post-review-check.md"
   },
   "skills": {
     "implement": [
@@ -272,7 +282,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 }
 ```
 
-`prompts.controllerImplementer` 与 `prompts.controllerReReview` 为可选项，省略时使用上述默认路径。
+`prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用上述默认路径。
 
 `implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
 
@@ -307,6 +317,9 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   - `{{diffFileSection}}`
   - `{{controllerNotes}}`
   - `{{reviewOutput}}`
+- `post-review-check.md`
+  - `{{round}}`
+  - `{{reviewStatus}}` — `REVIEW_PASS` 或 `REVIEW_NEEDS_CHECK`
 
 ## 开发
 
