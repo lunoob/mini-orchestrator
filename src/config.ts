@@ -10,9 +10,12 @@ const PLANNING_WITH_FILES_SKILL_PATHS = {
   cursor: "~/.cursor/skills/planning-with-files/SKILL.md",
 } as const
 
+const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
+  "~/.agents/skills/test-driven-development/SKILL.md"
+
 const DEFAULT_IMPLEMENT_SKILL_SUFFIXES = [
   "./skills/implementing-from-spec/SKILL.md",
-  "./skills/test-driven-development/SKILL.md",
+  TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
 const DEFAULT_REVISE_SKILLS = ["./skills/receiving-code-review/SKILL.md"]

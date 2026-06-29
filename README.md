@@ -41,7 +41,7 @@ mini-orchestrator/
 │   ├── receiving-code-review/
 │   │   └── SKILL.md                # 接收 review 反馈（源自 superpowers）
 │   └── test-driven-development/
-│       └── SKILL.md
+│       └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
 ├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
 ├── workflow.example.json
 └── package.json
@@ -158,7 +158,7 @@ start-orchestrator \
 |------|-------|------|------|
 | implement | planning-with-files | 自动按 implementer 环境选择 | 外部依赖，从 spec 派生 `task_plan.md` |
 | implement | implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 实现流程、自审清单 |
-| implement | test-driven-development | `./skills/test-driven-development/SKILL.md` | TDD 铁律 |
+| implement | test-driven-development | `~/.agents/skills/test-driven-development/SKILL.md` | 外部依赖，TDD 铁律 |
 | revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
 
 `skills.implement` 与 `skills.revise` 均可在 `workflow.json` 中覆盖。加载时会自动剥离 skill 文件的 YAML frontmatter。
@@ -173,7 +173,13 @@ start-orchestrator \
 
 若 `implementer.command` 无法识别，当前默认回退到 Codex 路径。若你在 `workflow.json` 显式配置了 `skills.implement`，则会完全按配置加载，不再使用自动探测。
 
-引用说明见 [`skills/planning-with-files/DEPENDENCY.md`](skills/planning-with-files/DEPENDENCY.md)。
+引用说明见 [`skills/planning-with-files/DEPENDENCY.md`](skills/planning-with-files/DEPENDENCY.md)、[`skills/test-driven-development/DEPENDENCY.md`](skills/test-driven-development/DEPENDENCY.md)。
+
+### test-driven-development（外部依赖）
+
+编排器**不会**把该 skill 复制进本仓库，而是从 `~/.agents/skills/test-driven-development/SKILL.md` 读取并注入 implement prompt。辅助文档 `testing-anti-patterns.md` 与 SKILL 同目录，由 implementer 在 SKILL 正文指引下按需阅读。
+
+安装：将 [self-skills](https://github.com/lunoob/self-skills) 仓库克隆或同步到 `~/.agents/skills`（`~/.cursor/skills` 通常符号链接到该目录）。
 
 ## 运行方式
 
@@ -273,7 +279,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
     "implement": [
       "~/.codex/skills/planning-with-files/SKILL.md",
       "./skills/implementing-from-spec/SKILL.md",
-      "./skills/test-driven-development/SKILL.md"
+      "~/.agents/skills/test-driven-development/SKILL.md"
     ],
     "revise": [
       "./skills/receiving-code-review/SKILL.md"
