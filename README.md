@@ -59,8 +59,6 @@ mini-orchestrator/
 ├── scripts/
 │   └── install-skill.ts   # skill 安装 CLI 入口
 ├── skills/
-│   ├── implementing-from-spec/
-│   │   └── SKILL.md
 │   ├── issue-config/
 │   │   └── SKILL.md               # 生成 issue 模式配置草案
 │   ├── receiving-code-review/
@@ -185,7 +183,6 @@ start-orchestrator \
 
 | 阶段 | Skill | 路径 | 说明 |
 |------|-------|------|------|
-| implement | implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 实现流程、自审清单 |
 | implement | test-driven-development | `~/.agents/skills/test-driven-development/SKILL.md` | 外部依赖，TDD 铁律 |
 | revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
 

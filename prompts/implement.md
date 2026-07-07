@@ -22,4 +22,4 @@
 
 ## 自审（输出 IMPLEMENT_DONE 前）
 
-对照 spec 与已加载的 `implementing-from-spec` skill 自审清单，确认 **Spec Compliance** 与 **Code Quality** 两项均达标。
+对照 spec 与已加载的 skills，确认 **Spec Compliance** 与 **Code Quality** 两项均达标。

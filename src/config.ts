@@ -8,7 +8,6 @@ const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
 
 const DEFAULT_IMPLEMENT_SKILLS = [
-  "./skills/implementing-from-spec/SKILL.md",
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
