@@ -2,7 +2,7 @@ import { access as fsAccess, readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import type { IssueConfig, LoadedPrompts, Mode, ParsedArgs, WorkflowConfig } from "./types.js"
+import type { IssueConfig, LoadedPrompts, Mode, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
 
 const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
@@ -11,6 +11,9 @@ const DEFAULT_IMPLEMENT_SKILLS = [
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
+const DEFAULT_IMPLEMENT_PROMPT = "./prompts/implement.md"
+const DEFAULT_REVIEW_PROMPT = "./prompts/review.md"
+const DEFAULT_REVISE_PROMPT = "./prompts/revise.md"
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = "./prompts/controller-implementer.md"
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = "./prompts/controller-re-review.md"
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = "./prompts/post-review-check.md"
@@ -67,9 +70,19 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     }
   }
 
-  if (!fileConfig.prompts?.implement) throw new Error("workflow config is missing prompts.implement")
-  if (!fileConfig.prompts?.review) throw new Error("workflow config is missing prompts.review")
-  if (!fileConfig.prompts?.revise) throw new Error("workflow config is missing prompts.revise")
+  // 缺少 prompts 字段时使用项目中默认的 prompt 路径
+  const prompts: PromptConfig = {
+    implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
+    review: fileConfig.prompts?.review ?? DEFAULT_REVIEW_PROMPT,
+    revise: fileConfig.prompts?.revise ?? DEFAULT_REVISE_PROMPT,
+    controllerImplementer:
+      fileConfig.prompts?.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
+    controllerReReview:
+      fileConfig.prompts?.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
+    postReviewCheck:
+      fileConfig.prompts?.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
+  }
+
   if (!fileConfig.implementer) throw new Error("workflow config is missing implementer")
   if (!fileConfig.reviewer) throw new Error("workflow config is missing reviewer")
 
@@ -79,7 +92,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     maxReviewRounds,
     mode,
     projectDir,
-    prompts: fileConfig.prompts,
+    prompts,
     reviewer: fileConfig.reviewer,
     specPath,
   } as WorkflowConfig
