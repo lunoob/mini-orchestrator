@@ -12,7 +12,7 @@ export type InstallResult = {
   message: string
 }
 
-export const SKILL_NAME = "issue-config"
+export const SKILL_NAME = "run-issue"
 
 /** 递归复制目录内容 */
 const copyDir = async (src: string, dest: string): Promise<void> => {
