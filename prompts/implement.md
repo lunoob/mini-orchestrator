@@ -6,14 +6,6 @@
 
 {{specPath}}
 
-## Skills（必须遵循）
-
-以下 skill 内容已由编排器注入。编码全过程必须严格遵循：
-
-1. **TDD 铁律**：没有先失败的测试，就不写生产代码
-
-{{implementSkills}}
-
 ## 工作约束
 
 - 若 spec 或需求不清楚，先提问并输出 `STATUS: IMPLEMENT_ASK`（编排器会暂停等待人工处理），不要猜测
