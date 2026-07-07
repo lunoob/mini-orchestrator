@@ -211,10 +211,10 @@ cp workflow.issue.example.json workflow.local.json  # issue 模式
 最后在 `HERDR_ENV=1` 的环境里执行：
 
 ```bash
-npx tsx run-post-spec.ts --config workflow.local.json
-npx tsx run-post-spec.ts --config workflow.local.json --mode issue  # 用 CLI 覆盖模式
-npx tsx run-post-spec.ts --help          # 不需要 HERDR_ENV=1
-npm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
+pnpm tsx run-post-spec.ts --config workflow.local.json
+pnpm tsx run-post-spec.ts --config workflow.local.json --mode issue  # 用 CLI 覆盖模式
+pnpm tsx run-post-spec.ts --help          # 不需要 HERDR_ENV=1
+pnpm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
 ```
 
 也可以用别名（若 shell 已配置 `start-orchestrator` 指向 `run-post-spec.ts`，默认读取当前目录下的 `workflow.local.json`）：
@@ -370,20 +370,14 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
 
 ## Skill 安装
 
-仓库内 `skills/` 目录下提供了一组可安装的 skill，供编排器的 implementer / reviewer agent 使用。通过安装脚本可将 skill 部署到 `~/.agents/skills/`。
-
-### 内置 Skill
-
-| Skill | 路径 | 说明 |
-|-------|------|------|
-| issue-config | `./skills/issue-config/SKILL.md` | 生成编排器 `issue` 模式配置草案 |
+仓库内 `skills/issue-config/` 提供了手动调用的技能。通过安装脚本可将 skill 部署到 `~/.agents/skills/`，注册为 `/issue-config` 斜杠命令。
 
 ### 安装命令
 
 ```bash
-npm run install-skill               # 以软链接安装所有内置 skill
-npm run install-skill -- --mode copy # 以复制模式安装
-npm run install-skill -- --force     # 覆盖已有安装
+pnpm run install-skill               # 以软链接安装
+pnpm run install-skill -- --mode copy # 以复制模式安装
+pnpm run install-skill -- --force     # 覆盖已有安装
 ```
 
 安装目标：`~/.agents/skills/<skill-name>/`
@@ -398,15 +392,15 @@ npm run install-skill -- --force     # 覆盖已有安装
 ### 卸载
 
 ```bash
-npm run uninstall-skill             # 卸载软链接安装的 skill
-npm run uninstall-skill -- --force   # 强制卸载（含复制模式目录）
+pnpm run uninstall-skill             # 卸载软链接安装的 skill
+pnpm run uninstall-skill -- --force   # 强制卸载（含复制模式目录）
 ```
 
 ## 开发
 
 ```bash
-npm test            # vitest run
-npm run typecheck   # tsc --noEmit
+pnpm test            # vitest run
+pnpm run typecheck   # tsc --noEmit
 ```
 
 ## 当前限制

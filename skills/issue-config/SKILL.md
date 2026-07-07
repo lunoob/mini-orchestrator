@@ -68,7 +68,7 @@ description: 基于已讨论完成的上下文与 issue 文档，生成编排器
 4. skill 根据上下文整理出配置草案
 5. 用户确认配置，或提出修改意见
 6. 用户将确认后的配置保存为 `workflow.local.json`
-7. 用户手动运行编排器：`npx tsx run-post-spec.ts --config workflow.local.json`
+7. 用户手动运行编排器：`pnpm tsx run-post-spec.ts --config workflow.local.json`
 
 ## 共用配置说明
 

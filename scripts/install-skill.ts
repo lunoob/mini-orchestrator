@@ -11,10 +11,10 @@ const TARGET_DIR = path.join(os.homedir(), ".agents", "skills", SKILL_NAME)
 const showUsage = () => {
   console.log(`
 用法:
-  npx tsx scripts/install-skill.ts              # 默认以软链接安装
-  npx tsx scripts/install-skill.ts --mode copy  # 以复制模式安装
-  npx tsx scripts/install-skill.ts --force      # 覆盖已有安装
-  npx tsx scripts/install-skill.ts --uninstall  # 卸载
+  pnpm run install-skill                # 默认以软链接安装
+  pnpm run install-skill -- --mode copy # 以复制模式安装
+  pnpm run install-skill -- --force     # 覆盖已有安装
+  pnpm run uninstall-skill            # 卸载
 
 选项:
   --mode symlink|copy   安装模式（默认 symlink）
