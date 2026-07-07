@@ -41,6 +41,7 @@ mini-orchestrator/
 │   ├── config.ts          # 配置、prompt、skill 加载
 │   ├── git.ts             # git 基线与命令封装
 │   ├── herdr.ts           # herdr CLI 封装（agent start/send/wait）
+│   ├── install-skill.ts   # skill 安装/卸载核心逻辑
 │   ├── main.ts            # 入口：环境检查、错误码
 │   ├── needs-check.ts     # REVIEW_NEEDS_CHECK 交互与 LLM 暂停
 │   ├── review-package.ts  # 生成 diff 审查包
@@ -55,9 +56,13 @@ mini-orchestrator/
 │   ├── controller-implementer.md   # needs_check → revise 专用
 │   ├── controller-re-review.md     # needs_check → retry-review 专用
 │   └── post-review-check.md        # REVIEW_PASS / NEEDS_CHECK 后 typecheck / lint
+├── scripts/
+│   └── install-skill.ts   # skill 安装 CLI 入口
 ├── skills/
 │   ├── implementing-from-spec/
 │   │   └── SKILL.md
+│   ├── issue-config/
+│   │   └── SKILL.md               # 生成 issue 模式配置草案
 │   ├── receiving-code-review/
 │   │   └── SKILL.md                # 接收 review 反馈（源自 superpowers）
 │   └── test-driven-development/
@@ -368,6 +373,40 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
 - `post-review-check.md`
   - `{{round}}`
   - `{{reviewStatus}}` — `REVIEW_PASS` 或 `REVIEW_NEEDS_CHECK`
+
+## Skill 安装
+
+仓库内 `skills/` 目录下提供了一组可安装的 skill，供编排器的 implementer / reviewer agent 使用。通过安装脚本可将 skill 部署到 `~/.agents/skills/`。
+
+### 内置 Skill
+
+| Skill | 路径 | 说明 |
+|-------|------|------|
+| issue-config | `./skills/issue-config/SKILL.md` | 生成编排器 `issue` 模式配置草案 |
+
+### 安装命令
+
+```bash
+npm run install-skill               # 以软链接安装所有内置 skill
+npm run install-skill -- --mode copy # 以复制模式安装
+npm run install-skill -- --force     # 覆盖已有安装
+```
+
+安装目标：`~/.agents/skills/<skill-name>/`
+
+软链接与复制模式的区别：
+
+| 模式 | 行为 | 适用场景 |
+|------|------|----------|
+| `symlink`（默认） | 在 `~/.agents/skills/` 创建指向仓库 `skills/` 的软链接 | 仓库更新后自动生效，无需重新安装 |
+| `copy` | 将 skill 文件复制到 `~/.agents/skills/` | 目标环境无法创建软链接（如某些 CI、容器），或需要独立副本 |
+
+### 卸载
+
+```bash
+npm run uninstall-skill             # 卸载软链接安装的 skill
+npm run uninstall-skill -- --force   # 强制卸载（含复制模式目录）
+```
 
 ## 开发
 
