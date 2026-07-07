@@ -47,3 +47,4 @@ workflow.local.json
 
 # Orchestrator scratch (review packages, etc.)
 .orchestrator/
+.agent-plans
