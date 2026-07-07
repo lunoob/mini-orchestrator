@@ -11,6 +11,7 @@ import {
   getCurrentPane,
   sendTaskAndWait,
   startAgent,
+  stopAgent,
   waitForAgentReady,
 } from "./herdr.js"
 import {
@@ -423,17 +424,7 @@ const runIssueQueue = async (
   configPath: string,
   implementSkills: string,
 ) => {
-  const issues = runtime.config.issues!
-  for (let index = 0; index < issues.length; index += 1) {
-    const issue = issues[index]
-    console.log(`\n=== Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
-    console.log(`Spec path: ${issue.specPath}`)
-
-    await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, undefined, undefined, undefined, index, issues)
-
-    // 当前 issue 完成，推进 baseline 到 HEAD，使后续 issue 仅审查自身变更
-    await advanceBaseline(runtime)
-  }
+  await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues!, implementSkills)
 }
 
 const runWorkflowResume = async (args: ParsedArgs) => {
@@ -490,6 +481,9 @@ const runWorkflowResume = async (args: ParsedArgs) => {
           await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
           return
         }
+        // 最后一个 issue，清理 agent
+        await stopAgent(runtime.implementerPane)
+        await stopAgent(runtime.reviewerPane)
         console.log("\nWorkflow finished: all issues manually approved.")
         return
       case "abort":
@@ -503,7 +497,11 @@ const runWorkflowResume = async (args: ParsedArgs) => {
           // 推进 baseline：当前 issue 的变更已通过 review
           await advanceBaseline(runtime)
           await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
+          return
         }
+        // 最后一个 issue，清理 agent
+        await stopAgent(runtime.implementerPane)
+        await stopAgent(runtime.reviewerPane)
         return
       case "retry-review":
         // 仅继续 review 循环（同轮带补充上下文），不重新发送 implement prompt
@@ -513,7 +511,11 @@ const runWorkflowResume = async (args: ParsedArgs) => {
           // 推进 baseline：当前 issue 的变更已通过 review
           await advanceBaseline(runtime)
           await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
+          return
         }
+        // 最后一个 issue，清理 agent
+        await stopAgent(runtime.implementerPane)
+        await stopAgent(runtime.reviewerPane)
         return
       default: {
         const _exhaustive: never = action
@@ -553,18 +555,46 @@ const runIssueQueueFromIndex = async (
   configPath: string,
   startIndex: number,
   issues: IssueConfig[],
+  implementSkills?: string,
 ) => {
-  const implementSkills = await loadImplementSkills(runtime.config, path.dirname(configPath))
+  if (!implementSkills) {
+    implementSkills = await loadImplementSkills(runtime.config, path.dirname(configPath))
+  }
 
   for (let index = startIndex; index < issues.length; index += 1) {
     const issue = issues[index]
     console.log(`\n=== Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
     console.log(`Spec path: ${issue.specPath}`)
 
-    await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, undefined, undefined, undefined, index, issues)
+    // 清理上个 issue 残留的 agent（resume 路径会从 checkpoint 带入旧 pane）
+    if (runtime.implementerPane) await stopAgent(runtime.implementerPane)
+    if (runtime.reviewerPane) await stopAgent(runtime.reviewerPane)
 
-    // 当前 issue 完成，推进 baseline 到 HEAD，使后续 issue 仅审查自身变更
-    await advanceBaseline(runtime)
+    let startedImplementer = false
+    let startedReviewer = false
+
+    try {
+      runtime.implementerPane = await startAgent(runtime.config.projectDir, runtime.config.implementer, {
+        ensureUniqueName: true,
+      })
+      startedImplementer = true
+      await waitForAgentReady(runtime.implementerPane, agentWaitOptions(runtime.config.implementer))
+
+      runtime.reviewerPane = await startAgent(runtime.config.projectDir, runtime.config.reviewer, {
+        ensureUniqueName: true,
+      })
+      startedReviewer = true
+      await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
+
+      await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, undefined, undefined, undefined, index, issues)
+
+      // 当前 issue 完成，推进 baseline 到 HEAD，使后续 issue 仅审查自身变更
+      await advanceBaseline(runtime)
+    } finally {
+      // 按逆序关闭 agent
+      if (startedReviewer) await stopAgent(runtime.reviewerPane)
+      if (startedImplementer) await stopAgent(runtime.implementerPane)
+    }
   }
 }
 
@@ -604,6 +634,25 @@ export const runWorkflow = async (args: ParsedArgs) => {
     console.log("Needs-check mode: llm (pause with checkpoint on REVIEW_NEEDS_CHECK)")
   }
 
+  const mode = config.mode ?? "spec"
+
+  if (mode === "issue") {
+    // issue 模式：agent 按 issue 启动/销毁，由 runIssueQueue 管理生命周期
+    const runtime: WorkflowRuntime = {
+      args,
+      baseSha,
+      config,
+      hasGit,
+      implementerPane: "",
+      needsCheckMode,
+      prompts,
+      reviewerPane: "",
+    }
+    await runIssueQueue(runtime, configPath, implementSkills)
+    return
+  }
+
+  // spec 模式：在开头启动一次 agent，复用至工作流结束
   const implementerPane = await startAgent(config.projectDir, config.implementer, {
     ensureUniqueName: true,
   })
@@ -630,13 +679,6 @@ export const runWorkflow = async (args: ParsedArgs) => {
     needsCheckMode,
     prompts,
     reviewerPane,
-  }
-
-  const mode = config.mode ?? "spec"
-
-  if (mode === "issue") {
-    await runIssueQueue(runtime, configPath, implementSkills)
-    return
   }
 
   // spec 模式：原有单 spec 工作流

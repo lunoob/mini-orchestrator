@@ -226,6 +226,10 @@ export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({
   agentReadyPattern: agent.agentReadyPattern,
 })
 
+export const stopAgent = async (paneId: string) => {
+  await runHerdr(["pane", "close", paneId])
+}
+
 export const readAgentOutput = async (paneId: string, lines: number) =>
   runHerdr([
     "agent",
