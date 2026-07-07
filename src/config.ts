@@ -11,8 +11,6 @@ const DEFAULT_IMPLEMENT_SKILLS = [
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
-const DEFAULT_REVISE_SKILLS = ["./skills/receiving-code-review/SKILL.md"]
-
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = "./prompts/controller-implementer.md"
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = "./prompts/controller-re-review.md"
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = "./prompts/post-review-check.md"
@@ -143,11 +141,6 @@ const skillSectionTitle = (skillPath: string) => {
 
 export const loadImplementSkills = async (config: WorkflowConfig, configDir: string) => {
   const skillPaths = config.skills?.implement ?? DEFAULT_IMPLEMENT_SKILLS
-  return loadSkillSections(configDir, skillPaths)
-}
-
-export const loadReviseSkills = async (config: WorkflowConfig, configDir: string) => {
-  const skillPaths = config.skills?.revise ?? DEFAULT_REVISE_SKILLS
   return loadSkillSections(configDir, skillPaths)
 }
 

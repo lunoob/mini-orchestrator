@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 
 import { readNeedsCheckCheckpoint } from "./checkpoint.js"
 import { isFlagEnabled } from "./cli.js"
-import { loadConfig, loadImplementSkills, loadPrompts, loadReviseSkills } from "./config.js"
+import { loadConfig, loadImplementSkills, loadPrompts } from "./config.js"
 import { getHeadShaSafe, getReviewBaselineSha, isGitRepo } from "./git.js"
 import { createSession } from "./session.js"
 import {
@@ -32,7 +32,6 @@ type WorkflowRuntime = {
   needsCheckMode: NeedsCheckMode
   prompts: LoadedPrompts
   reviewerPane: string
-  reviseSkills: string
 }
 
 type ReviewLoopOptions = {
@@ -120,7 +119,6 @@ const sendControllerRevise = async (
     render(runtime.prompts.controllerImplementer, {
       controllerNotes,
       reviewOutput,
-      reviseSkills: runtime.reviseSkills,
       round: String(round),
     }),
     agentWaitOptions(runtime.config.implementer),
@@ -274,7 +272,6 @@ const sendReviseAfterFail = async (
     runtime.implementerPane,
     render(runtime.prompts.revise, {
       reviewOutput,
-      reviseSkills: runtime.reviseSkills,
       round: String(round),
     }),
     agentWaitOptions(runtime.config.implementer),
@@ -454,7 +451,6 @@ const runWorkflowResume = async (args: ParsedArgs) => {
   const config = await loadConfig(configPath, args)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
-  const reviseSkills = await loadReviseSkills(config, configDir)
   const implementSkills = await loadImplementSkills(config, configDir)
 
   const runtime: WorkflowRuntime = {
@@ -466,7 +462,6 @@ const runWorkflowResume = async (args: ParsedArgs) => {
     needsCheckMode: parseNeedsCheckMode(args),
     prompts,
     reviewerPane: checkpoint.reviewerPane,
-    reviseSkills,
   }
 
   delete runtime.args["resume-from"]
@@ -592,7 +587,6 @@ export const runWorkflow = async (args: ParsedArgs) => {
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
   const implementSkills = await loadImplementSkills(config, configDir)
-  const reviseSkills = await loadReviseSkills(config, configDir)
   const needsCheckMode = parseNeedsCheckMode(args)
   const reuseCurrentPane = isFlagEnabled(args, "reuse-current-pane")
 
@@ -636,7 +630,6 @@ export const runWorkflow = async (args: ParsedArgs) => {
     needsCheckMode,
     prompts,
     reviewerPane,
-    reviseSkills,
   }
 
   const mode = config.mode ?? "spec"

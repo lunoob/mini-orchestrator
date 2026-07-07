@@ -10,10 +10,6 @@
 
 {{reviewOutput}}
 
-## 接收反馈（必须遵循）
-
-{{reviseSkills}}
-
 ## 工作约束
 
 - 仅处理 Controller 说明与 reviewer 中**已确认的问题**；`⚠️ Cannot verify` 项若 Controller 未要求修改，不要猜测性大改

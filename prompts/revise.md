@@ -6,10 +6,6 @@
 
 {{reviewOutput}}
 
-## 接收反馈（必须遵循）
-
-{{reviseSkills}}
-
 ## 修复优先级
 
 1. **Critical** — 本轮必须全部修复

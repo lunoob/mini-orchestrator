@@ -5,10 +5,10 @@
 1. implementer 读 spec，按 skills 规划进度并 TDD 编码
 2. 编排器生成 **review package**（git diff 文件），交给 reviewer
 3. reviewer 做 **双 verdict 审查**（规格合规 + 代码质量），按 Critical/Important/Minor 分级反馈
-4. review 失败时回到 implementer，按 `receiving-code-review` skill 修复
+4. review 失败时回到 implementer，按 review 反馈修复
 5. 最多循环固定轮数
 
-Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的 `requesting-code-review` / `subagent-driven-development` / `receiving-code-review`。
+Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的 `requesting-code-review` / `subagent-driven-development`。
 
 ## 运行模式
 
@@ -61,8 +61,6 @@ mini-orchestrator/
 ├── skills/
 │   ├── issue-config/
 │   │   └── SKILL.md               # 生成 issue 模式配置草案
-│   ├── receiving-code-review/
-│   │   └── SKILL.md                # 接收 review 反馈（源自 superpowers）
 │   └── test-driven-development/
 │       └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
 ├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
@@ -184,7 +182,6 @@ start-orchestrator \
 | 阶段 | Skill | 路径 | 说明 |
 |------|-------|------|------|
 | implement | test-driven-development | `~/.agents/skills/test-driven-development/SKILL.md` | 外部依赖，TDD 铁律 |
-| revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
 
 `skills.implement` 与 `skills.revise` 均可在 `workflow.json` 中覆盖。加载时会自动剥离 skill 文件的 YAML frontmatter。
 
