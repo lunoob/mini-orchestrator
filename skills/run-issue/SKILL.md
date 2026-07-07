@@ -45,10 +45,10 @@ disable-model-invocation: true
 - `issues[]` 按顺序排列，对应编排器的串行执行顺序
 - `title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
-
-## 共用配置说明
-
-除 `issues[]` 外，配置中的 `projectDir`、`implementer`、`reviewer`、`maxReviewRounds` 等字段应在讨论中约定一个共用值，避免每项 issue 重复填写。
+- `projectDir` 使用当前的项目目录
+- `maxReviewRounds` 没有提供则使用 8
+- `implementer` 没有提供则使用 "claude --model haiku"
+- `reviewer` 没有提供则使用 "codex --model gpt-5.4"
 
 ## 工作流
 
