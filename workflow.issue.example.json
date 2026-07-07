@@ -1,7 +1,20 @@
 {
   "projectDir": "/absolute/path/to/project",
-  "mode": "spec",
-  "specPath": "/absolute/path/to/spec.md",
+  "mode": "issue",
+  "issues": [
+    {
+      "title": "Step 1: Setup database schema",
+      "specPath": "/absolute/path/to/specs/db-schema.md"
+    },
+    {
+      "title": "Step 2: Implement API endpoints",
+      "specPath": "/absolute/path/to/specs/api-endpoints.md"
+    },
+    {
+      "title": "Step 3: Add frontend integration",
+      "specPath": "/absolute/path/to/specs/frontend.md"
+    }
+  ],
   "maxReviewRounds": 4,
   "implementer": {
     "name": "implementer",

@@ -10,6 +10,27 @@
 
 Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的 `requesting-code-review` / `subagent-driven-development` / `receiving-code-review`。
 
+## 运行模式
+
+编排器支持两种运行模式，通过配置文件中的 `mode` 字段或 CLI `--mode` 参数指定：
+
+### spec 模式（默认）
+
+读取单个 `specPath`，执行一次实现 + review 循环。兼容旧配置（不写 `mode` 时默认为 spec 模式）。
+
+参考配置：[`workflow.example.json`](workflow.example.json)
+
+### issue 模式
+
+读取 `issues[]` 数组，按数组顺序**串行**执行多个 issue。每个 issue 包含 `title` 和 `specPath`，复用相同的 implementer 与 reviewer agent。
+
+参考配置：[`workflow.issue.example.json`](workflow.issue.example.json)
+
+限制：
+- issue 按数组顺序执行，不做并行调度
+- 任一 issue 进入 `REVIEW_FAIL` 耗尽轮数后，整个工作流停止，后续 issue 不执行
+- `needs_check` 暂停后 resume，继续的是当前 issue（而非跳到下一个）
+
 ## 目录结构
 
 ```text
@@ -23,9 +44,10 @@ mini-orchestrator/
 │   ├── main.ts            # 入口：环境检查、错误码
 │   ├── needs-check.ts     # REVIEW_NEEDS_CHECK 交互与 LLM 暂停
 │   ├── review-package.ts  # 生成 diff 审查包
+│   ├── session.ts         # 工作流 session 管理
 │   ├── types.ts
 │   ├── utils.ts           # verdict 解析、模板渲染
-│   └── workflow.ts        # 主工作流编排
+│   └── workflow.ts        # 主工作流编排（含 issue 队列）
 ├── prompts/
 │   ├── implement.md
 │   ├── review.md
@@ -36,14 +58,14 @@ mini-orchestrator/
 ├── skills/
 │   ├── implementing-from-spec/
 │   │   └── SKILL.md
-│   ├── planning-with-files/
-│   │   └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
 │   ├── receiving-code-review/
 │   │   └── SKILL.md                # 接收 review 反馈（源自 superpowers）
 │   └── test-driven-development/
 │       └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
 ├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
 ├── workflow.example.json
+├── workflow.issue.example.json
+├── vitest.config.ts
 └── package.json
 ```
 
@@ -93,7 +115,7 @@ flowchart TD
 - **Diff Stat / Diff** — 完整 diff（`-U10` 上下文）
 - **Uncommitted Changes**（若有）— `git status`、工作区与暂存区的 stat / diff
 
-非 git 项目或无法生成 diff 时，review prompt 会降级为提示 reviewer 直接审查工作区改动及 `task_plan.md` / `progress.md`。
+非 git 项目或无法生成 diff 时，review prompt 会降级为提示 reviewer 直接审查工作区改动。
 
 ### 审查结果（三种）
 
@@ -129,6 +151,8 @@ start-orchestrator \
 
 恢复时 `--config` 可省略（checkpoint 内保存了 `configPath`）；`revise` 从下一轮继续 review，`retry-review` 在同一轮用 `controller-re-review` prompt 重审。
 
+在 issue 模式下 `approve` 当前 issue 后，若队列中还有后续 issue，编排器会自动继续执行下一项。
+
 ### Review 通过后静态检查
 
 当 reviewer 输出 `REVIEW_PASS` 或 `REVIEW_NEEDS_CHECK` 后，编排器会向 implementer 发送 `post-review-check` prompt，要求其自行探测并运行项目的 TypeScript 类型检查与 lint（若存在对应配置或 `package.json` script）。implementer 负责修复问题并重复校验；编排器**不解析**检查输出，仅以 `IMPLEMENT_DONE` / `IMPLEMENT_ASK` 判断任务是否结束。
@@ -156,43 +180,32 @@ start-orchestrator \
 
 | 阶段 | Skill | 路径 | 说明 |
 |------|-------|------|------|
-| implement | planning-with-files | 自动按 implementer 环境选择 | 外部依赖，从 spec 派生 `task_plan.md` |
 | implement | implementing-from-spec | `./skills/implementing-from-spec/SKILL.md` | 实现流程、自审清单 |
 | implement | test-driven-development | `~/.agents/skills/test-driven-development/SKILL.md` | 外部依赖，TDD 铁律 |
 | revise | receiving-code-review | `./skills/receiving-code-review/SKILL.md` | 先验证再改、按严重程度修复 |
 
 `skills.implement` 与 `skills.revise` 均可在 `workflow.json` 中覆盖。加载时会自动剥离 skill 文件的 YAML frontmatter。
 
-### planning-with-files（外部依赖）
-
-编排器**不会**把该 skill 复制进本仓库，而是会根据 `implementer.command` 自动选择对应环境中的安装路径，并在运行时读取 `SKILL.md` 注入 implement prompt：
-
-- `codex` → `~/.codex/skills/planning-with-files/SKILL.md`
-- `claude` → `~/.claude/plugins/marketplaces/planning-with-files/skills/planning-with-files/SKILL.md`
-- `cursor` → `~/.cursor/skills/planning-with-files/SKILL.md`
-
-若 `implementer.command` 无法识别，当前默认回退到 Codex 路径。若你在 `workflow.json` 显式配置了 `skills.implement`，则会完全按配置加载，不再使用自动探测。
-
-引用说明见 [`skills/planning-with-files/DEPENDENCY.md`](skills/planning-with-files/DEPENDENCY.md)、[`skills/test-driven-development/DEPENDENCY.md`](skills/test-driven-development/DEPENDENCY.md)。
-
 ### test-driven-development（外部依赖）
 
 编排器**不会**把该 skill 复制进本仓库，而是从 `~/.agents/skills/test-driven-development/SKILL.md` 读取并注入 implement prompt。辅助文档 `testing-anti-patterns.md` 与 SKILL 同目录，由 implementer 在 SKILL 正文指引下按需阅读。
 
-安装：将 [self-skills](https://github.com/lunoob/self-skills) 仓库克隆或同步到 `~/.agents/skills`（`~/.cursor/skills` 通常符号链接到该目录）。
+安装：将 [self-skills](https://github.com/lunoob/self-skills) 仓库克隆或同步到 `~/.agents/skills`。
 
 ## 运行方式
 
 先复制示例配置：
 
 ```bash
-cp workflow.example.json workflow.local.json
+cp workflow.example.json workflow.local.json   # spec 模式
+# 或
+cp workflow.issue.example.json workflow.local.json  # issue 模式
 ```
 
 然后修改：
 
 - `projectDir`
-- `specPath`
+- `specPath` / `issues[]`
 - `implementer.command`
 - `reviewer.command`
 
@@ -200,6 +213,7 @@ cp workflow.example.json workflow.local.json
 
 ```bash
 npx tsx run-post-spec.ts --config workflow.local.json
+npx tsx run-post-spec.ts --config workflow.local.json --mode issue  # 用 CLI 覆盖模式
 npx tsx run-post-spec.ts --help          # 不需要 HERDR_ENV=1
 npm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
 ```
@@ -238,9 +252,10 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--config` | 首次启动必填；resume 时可省略 | workflow 配置文件的绝对或相对路径 |
+| `--mode` | 否 | 运行模式：`spec`（默认）\| `issue`，覆盖配置中的 `mode` |
 | `--projectDir` | 否 | 项目目录，覆盖配置中的 `projectDir` |
 | `--specPath` | 否 | spec 文件路径，覆盖配置中的 `specPath` |
-| `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds`（默认 4） |
+| `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds`（默认 8） |
 | `--reuse-current-pane` | 否 | 复用当前 herdr pane 作为 reviewer，不新建 reviewer pane |
 | `--needs-check-mode` | 否 | `interactive`（默认）或 `llm` |
 | `--resume-from` | 否 | 从 needs_check checkpoint 恢复（需配合 `--needs-check-action`） |
@@ -248,9 +263,12 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | `--needs-check-notes` | `revise` / `retry-review` 时必填 | 补充说明 |
 | `-h`, `--help` | 否 | 显示使用帮助（不需要 `HERDR_ENV=1`） |
 
-至少需要为 `projectDir`、`specPath` 各提供一种来源（配置文件或 CLI）。
+spec 模式至少需要为 `projectDir`、`specPath` 各提供一种来源（配置文件或 CLI）。
+issue 模式需要配置文件中包含 `issues[]` 数组。
 
 ## 配置说明
+
+### spec 模式
 
 ```json
 {
@@ -270,25 +288,49 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   "prompts": {
     "implement": "./prompts/implement.md",
     "review": "./prompts/review.md",
-    "revise": "./prompts/revise.md",
-    "controllerImplementer": "./prompts/controller-implementer.md",
-    "controllerReReview": "./prompts/controller-re-review.md",
-    "postReviewCheck": "./prompts/post-review-check.md"
-  },
-  "skills": {
-    "implement": [
-      "~/.codex/skills/planning-with-files/SKILL.md",
-      "./skills/implementing-from-spec/SKILL.md",
-      "~/.agents/skills/test-driven-development/SKILL.md"
-    ],
-    "revise": [
-      "./skills/receiving-code-review/SKILL.md"
-    ]
+    "revise": "./prompts/revise.md"
   }
 }
 ```
 
-`prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用上述默认路径。
+### issue 模式
+
+```json
+{
+  "projectDir": "/absolute/path/to/project",
+  "mode": "issue",
+  "issues": [
+    {
+      "title": "Step 1: Setup database schema",
+      "specPath": "/absolute/path/to/specs/db-schema.md"
+    },
+    {
+      "title": "Step 2: Implement API endpoints",
+      "specPath": "/absolute/path/to/specs/api-endpoints.md"
+    }
+  ],
+  "maxReviewRounds": 4,
+  "implementer": {
+    "name": "implementer",
+    "command": "cursor --model composer",
+    "agentReadyPattern": "Cursor Agent"
+  },
+  "reviewer": {
+    "name": "reviewer",
+    "command": "codex --model gpt-5.5",
+    "agentReadyPattern": "codex"
+  },
+  "prompts": {
+    "implement": "./prompts/implement.md",
+    "review": "./prompts/review.md",
+    "revise": "./prompts/revise.md"
+  }
+}
+```
+
+### 完整配置项
+
+`prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用默认路径（见源代码 `src/config.ts` 中的常量）。
 
 `implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
 
@@ -330,6 +372,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 ## 开发
 
 ```bash
+npm test            # vitest run
 npm run typecheck   # tsc --noEmit
 ```
 
@@ -337,7 +380,7 @@ npm run typecheck   # tsc --noEmit
 
 - 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE`，以 `herdr agent wait --status working` 确认任务被接收、再以 `idle` 判断任务结束。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
-- 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区与 planning 文件。
-- 当前为整次实现的 review 轮询，尚未拆分为 superpowers 的 per-task 门禁。
+- 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
+- issue 模式为串行执行；并行调度不在此版本范围内。
 - agent 空闲等待超时为 30 分钟（`herdr agent wait --timeout 1800000`）。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

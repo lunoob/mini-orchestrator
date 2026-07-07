@@ -20,7 +20,7 @@ import {
   type NeedsCheckMode,
 } from "./needs-check.js"
 import { generateReviewPackage } from "./review-package.js"
-import type { LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
+import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
 import { parseImplementStatus, parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
 
 type WorkflowRuntime = {
@@ -52,7 +52,7 @@ const buildDiffFileSection = (diffFile: string | undefined, noGit: boolean) => {
       : "无可用 commit 范围或无法生成 diff"
     return [
       "",
-      `（未生成 diff 文件——${reason}。请审查工作区改动，并阅读 \`task_plan.md\` / \`progress.md\`。）`,
+      `（未生成 diff 文件——${reason}。请审查工作区改动与实现记录。）`,
     ].join("\n")
   }
 
@@ -88,6 +88,9 @@ const buildCheckpointInput = (
   reviewOutput: string,
   verdict: ReviewVerdict,
   reuseCurrentPane: boolean,
+  specPath: string,
+  issueIndex?: number,
+  issues?: IssueConfig[],
 ) => ({
   baseSha: runtime.baseSha,
   cannotVerifySummary: verdict.cannotVerifySummary,
@@ -95,12 +98,15 @@ const buildCheckpointInput = (
   hasGit: runtime.hasGit,
   implementerPane: runtime.implementerPane,
   maxReviewRounds: runtime.config.maxReviewRounds,
+  mode: runtime.config.mode,
   projectDir: runtime.config.projectDir,
   reviewOutput,
   reviewerPane: runtime.reviewerPane,
   reuseCurrentPane,
   round,
-  specPath: runtime.config.specPath,
+  specPath,
+  currentIssueIndex: issueIndex,
+  issues,
 })
 
 const sendControllerRevise = async (
@@ -137,6 +143,7 @@ const conductReview = async (
   runtime: WorkflowRuntime,
   round: number,
   sessionDir: string,
+  specPath: string,
   options: ReviewLoopOptions = {},
 ) => {
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.baseSha, round)
@@ -154,14 +161,14 @@ const conductReview = async (
           headSha: reviewContext.headSha,
           reviewOutput: options.lastReviewOutput,
           round: String(round),
-          specPath: runtime.config.specPath,
+          specPath,
         })
       : render(runtime.prompts.review, {
           baseSha: reviewContext.baseSha,
           diffFileSection,
           headSha: reviewContext.headSha,
           round: String(round),
-          specPath: runtime.config.specPath,
+          specPath,
         })
 
   const reviewOutput = await sendTaskAndWait(
@@ -182,6 +189,9 @@ const handleNeedsCheck = async (
   verdict: ReviewVerdict,
   reuseCurrentPane: boolean,
   sessionDir: string,
+  specPath: string,
+  issueIndex?: number,
+  issues?: IssueConfig[],
 ): Promise<NeedsCheckOutcome> => {
   const decision = await resolveNeedsCheckDecision(
     runtime.args,
@@ -189,7 +199,7 @@ const handleNeedsCheck = async (
     round,
     verdict,
     reviewOutput,
-    buildCheckpointInput(runtime, configPath, round, reviewOutput, verdict, reuseCurrentPane),
+    buildCheckpointInput(runtime, configPath, round, reviewOutput, verdict, reuseCurrentPane, specPath, issueIndex, issues),
     sessionDir,
   )
 
@@ -289,7 +299,10 @@ const runReviewLoop = async (
   startRound: number,
   reuseCurrentPane: boolean,
   sessionDir: string,
+  specPath: string,
   initialOptions?: ReviewLoopOptions,
+  issueIndex?: number,
+  issues?: IssueConfig[],
 ) => {
   for (let round = startRound; round <= runtime.config.maxReviewRounds; round += 1) {
     let activeLoopOptions: ReviewLoopOptions | undefined = round === startRound ? initialOptions : undefined
@@ -298,7 +311,7 @@ const runReviewLoop = async (
     while (retrySameRound) {
       retrySameRound = false
 
-      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, activeLoopOptions ?? {})
+      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
       activeLoopOptions = undefined
 
       if (verdict.kind === "pass") {
@@ -322,6 +335,9 @@ const runReviewLoop = async (
           verdict,
           reuseCurrentPane,
           sessionDir,
+          specPath,
+          issueIndex,
+          issues,
         )
 
         if (outcome.type === "approved") return
@@ -348,6 +364,81 @@ const runReviewLoop = async (
   throw new Error(`Review failed after ${runtime.config.maxReviewRounds} rounds.`)
 }
 
+/**
+ * 对单个 spec 执行完整的实现 + review 循环。
+ * spec 模式与 issue 模式的每个 issue 都复用此函数。
+ */
+const runSingleSpecCycle = async (
+  runtime: WorkflowRuntime,
+  configPath: string,
+  specPath: string,
+  sessionDir: string,
+  implementSkills: string,
+  startRound?: number,
+  controllerReviewNotes?: string,
+  lastReviewOutput?: string,
+  issueIndex?: number,
+  issues?: IssueConfig[],
+) => {
+  const round = startRound ?? 1
+  const initialOptions: ReviewLoopOptions | undefined =
+    controllerReviewNotes && lastReviewOutput ? { controllerReviewNotes, lastReviewOutput } : undefined
+
+  const specContent = await readFile(specPath, "utf8")
+  const configContent = await readFile(configPath, "utf8")
+  const { sessionDir: specSessionDir } = await createSession(
+    runtime.config.projectDir, configPath, configContent, specPath, specContent, runtime.args,
+  )
+
+  console.log(`Session: ${specSessionDir}`)
+
+  const implementOutput = await sendTaskAndWait(
+    runtime.implementerPane,
+    render(runtime.prompts.implement, {
+      implementSkills,
+      maxReviewRounds: String(runtime.config.maxReviewRounds),
+      specPath,
+    }),
+    agentWaitOptions(runtime.config.implementer),
+  )
+
+  const implementStatus = parseImplementStatus(implementOutput)
+  if (implementStatus === "needs_input") {
+    printSection("Implementer Needs Input", implementOutput)
+    throw new Error("Implementer has questions — needs human input before review.")
+  }
+  if (implementStatus === "unknown") {
+    console.warn(
+      "Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
+        "The implementation may be incomplete. Proceeding to review anyway.",
+    )
+  }
+
+  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, initialOptions, issueIndex, issues)
+}
+
+/**
+ * issue 模式：按数组顺序串行执行每个 issue。
+ * 任一 issue 失败时停止。
+ */
+const runIssueQueue = async (
+  runtime: WorkflowRuntime,
+  configPath: string,
+  implementSkills: string,
+) => {
+  const issues = runtime.config.issues!
+  for (let index = 0; index < issues.length; index += 1) {
+    const issue = issues[index]
+    console.log(`\n=== Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
+    console.log(`Spec path: ${issue.specPath}`)
+
+    await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, undefined, undefined, undefined, index, issues)
+
+    // 当前 issue 完成，推进 baseline 到 HEAD，使后续 issue 仅审查自身变更
+    await advanceBaseline(runtime)
+  }
+}
+
 const runWorkflowResume = async (args: ParsedArgs) => {
   const checkpointPath = path.resolve(args["resume-from"])
   const sessionDir = path.dirname(checkpointPath)
@@ -364,6 +455,7 @@ const runWorkflowResume = async (args: ParsedArgs) => {
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
   const reviseSkills = await loadReviseSkills(config, configDir)
+  const implementSkills = await loadImplementSkills(config, configDir)
 
   const runtime: WorkflowRuntime = {
     args: { ...args },
@@ -384,6 +476,58 @@ const runWorkflowResume = async (args: ParsedArgs) => {
   console.log(`Resuming from checkpoint: ${checkpointPath}`)
   console.log(`Needs-check action: ${action}`)
 
+  // issue 模式 resume
+  if (checkpoint.mode === "issue" && checkpoint.issues) {
+    const currentIndex = checkpoint.currentIssueIndex ?? 0
+    const currentIssue = checkpoint.issues[currentIndex]
+
+    if (!currentIssue) {
+      throw new Error(`Invalid checkpoint: issue index ${currentIndex} out of range`)
+    }
+
+    switch (action) {
+      case "approve":
+        console.log(`Issue approved: ${currentIssue.title}`)
+        // 若还有后续 issue，继续执行
+        if (currentIndex + 1 < checkpoint.issues.length) {
+          // 推进 baseline 到 HEAD：当前 issue 已完成，后续 issue 不应包含其变更
+          await advanceBaseline(runtime)
+          await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
+          return
+        }
+        console.log("\nWorkflow finished: all issues manually approved.")
+        return
+      case "abort":
+        throw new Error(`Workflow aborted after needs_check in round ${checkpoint.round}.`)
+      case "revise":
+        await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
+        // 仅继续 review 循环，不重新发送 implement prompt
+        await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, undefined, currentIndex, checkpoint.issues)
+        // 当前 issue review 通过，若还有后续 issue 则继续
+        if (currentIndex + 1 < checkpoint.issues.length) {
+          // 推进 baseline：当前 issue 的变更已通过 review
+          await advanceBaseline(runtime)
+          await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
+        }
+        return
+      case "retry-review":
+        // 仅继续 review 循环（同轮带补充上下文），不重新发送 implement prompt
+        await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput }, currentIndex, checkpoint.issues)
+        // 当前 issue review 通过，若还有后续 issue 则继续
+        if (currentIndex + 1 < checkpoint.issues.length) {
+          // 推进 baseline：当前 issue 的变更已通过 review
+          await advanceBaseline(runtime)
+          await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
+        }
+        return
+      default: {
+        const _exhaustive: never = action
+        throw new Error(`Unknown needs-check action: ${_exhaustive}`)
+      }
+    }
+  }
+
+  // 原有 spec 模式 resume
   switch (action) {
     case "approve":
       console.log(`Workflow finished: manually approved after needs_check in round ${checkpoint.round}.`)
@@ -392,18 +536,49 @@ const runWorkflowResume = async (args: ParsedArgs) => {
       throw new Error(`Workflow aborted after needs_check in round ${checkpoint.round}.`)
     case "revise":
       await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
-      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir)
+      // 仅继续 review 循环，不重新发送 implement prompt
+      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, checkpoint.specPath)
       return
     case "retry-review":
-      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, {
-        controllerReviewNotes: notes,
-        lastReviewOutput: checkpoint.reviewOutput,
-      })
+      // 仅继续 review 循环（同轮带补充上下文），不重新发送 implement prompt
+      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, checkpoint.specPath, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput })
       return
     default: {
       const _exhaustive: never = action
       throw new Error(`Unknown needs-check action: ${_exhaustive}`)
     }
+  }
+}
+
+/**
+ * 从指定 index 开始执行 issue 队列。
+ */
+const runIssueQueueFromIndex = async (
+  runtime: WorkflowRuntime,
+  configPath: string,
+  startIndex: number,
+  issues: IssueConfig[],
+) => {
+  const implementSkills = await loadImplementSkills(runtime.config, path.dirname(configPath))
+
+  for (let index = startIndex; index < issues.length; index += 1) {
+    const issue = issues[index]
+    console.log(`\n=== Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
+    console.log(`Spec path: ${issue.specPath}`)
+
+    await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, undefined, undefined, undefined, index, issues)
+
+    // 当前 issue 完成，推进 baseline 到 HEAD，使后续 issue 仅审查自身变更
+    await advanceBaseline(runtime)
+  }
+}
+
+const advanceBaseline = async (runtime: WorkflowRuntime) => {
+  if (!runtime.hasGit) return
+  const headSha = await getHeadShaSafe(runtime.config.projectDir)
+  if (headSha) {
+    runtime.baseSha = headSha
+    console.log(`Review baseline advanced: ${headSha}`)
   }
 }
 
@@ -464,10 +639,18 @@ export const runWorkflow = async (args: ParsedArgs) => {
     reviseSkills,
   }
 
+  const mode = config.mode ?? "spec"
+
+  if (mode === "issue") {
+    await runIssueQueue(runtime, configPath, implementSkills)
+    return
+  }
+
+  // spec 模式：原有单 spec 工作流
+  const specContent = await readFile(config.specPath!, "utf8")
   const configContent = await readFile(configPath, "utf8")
-  const specContent = await readFile(config.specPath, "utf8")
   const { sessionDir } = await createSession(
-    config.projectDir, configPath, configContent, config.specPath, specContent, args,
+    config.projectDir, configPath, configContent, config.specPath!, specContent, args,
   )
   console.log(`Session: ${sessionDir}`)
 
@@ -476,7 +659,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
     render(prompts.implement, {
       implementSkills,
       maxReviewRounds: String(config.maxReviewRounds),
-      specPath: config.specPath,
+      specPath: config.specPath!,
     }),
     agentWaitOptions(config.implementer),
   )
@@ -493,5 +676,5 @@ export const runWorkflow = async (args: ParsedArgs) => {
     )
   }
 
-  await runReviewLoop(runtime, configPath, 1, reuseCurrentPane, sessionDir)
+  await runReviewLoop(runtime, configPath, 1, reuseCurrentPane, sessionDir, config.specPath!)
 }

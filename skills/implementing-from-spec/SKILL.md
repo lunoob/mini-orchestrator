@@ -25,7 +25,7 @@ description: 在根据 spec 实现功能、修复 bug 或完成行为变更时�
 digraph implement_flow {
     rankdir=TB;
     "阅读 spec" [shape=box];
-    "从 spec 创建 task_plan.md" [shape=box];
+    "制定实现计划" [shape=box];
     "下一个行为/任务" [shape=ellipse];
     "红：写失败测试" [shape=box, style=filled, fillcolor="#ffcccc"];
     "确认测试正确失败" [shape=diamond];
@@ -36,8 +36,8 @@ digraph implement_flow {
     "提交前自审" [shape=box];
     "输出 STATUS: IMPLEMENT_DONE" [shape=doublecircle];
 
-    "阅读 spec" -> "从 spec 创建 task_plan.md";
-    "从 spec 创建 task_plan.md" -> "下一个行为/任务";
+    "阅读 spec" -> "制定实现计划";
+    "制定实现计划" -> "下一个行为/任务";
     "下一个行为/任务" -> "红：写失败测试";
     "红：写失败测试" -> "确认测试正确失败";
     "确认测试正确失败" -> "绿：最少实现" [label="失败原因正确"];
@@ -58,17 +58,15 @@ digraph implement_flow {
 - 不清楚的地方先问用户，不要猜
 - 浏览项目现有代码与测试风格，对齐约定
 
-## 2. 制定实现计划（planning-with-files）
+## 2. 制定实现计划
 
-**必须先按已加载的 `planning-with-files` skill 从 spec 创建并维护 planning 文件**，不要用 TodoWrite 替代磁盘进度。
-
-从 spec 派生 `task_plan.md`（及 `progress.md`），按依赖顺序列出每个可交付行为/阶段。计划应包含：
+**从 spec 创建实现计划**，按依赖顺序列出每个可交付行为/阶段。计划应包含：
 
 - 要改哪些文件
 - 每个行为的测试策略（测什么、不测什么）
 - 不实现 spec 未要求的内容
 
-每完成一个阶段：更新 `task_plan.md` 状态，并在 `progress.md` 记录 TDD 结果与改动摘要。调研与踩坑写入 `findings.md`。
+每完成一个阶段：更新计划状态，并记录 TDD 结果与改动摘要。调研与踩坑记入进度记录。
 
 ## 3. 按 TDD 实现
 
@@ -100,9 +98,9 @@ digraph implement_flow {
 - [ ] 每个新测试在实现前都观察过正确失败
 - [ ] 全部测试通过，输出干净（无错误、无警告）
 
-**Planning 文件：**
-- [ ] `task_plan.md` 中所有阶段已标记 complete
-- [ ] `progress.md` 已记录最终实现与测试摘要
+**实现记录：**
+- [ ] 实现计划中所有阶段已完成
+- [ ] 已记录最终实现与测试摘要
 
 有任一项未满足：继续修改，不要输出 `STATUS: IMPLEMENT_DONE`。
 

@@ -1,19 +1,13 @@
-import { access, readFile } from "node:fs/promises"
+import { access as fsAccess, readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import type { LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
-
-const PLANNING_WITH_FILES_SKILL_PATHS = {
-  claude: "~/.claude/plugins/marketplaces/planning-with-files/skills/planning-with-files/SKILL.md",
-  codex: "~/.codex/skills/planning-with-files/SKILL.md",
-  cursor: "~/.cursor/skills/planning-with-files/SKILL.md",
-} as const
+import type { IssueConfig, LoadedPrompts, Mode, ParsedArgs, WorkflowConfig } from "./types.js"
 
 const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
 
-const DEFAULT_IMPLEMENT_SKILL_SUFFIXES = [
+const DEFAULT_IMPLEMENT_SKILLS = [
   "./skills/implementing-from-spec/SKILL.md",
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
@@ -34,27 +28,6 @@ const parseMaxReviewRounds = (value: string) => {
   return rounds
 }
 
-const detectImplementerEnvironment = (command: string) => {
-  const normalized = command.trim().toLowerCase()
-  const firstToken = normalized.split(/\s+/)[0] ?? ""
-  const executable = path.basename(firstToken)
-
-  if (executable.includes("codex")) return "codex"
-  if (executable.includes("cursor")) return "cursor"
-  if (executable.includes("claude")) return "claude"
-  return undefined
-}
-
-const getDefaultImplementSkills = (config: WorkflowConfig) => {
-  const detected = detectImplementerEnvironment(config.implementer.command)
-  const planningSkill =
-    detected === undefined
-      ? PLANNING_WITH_FILES_SKILL_PATHS.codex
-      : PLANNING_WITH_FILES_SKILL_PATHS[detected]
-
-  return [planningSkill, ...DEFAULT_IMPLEMENT_SKILL_SUFFIXES]
-}
-
 export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   const content = await readFile(configPath, "utf8")
   const fileConfig = JSON.parse(content) as Partial<WorkflowConfig>
@@ -66,8 +39,37 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       ? parseMaxReviewRounds(args.maxReviewRounds)
       : Number(fileConfig.maxReviewRounds ?? 8)
 
+  // 缺省 mode 时兼容旧配置，按 spec 处理；CLI --mode 可覆盖配置文件
+  const mode: Mode = (args.mode as Mode) ?? fileConfig.mode ?? "spec"
+
   if (!projectDir) throw new Error("projectDir is required (workflow config or --projectDir)")
-  if (!specPath) throw new Error("specPath is required (workflow config or --specPath)")
+
+  if (mode === "spec") {
+    if (!specPath) throw new Error("specPath is required for spec mode (workflow config or --specPath)")
+  }
+
+  if (mode === "issue") {
+    if (!fileConfig.issues || fileConfig.issues.length === 0) {
+      throw new Error("issues is required for issue mode (non-empty array)")
+    }
+    fileConfig.issues.forEach((issue, index) => {
+      if (!issue.title) throw new Error(`issues[${index}].title is required`)
+      if (!issue.specPath) throw new Error(`issues[${index}].specPath is required`)
+    })
+  }
+
+  // 尽早校验 spec 文件存在性，避免执行到一半才报错
+  if (specPath) {
+    try { await fsAccess(specPath) } catch { throw new Error(`Spec file not found: ${specPath}`) }
+  }
+  if (fileConfig.issues) {
+    for (let i = 0; i < fileConfig.issues.length; i += 1) {
+      try { await fsAccess(fileConfig.issues[i].specPath) } catch {
+        throw new Error(`Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
+      }
+    }
+  }
+
   if (!fileConfig.prompts?.implement) throw new Error("workflow config is missing prompts.implement")
   if (!fileConfig.prompts?.review) throw new Error("workflow config is missing prompts.review")
   if (!fileConfig.prompts?.revise) throw new Error("workflow config is missing prompts.revise")
@@ -78,6 +80,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     ...fileConfig,
     implementer: fileConfig.implementer,
     maxReviewRounds,
+    mode,
     projectDir,
     prompts: fileConfig.prompts,
     reviewer: fileConfig.reviewer,
@@ -126,7 +129,7 @@ export const resolveSkillPath = (configDir: string, skillPath: string) => {
 const loadSkill = async (configDir: string, skillPath: string) => {
   const resolvedPath = resolveSkillPath(configDir, skillPath)
   try {
-    await access(resolvedPath)
+    await fsAccess(resolvedPath)
   } catch {
     throw new Error(`Skill not found: ${skillPath} (resolved to ${resolvedPath})`)
   }
@@ -140,7 +143,7 @@ const skillSectionTitle = (skillPath: string) => {
 }
 
 export const loadImplementSkills = async (config: WorkflowConfig, configDir: string) => {
-  const skillPaths = config.skills?.implement ?? getDefaultImplementSkills(config)
+  const skillPaths = config.skills?.implement ?? DEFAULT_IMPLEMENT_SKILLS
   return loadSkillSections(configDir, skillPaths)
 }
 

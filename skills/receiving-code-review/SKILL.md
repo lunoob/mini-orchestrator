@@ -28,7 +28,7 @@ description: 收到 code review 反馈后、动手修改前使用——要求技
 |------|------|
 | **Critical** | 本轮必须修，修完重跑相关测试 |
 | **Important** | 本轮必须修，再输出 `STATUS: IMPLEMENT_DONE` |
-| **Minor** | 顺手就修；否则记入 `progress.md` 留待后续 |
+| **Minor** | 顺手就修；否则记入进度记录留待后续 |
 
 ## ⚠️ Cannot verify from diff
 

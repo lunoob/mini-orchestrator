@@ -1,7 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-export const CHECKPOINT_VERSION = 1
+import type { IssueConfig, Mode } from "./types.js"
+
+export const CHECKPOINT_VERSION = 2
 
 export type NeedsCheckCheckpoint = {
   baseSha: string | undefined
@@ -18,6 +20,10 @@ export type NeedsCheckCheckpoint = {
   round: number
   specPath: string
   version: typeof CHECKPOINT_VERSION
+  /** issue 模式字段 */
+  currentIssueIndex?: number
+  issues?: IssueConfig[]
+  mode?: Mode
 }
 
 export type NeedsCheckCheckpointInput = Omit<NeedsCheckCheckpoint, "createdAt" | "version">

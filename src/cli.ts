@@ -11,8 +11,13 @@ export const printHelp = () => {
 
 在 Herdr pane 内串起 implementer 与 reviewer agent 工作流。
 
+运行模式：
+  spec （默认） — 读取 specPath 执行单个 spec 的实现与 review
+  issue         — 按配置的 issues[] 数组顺序串行执行多个 issue
+
 Options:
   --config <path>           workflow 配置文件路径（首次启动必填；resume 时可省略）
+  --mode <mode>             运行模式：spec（默认）| issue
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --specPath <path>         spec 文件路径，覆盖配置中的 specPath
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
@@ -24,11 +29,13 @@ Options:
   -h, --help                显示此帮助信息
 
 CLI 参数优先级高于 workflow 配置文件中的同名字段。
-首次启动时，至少需要为 projectDir、specPath 各提供一种来源（配置或 CLI）。
+首次启动时，spec 模式至少需要为 projectDir、specPath 各提供一种来源（配置或 CLI）；
+issue 模式需要配置文件中包含 issues[] 数组。
 resume 时可从 checkpoint 读取 configPath，因此可省略 --config。
 
 Examples:
   npx tsx run-post-spec.ts --config workflow.local.json
+  npx tsx run-post-spec.ts --config workflow.issue.json --mode issue
   start-orchestrator --reuse-current-pane --specPath ./spec.md
   npx tsx run-post-spec.ts --config workflow.local.json --projectDir . --maxReviewRounds 6
   start-orchestrator --needs-check-mode llm --specPath ./plan.md

@@ -19,14 +19,23 @@ export type SkillsConfig = {
   revise?: string[]
 }
 
+export type Mode = "spec" | "issue"
+
+export type IssueConfig = {
+  title: string
+  specPath: string
+}
+
 export type WorkflowConfig = {
   implementer: AgentConfig
   maxReviewRounds: number
+  mode?: Mode
   projectDir: string
   prompts: PromptConfig
   reviewer: AgentConfig
   skills?: SkillsConfig
-  specPath: string
+  specPath?: string
+  issues?: IssueConfig[]
 }
 
 export type HerdrPaneInfo = {
