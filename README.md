@@ -4,32 +4,13 @@
 
 1. implementer 读 spec，按 skills 规划进度并 TDD 编码
 2. 编排器生成 **review package**（git diff 文件），交给 reviewer
-3. reviewer 做 **双 verdict 审查**（规格合规 + 代码质量），按 Critical/Important/Minor 分级反馈
+3. reviewer 审查后输出状态信号（`REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK`）
 4. review 失败时回到 implementer，按 review 反馈修复
 5. 最多循环固定轮数
 
+支持 **issue 队列模式**：按 `issues[]` 数组顺序串行执行多个 issue，每个 issue 使用独立的 agent 对，issue 间通过 git baseline 隔离变更。
+
 Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的 `requesting-code-review` / `subagent-driven-development`。
-
-## 运行模式
-
-编排器支持两种运行模式，通过配置文件中的 `mode` 字段或 CLI `--mode` 参数指定：
-
-### spec 模式（默认）
-
-读取单个 `specPath`，执行一次实现 + review 循环。兼容旧配置（不写 `mode` 时默认为 spec 模式）。
-
-参考配置：[`workflow.example.json`](workflow.example.json)
-
-### issue 模式
-
-读取 `issues[]` 数组，按数组顺序**串行**执行多个 issue。每个 issue 包含 `title` 和 `specPath`，复用相同的 implementer 与 reviewer agent。
-
-参考配置：[`workflow.issue.example.json`](workflow.issue.example.json)
-
-限制：
-- issue 按数组顺序执行，不做并行调度
-- 任一 issue 进入 `REVIEW_FAIL` 耗尽轮数后，整个工作流停止，后续 issue 不执行
-- `needs_check` 暂停后 resume，继续的是当前 issue（而非跳到下一个）
 
 ## 目录结构
 
@@ -48,7 +29,7 @@ mini-orchestrator/
 │   ├── session.ts         # 工作流 session 管理
 │   ├── types.ts
 │   ├── utils.ts           # verdict 解析、模板渲染
-│   └── workflow.ts        # 主工作流编排（含 issue 队列）
+│   └── workflow.ts        # 主工作流编排（issue 队列）
 ├── prompts/
 │   ├── implement.md
 │   ├── review.md
@@ -60,7 +41,7 @@ mini-orchestrator/
 │   └── install-skill.ts   # skill 安装 CLI 入口
 ├── skills/
 │   ├── issue-config/
-│   │   └── SKILL.md               # 生成 issue 模式配置草案
+│   │   └── SKILL.md               # 生成 issue 配置草案
 │   └── test-driven-development/
 │       └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
 ├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
@@ -77,13 +58,32 @@ mini-orchestrator/
 | `review-round-{n}-{timestamp}.md` | 每轮 review 前 |
 | `needs-check-round-{n}-{timestamp}.json` | LLM 模式下 REVIEW_NEEDS_CHECK 暂停时 |
 
+## Issue 队列
+
+配置文件通过顶层的 `issues[]` 数组定义多个阶段：
+
+```json
+{
+  "issues": [
+    { "title": "Step 1: Setup database schema",  "specPath": "/path/to/specs/db-schema.md" },
+    { "title": "Step 2: Implement API endpoints", "specPath": "/path/to/specs/api-endpoints.md" }
+  ]
+}
+```
+
+- issue 按数组顺序**串行**执行
+- 每个 issue 创建一对全新的 implementer + reviewer agent，issue 完成后销毁
+- 当前 issue 的 review 通过后，git baseline 推进到 `HEAD`，后续 issue 的 diff 只包含其自身变更
+- 任一 issue 耗尽 review 轮数后，整个工作流停止，后续 issue 不执行
+- `needs_check` 暂停后 resume，继续的是当前 issue（而非跳到下一个）
+
 ## Review 流程
 
 ```mermaid
 flowchart TD
     A[记录 baseline SHA] --> B[Implementer 实现]
     B --> C[生成 review package]
-    C --> D[Reviewer 双 verdict 审查]
+    C --> D[Reviewer 审查]
     D -->|REVIEW_PASS| E0[Implementer 跑 typecheck / lint]
     E0 --> E[完成 exit 0]
     D -->|REVIEW_FAIL| F[Implementer revise]
@@ -118,15 +118,15 @@ flowchart TD
 
 非 git 项目或无法生成 diff 时，review prompt 会降级为提示 reviewer 直接审查工作区改动。
 
-### 审查结果（三种）
+### 审查结果
+
+Reviewer 通过输出 `STATUS: REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 标记状态。编排器只解析这些显式标记和 `⚠️ Cannot verify from diff:` 段落，不做内容启发式判断。
 
 | 状态 | 含义 | 编排器行为 |
 |------|------|------------|
-| `REVIEW_PASS` | spec ✅、quality Approved、无阻塞项、无可核查 ⚠️ | implementer 校验 typecheck / lint（若有）→ 结束 |
-| `REVIEW_NEEDS_CHECK` | 无阻塞项，但 reviewer 无法仅从 diff 验证部分要求 | implementer 校验 typecheck / lint（若有）→ 暂停并询问用户（见下） |
-| `REVIEW_FAIL` | 存在需修复项（spec ❌、quality Needs fixes、Critical/Important） | 发回 implementer revise，进入下一轮 review |
-
-编排器通过解析 reviewer 输出中的 `STATUS:` 行及结构化 verdict（Spec Compliance、Task quality、Issues 分级）判断上述状态。
+| `REVIEW_PASS` | 审查通过 | implementer 校验 typecheck / lint（若有）→ 结束 |
+| `REVIEW_NEEDS_CHECK` | reviewer 无法仅从 diff 验证部分要求 | implementer 校验 typecheck / lint（若有）→ 暂停并询问用户（见下） |
+| `REVIEW_FAIL` | 存在需修复项 | 发回 implementer revise，进入下一轮 review |
 
 ### REVIEW_NEEDS_CHECK 交互
 
@@ -152,30 +152,13 @@ start-orchestrator \
 
 恢复时 `--config` 可省略（checkpoint 内保存了 `configPath`）；`revise` 从下一轮继续 review，`retry-review` 在同一轮用 `controller-re-review` prompt 重审。
 
-在 issue 模式下 `approve` 当前 issue 后，若队列中还有后续 issue，编排器会自动继续执行下一项。
+`approve` 当前 issue 后，若队列中还有后续 issue，编排器会自动继续执行下一项。
 
 ### Review 通过后静态检查
 
 当 reviewer 输出 `REVIEW_PASS` 或 `REVIEW_NEEDS_CHECK` 后，编排器会向 implementer 发送 `post-review-check` prompt，要求其自行探测并运行项目的 TypeScript 类型检查与 lint（若存在对应配置或 `package.json` script）。implementer 负责修复问题并重复校验；编排器**不解析**检查输出，仅以 `IMPLEMENT_DONE` / `IMPLEMENT_ASK` 判断任务是否结束。
 
 `REVIEW_NEEDS_CHECK` 时，静态检查在暂停询问用户**之前**执行，避免把类型或 lint 问题留给人工核查。
-
-### 双 Verdict
-
-| Verdict | 含义 |
-|---------|------|
-| **Spec Compliance** | 实现是否满足 spec（不多做、不少做） |
-| **Task quality** | 代码质量是否可接受 |
-
-两项均通过且无 Critical/Important 问题时，reviewer 输出 `STATUS: REVIEW_PASS`。
-
-### 严重程度
-
-| 级别 | 处理 |
-|------|------|
-| Critical | 必须在本轮修复 |
-| Important | 必须在本轮修复 |
-| Minor | 顺手修或记入 progress，不阻塞 |
 
 ## Skill 依赖
 
@@ -193,26 +176,16 @@ start-orchestrator \
 
 ## 运行方式
 
-先复制示例配置：
+先复制示例配置并修改其中的 `projectDir`、`issues[].specPath`、`implementer.command`、`reviewer.command`：
 
 ```bash
-cp workflow.example.json workflow.local.json   # spec 模式
-# 或
-cp workflow.issue.example.json workflow.local.json  # issue 模式
+cp workflow.issue.example.json workflow.local.json
 ```
 
-然后修改：
-
-- `projectDir`
-- `specPath` / `issues[]`
-- `implementer.command`
-- `reviewer.command`
-
-最后在 `HERDR_ENV=1` 的环境里执行：
+然后运行：
 
 ```bash
 pnpm tsx run-post-spec.ts --config workflow.local.json
-pnpm tsx run-post-spec.ts --config workflow.local.json --mode issue  # 用 CLI 覆盖模式
 pnpm tsx run-post-spec.ts --help          # 不需要 HERDR_ENV=1
 pnpm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
 ```
@@ -221,20 +194,7 @@ pnpm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
 
 ```bash
 start-orchestrator
-start-orchestrator --reuse-current-pane --specPath ./spec.md
 ```
-
-### 复用当前 pane 作为 reviewer
-
-如果希望 review 阶段直接使用当前 herdr pane（不再额外 `agent start` 一个 reviewer pane），在 reviewer pane 里运行脚本并加上 `--reuse-current-pane`：
-
-```bash
-npx tsx run-post-spec.ts \
-  --config workflow.local.json \
-  --reuse-current-pane
-```
-
-脚本会调用 `herdr pane current` 获取当前 pane 的 `pane_id`，并向该 pane 发送 review prompt。此模式下只会新建 implementer pane；`workflow.json` 里的 `reviewer` 配置不会被用来启动 agent，但建议保留以便切换回默认模式。
 
 ### 退出码
 
@@ -251,54 +211,19 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `--config` | 首次启动必填；resume 时可省略 | workflow 配置文件的绝对或相对路径 |
-| `--mode` | 否 | 运行模式：`spec`（默认）\| `issue`，覆盖配置中的 `mode` |
 | `--projectDir` | 否 | 项目目录，覆盖配置中的 `projectDir` |
-| `--specPath` | 否 | spec 文件路径，覆盖配置中的 `specPath` |
 | `--maxReviewRounds` | 否 | 最大 review 轮数，覆盖配置中的 `maxReviewRounds`（默认 8） |
-| `--reuse-current-pane` | 否 | 复用当前 herdr pane 作为 reviewer，不新建 reviewer pane |
 | `--needs-check-mode` | 否 | `interactive`（默认）或 `llm` |
 | `--resume-from` | 否 | 从 needs_check checkpoint 恢复（需配合 `--needs-check-action`） |
 | `--needs-check-action` | resume 时必填 | `approve` \| `revise` \| `retry-review` \| `abort` |
 | `--needs-check-notes` | `revise` / `retry-review` 时必填 | 补充说明 |
 | `-h`, `--help` | 否 | 显示使用帮助（不需要 `HERDR_ENV=1`） |
 
-spec 模式至少需要为 `projectDir`、`specPath` 各提供一种来源（配置文件或 CLI）。
-issue 模式需要配置文件中包含 `issues[]` 数组。
-
 ## 配置说明
 
-### spec 模式
-
 ```json
 {
   "projectDir": "/absolute/path/to/project",
-  "specPath": "/absolute/path/to/spec.md",
-  "maxReviewRounds": 4,
-  "implementer": {
-    "name": "implementer",
-    "command": "cursor --model composer",
-    "agentReadyPattern": "Cursor Agent"
-  },
-  "reviewer": {
-    "name": "reviewer",
-    "command": "codex --model gpt-5.5",
-    "agentReadyPattern": "codex",
-    "updateCommand": "codex update"
-  },
-  "prompts": {
-    "implement": "./prompts/implement.md",
-    "review": "./prompts/review.md",
-    "revise": "./prompts/revise.md"
-  }
-}
-```
-
-### issue 模式
-
-```json
-{
-  "projectDir": "/absolute/path/to/project",
-  "mode": "issue",
   "issues": [
     {
       "title": "Step 1: Setup database schema",
@@ -329,15 +254,13 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
 }
 ```
 
-### 完整配置项
-
 `prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用默认路径（见源代码 `src/config.ts` 中的常量）。
 
 `implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
 
 常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
 
-`implementer.updateCommand` / `reviewer.updateCommand`（可选）：启动 agent 前先执行一次的命令。用于 agent 需要先 update 再启动的场景（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败。仅 workflow 首次启动 agent 前执行一次；issue 模式下不会为每个 issue 重复执行。
+`implementer.updateCommand` / `reviewer.updateCommand`（可选）：启动 agent 前先执行一次的命令。用于 agent 需要先 update 再启动的场景（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败。仅 workflow 首次启动 agent 前执行一次；不会为每个 issue 重复执行。
 
 `skills.*` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。
 
@@ -409,9 +332,9 @@ pnpm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 通过 `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 及结构化双 verdict 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE`，以 `herdr agent wait --status working` 确认任务被接收、再以 `idle` 判断任务结束。
+- 通过 `STATUS: REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE` 内容，以 `herdr agent wait --status working` 确认任务被接收、再以 `idle` 判断任务结束。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
-- issue 模式为串行执行；并行调度不在此版本范围内。
+- Issue 队列为串行执行；并行调度不在此版本范围内。
 - agent 空闲等待超时为 30 分钟（`herdr agent wait --timeout 1800000`）。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

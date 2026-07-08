@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import type { IssueConfig, LoadedPrompts, Mode, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
+import type { IssueConfig, LoadedPrompts, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
 
 const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
@@ -38,40 +38,26 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   const fileConfig = JSON.parse(content) as Partial<WorkflowConfig>
 
   const projectDir = resolveOptionalPath(args.projectDir) ?? fileConfig.projectDir
-  const specPath = resolveOptionalPath(args.specPath) ?? fileConfig.specPath
   const maxReviewRounds =
     args.maxReviewRounds !== undefined
       ? parseMaxReviewRounds(args.maxReviewRounds)
       : Number(fileConfig.maxReviewRounds ?? 8)
 
-  // 缺省 mode 时兼容旧配置，按 spec 处理；CLI --mode 可覆盖配置文件
-  const mode: Mode = (args.mode as Mode) ?? fileConfig.mode ?? "spec"
-
   if (!projectDir) throw new Error("projectDir is required (workflow config or --projectDir)")
 
-  if (mode === "spec") {
-    if (!specPath) throw new Error("specPath is required for spec mode (workflow config or --specPath)")
+  // 验证 issues（仅 issue 模式）
+  if (!fileConfig.issues || fileConfig.issues.length === 0) {
+    throw new Error("issues is required (non-empty array)")
   }
-
-  if (mode === "issue") {
-    if (!fileConfig.issues || fileConfig.issues.length === 0) {
-      throw new Error("issues is required for issue mode (non-empty array)")
-    }
-    fileConfig.issues.forEach((issue, index) => {
-      if (!issue.title) throw new Error(`issues[${index}].title is required`)
-      if (!issue.specPath) throw new Error(`issues[${index}].specPath is required`)
-    })
-  }
+  fileConfig.issues.forEach((issue, index) => {
+    if (!issue.title) throw new Error(`issues[${index}].title is required`)
+    if (!issue.specPath) throw new Error(`issues[${index}].specPath is required`)
+  })
 
   // 尽早校验 spec 文件存在性，避免执行到一半才报错
-  if (specPath) {
-    try { await fsAccess(specPath) } catch { throw new Error(`Spec file not found: ${specPath}`) }
-  }
-  if (fileConfig.issues) {
-    for (let i = 0; i < fileConfig.issues.length; i += 1) {
-      try { await fsAccess(fileConfig.issues[i].specPath) } catch {
-        throw new Error(`Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
-      }
+  for (let i = 0; i < fileConfig.issues.length; i += 1) {
+    try { await fsAccess(fileConfig.issues[i].specPath) } catch {
+      throw new Error(`Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
     }
   }
 
@@ -103,14 +89,13 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       updateCommand: implementerUpdate ?? fileConfig.implementer.updateCommand,
     },
     maxReviewRounds,
-    mode,
     projectDir,
     prompts,
     reviewer: {
       ...fileConfig.reviewer,
       updateCommand: reviewerUpdate ?? fileConfig.reviewer.updateCommand,
     },
-    specPath,
+    issues: fileConfig.issues,
   } as WorkflowConfig
 }
 
