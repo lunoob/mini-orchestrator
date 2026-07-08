@@ -282,7 +282,8 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
   "reviewer": {
     "name": "reviewer",
     "command": "codex --model gpt-5.5",
-    "agentReadyPattern": "codex"
+    "agentReadyPattern": "codex",
+    "updateCommand": "codex update"
   },
   "prompts": {
     "implement": "./prompts/implement.md",
@@ -317,7 +318,8 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
   "reviewer": {
     "name": "reviewer",
     "command": "codex --model gpt-5.5",
-    "agentReadyPattern": "codex"
+    "agentReadyPattern": "codex",
+    "updateCommand": "codex update"
   },
   "prompts": {
     "implement": "./prompts/implement.md",
@@ -334,6 +336,8 @@ issue 模式需要配置文件中包含 `issues[]` 数组。
 `implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
 
 常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
+
+`implementer.updateCommand` / `reviewer.updateCommand`（可选）：启动 agent 前先执行一次的命令。用于 agent 需要先 update 再启动的场景（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败。仅 workflow 首次启动 agent 前执行一次；issue 模式下不会为每个 issue 重复执行。
 
 `skills.*` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。
 

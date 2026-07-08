@@ -11,7 +11,8 @@
   "reviewer": {
     "name": "reviewer",
     "command": "codex --model gpt-5.5",
-    "agentReadyPattern": "codex"
+    "agentReadyPattern": "codex",
+    "updateCommand": "codex update"
   },
   "prompts": {
     "implement": "./prompts/implement.md",

@@ -30,14 +30,18 @@ disable-model-invocation: true
       "specPath": "<issue 文档绝对路径>"
     }
   ],
-  "maxReviewRounds": "<number>",
+  "maxReviewRounds": 8,
   "implementer": {
     "name": "implementer",
-    "command": "<agent 命令>"
+    "command": "claude --model haiku",
+    "agentReadyPattern": "claude code",
+    "updateCommand": "claude update"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "<agent 命令>"
+    "command": "codex --model gpt-5.4",
+    "agentReadyPattern": "codex",
+    "updateCommand": "codex update"
   }
 }
 ```
@@ -46,9 +50,7 @@ disable-model-invocation: true
 - `title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
 - `projectDir` 使用当前的项目目录
-- `maxReviewRounds` 没有提供则使用 8
-- `implementer` 没有提供则使用 "claude --model haiku"
-- `reviewer` 没有提供则使用 "codex --model gpt-5.4"
+- 如出现配置项没提供，可以采用上述的配置做 fallback
 
 ## 工作流
 
@@ -114,7 +116,8 @@ zsh -ic 'start-orchestrator \
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.4"
+    "command": "codex --model gpt-5.4",
+    "updateCommand": "codex update"
   }
 }
 ```
