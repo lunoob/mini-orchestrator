@@ -13,5 +13,5 @@
 
 ## 输出
 1. 先输出起始前缀: ---REVIEW_RESULT_START---
-2. 再输出其他内容
+2. 再输出其他内容（含 STATUS 标记）
 3. 最后输出结束后缀: ---REVIEW_RESULT_END---
