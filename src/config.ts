@@ -1,6 +1,7 @@
 import { access as fsAccess, readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import type { IssueConfig, LoadedPrompts, Mode, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
 
@@ -11,12 +12,15 @@ const DEFAULT_IMPLEMENT_SKILLS = [
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
-const DEFAULT_IMPLEMENT_PROMPT = "./prompts/implement.md"
-const DEFAULT_REVIEW_PROMPT = "./prompts/review.md"
-const DEFAULT_REVISE_PROMPT = "./prompts/revise.md"
-const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = "./prompts/controller-implementer.md"
-const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = "./prompts/controller-re-review.md"
-const DEFAULT_POST_REVIEW_CHECK_PROMPT = "./prompts/post-review-check.md"
+// 本项目根目录，用于默认 prompt 模板的基准路径，不受 process.cwd() 影响
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+
+const DEFAULT_IMPLEMENT_PROMPT = path.join(PROJECT_ROOT, "prompts/implement.md")
+const DEFAULT_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/review.md")
+const DEFAULT_REVISE_PROMPT = path.join(PROJECT_ROOT, "prompts/revise.md")
+const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-implementer.md")
+const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-re-review.md")
+const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-review-check.md")
 
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
