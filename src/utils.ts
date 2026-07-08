@@ -100,6 +100,13 @@ export const extractImplementResult = (output: string): string => {
   return output.slice(afterStart, endIdx).trim() || output
 }
 
+/**
+ * 从输出中移除编排器专用的 STATUS 标记行，只保留对人类 agent 有意义的内容。
+ * 用于将 reviewOutput 注入 revise / controller 等 prompt 前清理。
+ */
+export const stripStatusLines = (output: string): string =>
+  output.replace(/^STATUS: .+$/gm, "").trim()
+
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)
   console.log(body.trim())

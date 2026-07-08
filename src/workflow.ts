@@ -23,7 +23,7 @@ import {
 } from "./needs-check.js"
 import { generateReviewPackage } from "./review-package.js"
 import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
-import { extractImplementResult, extractReviewResult, parseImplementStatus, parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
+import { extractImplementResult, extractReviewResult, parseImplementStatus, parseReviewVerdict, printSection, render, stripStatusLines, type ReviewVerdict } from "./utils.js"
 
 type WorkflowRuntime = {
   args: ParsedArgs
@@ -120,7 +120,7 @@ const sendControllerRevise = async (
     runtime.implementerPane,
     render(runtime.prompts.controllerImplementer, {
       controllerNotes,
-      reviewOutput: extractReviewResult(reviewOutput),
+      reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
     }),
     agentWaitOptions(runtime.config.implementer),
@@ -159,7 +159,7 @@ const conductReview = async (
           controllerNotes: options.controllerReviewNotes,
           diffFileSection,
           headSha: reviewContext.headSha,
-          reviewOutput: options.lastReviewOutput,
+          reviewOutput: stripStatusLines(options.lastReviewOutput),
           round: String(round),
           specPath,
         })
@@ -268,7 +268,7 @@ const sendReviseAfterFail = async (
   const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.revise, {
-      reviewOutput: extractReviewResult(reviewOutput),
+      reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
     }),
     agentWaitOptions(runtime.config.implementer),
