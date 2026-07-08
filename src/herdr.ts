@@ -1,12 +1,13 @@
 import { spawn } from "node:child_process"
 
-import type { AgentConfig, AgentListResult, AgentStartResult, PaneCurrentResult } from "./types.js"
+import type { AgentConfig, AgentListEntry, AgentListResult, AgentStartResult, PaneCurrentResult } from "./types.js"
 import { splitCommand } from "./utils.js"
 
 const DEFAULT_READY_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_MATCH_TIMEOUT_MS = 60_000
 const DEFAULT_WORKING_TIMEOUT_MS = 60_000
 const IDLE_TIMEOUT_MS = 1_800_000
+const POLL_INTERVAL_MS = 10_000
 const DELAY_MS = 800
 
 export type AgentWaitOptions = {
@@ -163,30 +164,40 @@ export const sendTask = async (paneId: string, prompt: string) => {
   await runHerdr(["pane", "send-keys", paneId, "enter"])
 }
 
-export const waitForIdle = async (paneId: string): Promise<void> => {
-  // 1. 使用 herdr 内置等待机制等待 idle（保留原逻辑）
-  await runHerdr([
-    "agent",
-    "wait",
-    paneId,
-    "--status",
-    "idle",
-    "--timeout",
-    String(IDLE_TIMEOUT_MS),
-  ])
+type AgentGetResult = {
+  id: string
+  result: {
+    agent: AgentListEntry
+    type: "agent_get"
+  }
+}
 
-  // 2. 再等 2 秒，避免检测到瞬时状态变化
-  await new Promise(resolve => setTimeout(resolve, 2000))
+/**
+ * 轮询 herdr agent get 获取语义状态，等待 agent 进入 idle。
+ * 替代事件驱动的 waitForIdle（herdr agent wait 在后台 pane 不推送事件）。
+ * 返回时已读取完整输出，调用方无需再调 readAgentOutput。
+ */
+const waitForIdleByPolling = async (paneId: string): Promise<string> => {
+  const deadline = Date.now() + IDLE_TIMEOUT_MS
+  let lastStatus = "unknown"
 
-  // 3. 调用 herdr agent list 获取当前实际状态，验证是否真的 idle
-  const output = await runHerdr(["agent", "list"])
-  const parsed = JSON.parse(output) as AgentListResult
-  const agent = parsed.result.agents.find(a => a.pane_id === paneId)
+  while (Date.now() < deadline) {
+    const output = await runHerdr(["agent", "get", paneId])
+    const parsed = JSON.parse(output) as AgentGetResult
+    lastStatus = parsed.result.agent.agent_status
 
-  if (agent?.agent_status === "idle") return
+    if (lastStatus === "idle") {
+      return readAgentOutput(paneId, 280)
+    }
 
-  // 4. 并非真正 idle——递归重试
-  return waitForIdle(paneId)
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+  }
+
+  throw new Error(
+    `Agent ${paneId} did not complete within ${IDLE_TIMEOUT_MS / 1000}s timeout ` +
+      `(last status: ${lastStatus}).` +
+      `\nLast output:\n${(await readAgentOutput(paneId, 10)).slice(0, 500)}`,
+  )
 }
 
 const waitForWorkingAfterSend = async (
@@ -217,9 +228,9 @@ export const sendTaskAndWait = async (
 ): Promise<string> => {
   await sendTask(paneId, prompt)
   await waitForWorkingAfterSend(paneId, prompt, options)
-  await waitForIdle(paneId)
 
-  return readAgentOutput(paneId, 280)
+  // 轮询等待 agent 完成，不依赖 herdr 事件推送（后台 pane 不触发事件）
+  return waitForIdleByPolling(paneId)
 }
 
 export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({
