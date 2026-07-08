@@ -13,6 +13,7 @@ export type PromptConfig = {
   controllerReReview?: string
   implement: string
   postReviewCheck?: string
+  reReview?: string
   review: string
   revise: string
 }
@@ -90,6 +91,7 @@ export type LoadedPrompts = {
   controllerReReview: string
   implement: string
   postReviewCheck: string
+  reReview: string
   review: string
   revise: string
 }

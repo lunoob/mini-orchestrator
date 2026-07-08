@@ -163,7 +163,7 @@ const conductReview = async (
           round: String(round),
           specPath,
         })
-      : render(runtime.prompts.review, {
+      : render(runtime.prompts[round === 1 ? "review" : "reReview"], {
           baseSha: reviewContext.baseSha,
           diffFileSection,
           headSha: reviewContext.headSha,

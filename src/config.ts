@@ -17,6 +17,7 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 const DEFAULT_IMPLEMENT_PROMPT = path.join(PROJECT_ROOT, "prompts/implement.md")
 const DEFAULT_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/review.md")
+const DEFAULT_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/re-review.md")
 const DEFAULT_REVISE_PROMPT = path.join(PROJECT_ROOT, "prompts/revise.md")
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-implementer.md")
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-re-review.md")
@@ -81,6 +82,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   // 缺少 prompts 字段时使用项目中默认的 prompt 路径
   const prompts: PromptConfig = {
     implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
+    reReview: fileConfig.prompts?.reReview ?? DEFAULT_RE_REVIEW_PROMPT,
     review: fileConfig.prompts?.review ?? DEFAULT_REVIEW_PROMPT,
     revise: fileConfig.prompts?.revise ?? DEFAULT_REVISE_PROMPT,
     controllerImplementer:
@@ -117,6 +119,7 @@ const readPrompt = async (configDir: string, file: string) =>
 
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
   const implement = await readPrompt(configDir, config.prompts.implement)
+  const reReview = await readPrompt(configDir, config.prompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT)
   const review = await readPrompt(configDir, config.prompts.review)
   const revise = await readPrompt(configDir, config.prompts.revise)
   const controllerImplementer = await readPrompt(
@@ -131,7 +134,7 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     configDir,
     config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
   )
-  return { controllerImplementer, controllerReReview, implement, postReviewCheck, review, revise }
+  return { controllerImplementer, controllerReReview, implement, postReviewCheck, reReview, review, revise }
 }
 
 const stripSkillFrontmatter = (content: string) => {
