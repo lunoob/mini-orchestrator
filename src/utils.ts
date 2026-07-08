@@ -17,7 +17,7 @@ export const getErrorMessage = (error: unknown) => {
 }
 
 export const hasStatus = (output: string, status: string) =>
-  new RegExp(`^STATUS: ${status}$`, "m").test(output.trim())
+  new RegExp(`STATUS: ${status}`, "m").test(output.trim())
 
 export type ReviewVerdictKind = "pass" | "fail" | "needs_check"
 
