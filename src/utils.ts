@@ -121,13 +121,13 @@ const REVIEW_DELIMITER_START = "---REVIEW_RESULT_START---"
 const REVIEW_DELIMITER_END = "---REVIEW_RESULT_END---"
 
 /**
- * 从 reviewer 的完整终端输出中提取两个标记之间的最终结果。
- * 先找 ---REVIEW_RESULT_START---（丢弃前面的分析内容），再找其后的
- * ---REVIEW_RESULT_END---（取中间内容）。
+ * 从 reviewer 的完整终端输出中提取最后一对标记之间的最终结果。
+ * 终端输出可能包含多对标记（prompt 中的格式说明 + reviewer 的实际回复），
+ * 用 lastIndexOf 取最后那对，即 reviewer 本次实际输出的内容。
  * 标记缺失时回退到原始输出，不打断工作流。
  */
 export const extractReviewResult = (output: string): string => {
-  const startIdx = output.indexOf(REVIEW_DELIMITER_START)
+  const startIdx = output.lastIndexOf(REVIEW_DELIMITER_START)
   if (startIdx === -1) return output
 
   const afterStart = startIdx + REVIEW_DELIMITER_START.length
