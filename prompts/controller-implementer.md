@@ -16,3 +16,8 @@
 - **TDD**：若需新行为，先写失败测试
 - 若不清楚 Controller 或 reviewer 的要求，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题，不要猜测
 - 完成后输出 `STATUS: IMPLEMENT_DONE`
+
+## 输出
+1. 先输出起始前缀: ---IMPLEMENT_RESULT_START---
+2. 再输出其他内容
+3. 最后输出结束后缀: ---IMPLEMENT_RESULT_END---

@@ -27,3 +27,8 @@
 - 编排器**不会**解析你的检查结果；由你自行修复并校验
 - 若不清楚应使用哪条命令，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题
 - 全部检查通过（或确认项目无对应检查）后，输出 `STATUS: IMPLEMENT_DONE`
+
+## 输出
+1. 先输出起始前缀: ---IMPLEMENT_RESULT_START---
+2. 再输出其他内容
+3. 最后输出结束后缀: ---IMPLEMENT_RESULT_END---

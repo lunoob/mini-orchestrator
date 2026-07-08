@@ -23,7 +23,7 @@ import {
 } from "./needs-check.js"
 import { generateReviewPackage } from "./review-package.js"
 import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "./types.js"
-import { extractReviewResult, parseImplementStatus, parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
+import { extractImplementResult, extractReviewResult, parseImplementStatus, parseReviewVerdict, printSection, render, type ReviewVerdict } from "./utils.js"
 
 type WorkflowRuntime = {
   args: ParsedArgs
@@ -126,7 +126,7 @@ const sendControllerRevise = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(output)
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
       `Implementer has questions during controller revise round ${round} — needs human input.`,
@@ -178,7 +178,7 @@ const conductReview = async (
   )
   printSection(`Review Round ${round}`, reviewOutput)
 
-  return { reviewOutput, verdict: parseReviewVerdict(reviewOutput) }
+  return { reviewOutput, verdict: parseReviewVerdict(extractReviewResult(reviewOutput)) }
 }
 
 const handleNeedsCheck = async (
@@ -245,7 +245,7 @@ const sendPostReviewCheck = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(output)
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
       `Implementer has questions during post-review check round ${round} — needs human input.`,
@@ -274,7 +274,7 @@ const sendReviseAfterFail = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(output)
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
       `Implementer has questions during revise round ${round} — needs human input.`,
@@ -391,7 +391,7 @@ const runSingleSpecCycle = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(implementOutput)
+  const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
   if (implementStatus === "needs_input") {
     printSection("Implementer Needs Input", implementOutput)
     throw new Error("Implementer has questions — needs human input before review.")
@@ -700,7 +700,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
     agentWaitOptions(config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(implementOutput)
+  const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
   if (implementStatus === "needs_input") {
     printSection("Implementer Needs Input", implementOutput)
     throw new Error("Implementer has questions — needs human input before review.")

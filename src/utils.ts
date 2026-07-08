@@ -65,6 +65,8 @@ export const parseReviewVerdict = (output: string): ReviewVerdict => {
 
 const REVIEW_DELIMITER_START = "---REVIEW_RESULT_START---"
 const REVIEW_DELIMITER_END = "---REVIEW_RESULT_END---"
+const IMPLEMENT_DELIMITER_START = "---IMPLEMENT_RESULT_START---"
+const IMPLEMENT_DELIMITER_END = "---IMPLEMENT_RESULT_END---"
 
 /**
  * 从 reviewer 的完整终端输出中提取最后一对标记之间的最终结果。
@@ -78,6 +80,21 @@ export const extractReviewResult = (output: string): string => {
 
   const afterStart = startIdx + REVIEW_DELIMITER_START.length
   const endIdx = output.indexOf(REVIEW_DELIMITER_END, afterStart)
+  if (endIdx === -1) return output
+
+  return output.slice(afterStart, endIdx).trim() || output
+}
+
+/**
+ * 从 implementer 的完整终端输出中提取最后一对标记之间的最终结果。
+ * 标记缺失时回退到原始输出，不打断工作流。
+ */
+export const extractImplementResult = (output: string): string => {
+  const startIdx = output.lastIndexOf(IMPLEMENT_DELIMITER_START)
+  if (startIdx === -1) return output
+
+  const afterStart = startIdx + IMPLEMENT_DELIMITER_START.length
+  const endIdx = output.indexOf(IMPLEMENT_DELIMITER_END, afterStart)
   if (endIdx === -1) return output
 
   return output.slice(afterStart, endIdx).trim() || output
