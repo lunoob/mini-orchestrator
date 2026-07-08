@@ -23,24 +23,9 @@ export type ReviewVerdictKind = "pass" | "fail" | "needs_check"
 
 export type ReviewVerdict = {
   cannotVerifySummary: string | null
-  hasBlockingIssues: boolean
   hasCannotVerify: boolean
   kind: ReviewVerdictKind
   passed: boolean
-  qualityApproved: boolean | null
-  specCompliant: boolean | null
-}
-
-const hasIssuesInSection = (output: string, section: string) => {
-  const match = output.match(
-    new RegExp(`####\\s*${section}[^\\n]*\\n([\\s\\S]*?)(?=\\n####|\\n### |$)`, "i"),
-  )
-  if (!match) return false
-
-  const body = match[1].trim()
-  if (!body || /^\(none\)$/i.test(body) || /^无$/i.test(body)) return false
-
-  return /^\s*[\d*-]/m.test(body)
 }
 
 const extractCannotVerifySummary = (output: string) => {
@@ -60,60 +45,21 @@ export const parseReviewVerdict = (output: string): ReviewVerdict => {
   const explicitFail = hasStatus(output, "REVIEW_FAIL")
   const explicitNeedsCheck = hasStatus(output, "REVIEW_NEEDS_CHECK")
 
-  const specCompliant =
-    /Spec Compliance[^\n]*✅/i.test(output) ||
-    /spec compliant/i.test(output) ||
-    hasStatus(output, "SPEC_PASS")
-
-  const specFailed =
-    /Spec Compliance[^\n]*❌/i.test(output) ||
-    /Issues found:/i.test(output) ||
-    hasStatus(output, "SPEC_FAIL")
-
-  const qualityApproved =
-    /(?:Task quality|Quality):\s*Approved/i.test(output) || hasStatus(output, "QUALITY_PASS")
-
-  const qualityNeedsFix =
-    /(?:Task quality|Quality):\s*Needs fixes/i.test(output) || hasStatus(output, "QUALITY_FAIL")
-
-  const hasBlockingIssues =
-    hasIssuesInSection(output, "Critical") || hasIssuesInSection(output, "Important")
-
   const cannotVerifySummary = extractCannotVerifySummary(output)
   const hasCannotVerify = cannotVerifySummary !== null
 
-  const hasFixableFailures = specFailed || qualityNeedsFix || hasBlockingIssues
-
-  const dualVerdictPass =
-    specCompliant &&
-    !specFailed &&
-    qualityApproved &&
-    !qualityNeedsFix &&
-    !hasBlockingIssues &&
-    !hasCannotVerify
-
-  const passed =
-    (explicitPass || dualVerdictPass) && !explicitFail && !explicitNeedsCheck && !hasFixableFailures
-
-  let kind: ReviewVerdictKind
-  if (passed) {
-    kind = "pass"
-  } else if (hasFixableFailures || (explicitFail && !explicitNeedsCheck)) {
-    kind = "fail"
-  } else if (explicitNeedsCheck || hasCannotVerify) {
-    kind = "needs_check"
-  } else {
-    kind = "fail"
-  }
+  // 根据 review prompt 的设计，三个状态标记互斥；安全优先排序
+  const kind: ReviewVerdictKind =
+    explicitFail ? "fail" :
+    (explicitNeedsCheck || hasCannotVerify) ? "needs_check" :
+    explicitPass ? "pass" :
+    /* 无任何状态标记 */ "fail"
 
   return {
     cannotVerifySummary,
-    hasBlockingIssues,
     hasCannotVerify,
     kind,
     passed: kind === "pass",
-    qualityApproved: qualityApproved ? true : qualityNeedsFix ? false : null,
-    specCompliant: specCompliant ? true : specFailed ? false : null,
   }
 }
 

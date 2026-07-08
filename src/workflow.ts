@@ -262,13 +262,8 @@ const sendReviseAfterFail = async (
   runtime: WorkflowRuntime,
   round: number,
   reviewOutput: string,
-  verdict: ReviewVerdict,
 ) => {
-  if (verdict.hasBlockingIssues) {
-    console.log("Blocking issues (Critical/Important) — sending back to implementer.")
-  } else {
-    console.log("Review failed — sending back to implementer.")
-  }
+  console.log("Review failed — sending back to implementer.")
 
   const output = await sendTaskAndWait(
     runtime.implementerPane,
@@ -316,11 +311,6 @@ const runReviewLoop = async (
       if (verdict.kind === "pass") {
         await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
         console.log(`\nWorkflow finished: review passed in round ${round}.`)
-        if (verdict.specCompliant !== null || verdict.qualityApproved !== null) {
-          console.log(
-            `Verdict: spec=${verdict.specCompliant ? "✅" : "—"}, quality=${verdict.qualityApproved ? "Approved" : "—"}`,
-          )
-        }
         return
       }
 
@@ -355,7 +345,7 @@ const runReviewLoop = async (
         throw new Error(`Review failed after ${runtime.config.maxReviewRounds} rounds.`)
       }
 
-      await sendReviseAfterFail(runtime, round, reviewOutput, verdict)
+      await sendReviseAfterFail(runtime, round, reviewOutput)
       break
     }
   }
