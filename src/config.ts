@@ -74,6 +74,10 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     }
   }
 
+  // CLI 参数覆盖 updateCommand
+  const implementerUpdate = args["implementer-update"]
+  const reviewerUpdate = args["reviewer-update"]
+
   // 缺少 prompts 字段时使用项目中默认的 prompt 路径
   const prompts: PromptConfig = {
     implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
@@ -92,12 +96,18 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
 
   return {
     ...fileConfig,
-    implementer: fileConfig.implementer,
+    implementer: {
+      ...fileConfig.implementer,
+      updateCommand: implementerUpdate ?? fileConfig.implementer.updateCommand,
+    },
     maxReviewRounds,
     mode,
     projectDir,
     prompts,
-    reviewer: fileConfig.reviewer,
+    reviewer: {
+      ...fileConfig.reviewer,
+      updateCommand: reviewerUpdate ?? fileConfig.reviewer.updateCommand,
+    },
     specPath,
   } as WorkflowConfig
 }

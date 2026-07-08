@@ -3,6 +3,9 @@ export type AgentConfig = {
   agentReadyPattern?: string
   command: string
   name: string
+  /** 启动 agent 前先执行的 update 命令（如 "codex update"），
+   *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */
+  updateCommand?: string
 }
 
 export type PromptConfig = {

@@ -22,6 +22,8 @@ Options:
   --specPath <path>         spec 文件路径，覆盖配置中的 specPath
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
   --reuse-current-pane      复用当前 herdr pane 作为 reviewer，不新建 reviewer pane
+  --implementer-update <cmd> 覆盖 implementer 的 updateCommand（如 "cursor update"）
+  --reviewer-update <cmd>    覆盖 reviewer 的 updateCommand（如 "codex update"）
   --needs-check-mode <mode> needs_check 交互模式：interactive（默认）| llm
   --resume-from <path>      从 needs_check checkpoint 恢复工作流
   --needs-check-action <a>  恢复时的选择：approve | revise | retry-review | abort

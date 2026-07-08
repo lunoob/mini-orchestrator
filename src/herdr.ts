@@ -226,6 +226,37 @@ export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({
   agentReadyPattern: agent.agentReadyPattern,
 })
 
+/**
+ * 启动临时进程执行 agent 的 update 命令，等它完成后返回。
+ * 失败时 warn 但不抛错，由调用方决定是否继续。
+ * 未配置 updateCommand 时直接返回 true。
+ */
+export const runAgentUpdate = async (
+  projectDir: string,
+  agent: AgentConfig,
+): Promise<boolean> => {
+  if (!agent.updateCommand) return true
+
+  console.log(`Running update for "${agent.name}": ${agent.updateCommand}`)
+
+  const [cmd, ...args] = splitCommand(agent.updateCommand)
+  const { code } = await new Promise<{ code: number | null }>((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: projectDir,
+      env: process.env,
+      stdio: "inherit",
+    })
+    child.on("error", reject)
+    child.on("close", resolve)
+  })
+
+  if (code !== 0) {
+    console.warn(`Update for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
+    return false
+  }
+  return true
+}
+
 export const stopAgent = async (paneId: string) => {
   await runHerdr(["pane", "close", paneId])
 }

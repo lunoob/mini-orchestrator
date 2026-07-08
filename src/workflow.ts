@@ -9,6 +9,7 @@ import { createSession } from "./session.js"
 import {
   agentWaitOptions,
   getCurrentPane,
+  runAgentUpdate,
   sendTaskAndWait,
   startAgent,
   stopAgent,
@@ -424,6 +425,10 @@ const runIssueQueue = async (
   configPath: string,
   implementSkills: string,
 ) => {
+  // 统一在循环前执行一次 update（若有配置），避免每次循环重复更新
+  await runAgentUpdate(runtime.config.projectDir, runtime.config.implementer)
+  await runAgentUpdate(runtime.config.projectDir, runtime.config.reviewer)
+
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues!, implementSkills)
 }
 
@@ -653,16 +658,22 @@ export const runWorkflow = async (args: ParsedArgs) => {
   }
 
   // spec 模式：在开头启动一次 agent，复用至工作流结束
+  await runAgentUpdate(config.projectDir, config.implementer)
+
   const implementerPane = await startAgent(config.projectDir, config.implementer, {
     ensureUniqueName: true,
   })
   await waitForAgentReady(implementerPane, agentWaitOptions(config.implementer))
 
-  const reviewerPane = reuseCurrentPane
-    ? await getCurrentPane()
-    : await startAgent(config.projectDir, config.reviewer, {
-        ensureUniqueName: true,
-      })
+  let reviewerPane: string
+  if (reuseCurrentPane) {
+    reviewerPane = await getCurrentPane()
+  } else {
+    await runAgentUpdate(config.projectDir, config.reviewer)
+    reviewerPane = await startAgent(config.projectDir, config.reviewer, {
+      ensureUniqueName: true,
+    })
+  }
 
   if (reuseCurrentPane) {
     console.log(`Reusing current pane as reviewer: ${reviewerPane}`)
