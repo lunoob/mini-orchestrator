@@ -1,6 +1,8 @@
 ---
 name: run-issue
-description: 基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，确认后保存配置并启动编排器
+description: >-
+  基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，
+  确认后保存配置并启动编排器。编排器暂停或结束时通过 terminal-notifier 通知用户。
 disable-model-invocation: true
 ---
 
@@ -86,6 +88,19 @@ zsh -ic 'start-orchestrator \
 > `start-orchestrator` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
 
 等待期间**不要**向用户反复发送状态旁白，**不要**去读项目文件探查进度；仅以 exit code 为准。若用户主动询问，简短说明即可。
+
+#### 退出码处理
+
+`start-orchestrator` 结束后通过 terminal-notifier 通知用户：
+
+| exit code | 含义 | 通知 |
+|-----------|------|------|
+| 0 | 编排正常完成 | `terminal-notifier -title "工作流完成" -message "编排工作已结束，请进行查看"` |
+| 1 | 编排失败 | 无通知，在 chat 展示错误 |
+| 2 | needs_check 暂停 | `terminal-notifier -title "需要人工 Review" -message "Reviewer 无法仅从 diff 验证部分项，请查看对话"` |
+
+> exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `start-orchestrator --resume-from <path> --needs-check-action <action>` 恢复。
+> `terminal-notifier` 不可用时用 chat 醒目提示替代。
 
 ## 示例
 
