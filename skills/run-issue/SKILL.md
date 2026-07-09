@@ -2,7 +2,7 @@
 name: run-issue
 description: >-
   基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，
-  确认后保存配置并启动编排器。编排器暂停或结束时通过 terminal-notifier 通知用户。
+  确认后保存配置并启动编排器。编排器暂停或结束时向用户报告结果。
 disable-model-invocation: true
 ---
 
@@ -91,16 +91,15 @@ zsh -ic 'start-orchestrator \
 
 #### 退出码处理
 
-`start-orchestrator` 结束后通过 terminal-notifier 通知用户：
+`start-orchestrator` 退出后，根据 exit code 在 chat 中向用户报告结果：
 
-| exit code | 含义 | 通知 |
-|-----------|------|------|
-| 0 | 编排正常完成 | `terminal-notifier -title "工作流完成" -message "编排工作已结束，请进行查看"` |
-| 1 | 编排失败 | 无通知，在 chat 展示错误 |
-| 2 | needs_check 暂停 | `terminal-notifier -title "需要人工 Review" -message "Reviewer 无法仅从 diff 验证部分项，请查看对话"` |
+| exit code | 含义 | 报告方式 |
+|-----------|------|----------|
+| 0 | 编排正常完成 | 告诉用户"编排完成，所有 issue 已处理完毕" |
+| 1 | 编排失败 | 显示编排器的错误消息 |
+| 2 | needs_check 暂停 | 告诉用户需要人工 Review，以及 `CHECKPOINT:` 路径 |
 
 > exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `start-orchestrator --resume-from <path> --needs-check-action <action>` 恢复。
-> `terminal-notifier` 不可用时用 chat 醒目提示替代。
 
 ## 示例
 

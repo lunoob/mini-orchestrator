@@ -1,4 +1,5 @@
 import { NeedsCheckPauseError } from "./needs-check.js"
+import { notifyError, notifyNeedsCheck, notifySuccess } from "./notify.js"
 import { assertHerdrEnv, getErrorMessage } from "./utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli.js"
 import { runWorkflow } from "./workflow.js"
@@ -21,14 +22,18 @@ export const main = async () => {
   }
 
   await runWorkflow(args)
+  notifySuccess()
 }
 
 void main().catch((error) => {
   if (error instanceof NeedsCheckPauseError) {
+    notifyNeedsCheck(error.checkpointPath)
     process.exitCode = 2
     return
   }
 
-  console.error(`\nWorkflow failed: ${getErrorMessage(error)}`)
+  const message = getErrorMessage(error)
+  console.error(`\nWorkflow failed: ${message}`)
+  notifyError(message)
   process.exitCode = 1
 })
