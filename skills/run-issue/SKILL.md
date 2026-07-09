@@ -36,13 +36,13 @@ disable-model-invocation: true
   "implementer": {
     "name": "implementer",
     "command": "claude --model haiku",
-    "agentReadyPattern": "claude code",
+    "agentReadyPattern": "Claude",
     "updateCommand": "claude update"
   },
   "reviewer": {
     "name": "reviewer",
     "command": "codex --model gpt-5.4",
-    "agentReadyPattern": "codex",
+    "agentReadyPattern": "Codex",
     "updateCommand": "codex update"
   }
 }
