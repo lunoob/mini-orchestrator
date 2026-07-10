@@ -69,7 +69,8 @@ disable-model-invocation: true
 
 ### 2. 保存配置
 
-用户确认后，将配置文件保存到第一个 issue 的 `specPath` 所在目录，文件名为 `<Issue 标题>_workflow.issue.json`。
+用户确认后，将配置文件保存到第一个 issue 的 `specPath` 所在目录，文件名为 `<Issue 标题>_workflow.issue.json`，
+文件名最好使用蛇形命名法（snake_case），防止文件名出现空格等情况，导致程序识别错误。
 
 > 例：若 `issues[0].specPath` 为 `/home/user/my-project/specs/db-schema.md`，则配置保存至 `/home/user/my-project/specs/db-schema_workflow.issue.json`。
 
