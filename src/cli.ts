@@ -5,7 +5,7 @@ import type { ParsedArgs } from "./types.js"
 export const wantsHelp = (argv: string[]) => argv.includes("--help") || argv.includes("-h")
 
 export const printHelp = () => {
-  console.log(`Usage:
+  console.log(`[CLI] Usage:
   run-post-spec.ts --config <path> [options]
   run-post-spec.ts --resume-from <path> --needs-check-action <action> [options]
 
@@ -70,5 +70,5 @@ export const getConfigPath = (args: ParsedArgs) => {
   const configPath = args.config
   if (configPath) return path.resolve(configPath)
 
-  throw new Error("Missing required argument --config /absolute/path/to/workflow.json")
+  throw new Error("[CLI] Missing required argument --config /absolute/path/to/workflow.json")
 }

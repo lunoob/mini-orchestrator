@@ -8,7 +8,7 @@ export const parseImplementStatus = (output: string): ImplementStatus => {
 
 export const assertHerdrEnv = () => {
   if (process.env.HERDR_ENV === "1") return
-  throw new Error("HERDR_ENV is not set to 1. Please run this inside a herdr pane.")
+  throw new Error("[Config] HERDR_ENV is not set to 1. Please run this inside a herdr pane.")
 }
 
 export const getErrorMessage = (error: unknown) => {

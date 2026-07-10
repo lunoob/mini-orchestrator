@@ -9,7 +9,7 @@ const SOURCE_DIR = path.resolve(__dirname, "../skills", SKILL_NAME)
 const TARGET_DIR = path.join(os.homedir(), ".agents", "skills", SKILL_NAME)
 
 const showUsage = () => {
-  console.log(`
+  console.log(`[Install]
 用法:
   pnpm run install-skill                # 默认以软链接安装
   pnpm run install-skill -- --mode copy # 以复制模式安装
@@ -38,18 +38,18 @@ const main = async () => {
   const uninstall = args.includes("--uninstall")
 
   if (mode !== "symlink" && mode !== "copy") {
-    console.error(`无效模式：${mode}，可选值：symlink、copy`)
+    console.error(`[Install] 无效模式：${mode}，可选值：symlink、copy`)
     process.exit(1)
   }
 
   if (uninstall) {
     const result = await uninstallSkill(TARGET_DIR, { force })
-    console.log(result.message)
+    console.log(`[Install] ${result.message}`)
     process.exit(result.success ? 0 : 1)
   }
 
   const result = await installSkill(SOURCE_DIR, TARGET_DIR, { mode, force })
-  console.log(result.message)
+  console.log(`[Install] ${result.message}`)
   process.exit(result.success ? 0 : 1)
 }
 

@@ -18,7 +18,7 @@ export const main = async () => {
   if (args.config) {
     args.config = getConfigPath(args)
   } else if (!args["resume-from"]) {
-    throw new Error("Missing required argument --config /absolute/path/to/workflow.json")
+    throw new Error("[Config] Missing required argument --config /absolute/path/to/workflow.json")
   }
 
   await runWorkflow(args)
@@ -33,7 +33,7 @@ void main().catch((error) => {
   }
 
   const message = getErrorMessage(error)
-  console.error(`\nWorkflow failed: ${message}`)
+  console.error(`\n[Workflow] Workflow failed: ${message}`)
   notifyError(message)
   process.exitCode = 1
 })

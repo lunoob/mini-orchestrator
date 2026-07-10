@@ -45,7 +45,7 @@ export const runHerdr = async (args: string[]) => {
   const { code, stderr, stdout } = await run("herdr", args)
   if (code === 0) return stdout.trim()
 
-  throw new Error(stderr.trim() || `herdr ${args.join(" ")} failed with code ${code}`)
+  throw new Error(`[Agent] ${stderr.trim() || `herdr ${args.join(" ")} failed with code ${code}`}`)
 }
 
 const tryRunHerdr = async (args: string[]) => {
@@ -123,7 +123,7 @@ export const startAgent = async (
   if (options.ensureUniqueName) {
     name = await resolveUniqueAgentName(agent.name)
     if (name !== agent.name) {
-      console.log(`Agent name "${agent.name}" is taken; using "${name}" instead.`)
+      console.log(`[Agent] Name "${agent.name}" is taken; using "${name}" instead.`)
     }
   }
 
@@ -194,7 +194,7 @@ const waitForIdleByPolling = async (paneId: string): Promise<string> => {
   }
 
   throw new Error(
-    `Agent ${paneId} did not complete within ${IDLE_TIMEOUT_MS / 1000}s timeout ` +
+    `[Agent] Pane ${paneId} did not complete within ${IDLE_TIMEOUT_MS / 1000}s timeout ` +
       `(last status: ${lastStatus}).` +
       `\nLast output:\n${(await readAgentOutput(paneId, 10)).slice(0, 500)}`,
   )
@@ -209,14 +209,14 @@ const waitForWorkingAfterSend = async (
 
   if (await tryWaitStatus(paneId, "working", workingTimeoutMs)) return
 
-  console.log(`Agent ${paneId} did not enter working; retrying after ready wait...`)
+  console.log(`[Agent] Pane ${paneId} did not enter working; retrying after ready wait...`)
   await waitForAgentReady(paneId, options)
   await sendTask(paneId, prompt)
 
   if (await tryWaitStatus(paneId, "working", workingTimeoutMs)) return
 
   throw new Error(
-    `Agent ${paneId} did not enter working after send — prompt likely lost. ` +
+    `[Agent] Pane ${paneId} did not enter working after send — prompt likely lost. ` +
       "Check agentReadyPattern or agent startup.",
   )
 }
@@ -248,7 +248,7 @@ export const runAgentUpdate = async (
 ): Promise<boolean> => {
   if (!agent.updateCommand) return true
 
-  console.log(`Running update for "${agent.name}": ${agent.updateCommand}`)
+  console.log(`[Agent] Running update for "${agent.name}": ${agent.updateCommand}`)
 
   const [cmd, ...args] = splitCommand(agent.updateCommand)
   const { code } = await new Promise<{ code: number | null }>((resolve, reject) => {
@@ -262,7 +262,7 @@ export const runAgentUpdate = async (
   })
 
   if (code !== 0) {
-    console.warn(`Update for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
+    console.warn(`[Agent] Update for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
     return false
   }
   return true

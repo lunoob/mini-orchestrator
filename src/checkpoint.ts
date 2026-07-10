@@ -47,7 +47,7 @@ export const readNeedsCheckCheckpoint = async (filePath: string): Promise<NeedsC
   const checkpoint = JSON.parse(content) as NeedsCheckCheckpoint
 
   if (checkpoint.version !== CHECKPOINT_VERSION) {
-    throw new Error(`Unsupported checkpoint version: ${checkpoint.version}`)
+    throw new Error(`[Checkpoint] Unsupported checkpoint version: ${checkpoint.version}`)
   }
 
   return checkpoint

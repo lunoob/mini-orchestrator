@@ -33,7 +33,7 @@ export const getHeadShaSafe = async (projectDir: string) => {
 
 export const getHeadSha = async (projectDir: string) => {
   const head = await getHeadShaSafe(projectDir)
-  if (!head) throw new Error(`git rev-parse HEAD failed in ${projectDir} (no commits yet?)`)
+  if (!head) throw new Error(`[Git] git rev-parse HEAD failed in ${projectDir} (no commits yet?)`)
   return head
 }
 

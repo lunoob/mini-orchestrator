@@ -28,7 +28,7 @@ const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve
 const parseMaxReviewRounds = (value: string) => {
   const rounds = Number(value)
   if (!Number.isInteger(rounds) || rounds < 1) {
-    throw new Error(`Invalid maxReviewRounds: ${value}`)
+    throw new Error(`[Config] Invalid maxReviewRounds: ${value}`)
   }
   return rounds
 }
@@ -43,21 +43,21 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       ? parseMaxReviewRounds(args.maxReviewRounds)
       : Number(fileConfig.maxReviewRounds ?? 8)
 
-  if (!projectDir) throw new Error("projectDir is required (workflow config or --projectDir)")
+  if (!projectDir) throw new Error("[Config] projectDir is required (workflow config or --projectDir)")
 
   // 验证 issues（仅 issue 模式）
   if (!fileConfig.issues || fileConfig.issues.length === 0) {
-    throw new Error("issues is required (non-empty array)")
+    throw new Error("[Config] issues is required (non-empty array)")
   }
   fileConfig.issues.forEach((issue, index) => {
-    if (!issue.title) throw new Error(`issues[${index}].title is required`)
-    if (!issue.specPath) throw new Error(`issues[${index}].specPath is required`)
+    if (!issue.title) throw new Error(`[Config] issues[${index}].title is required`)
+    if (!issue.specPath) throw new Error(`[Config] issues[${index}].specPath is required`)
   })
 
   // 尽早校验 spec 文件存在性，避免执行到一半才报错
   for (let i = 0; i < fileConfig.issues.length; i += 1) {
     try { await fsAccess(fileConfig.issues[i].specPath) } catch {
-      throw new Error(`Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
+      throw new Error(`[Config] Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
     }
   }
 
@@ -79,8 +79,8 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       fileConfig.prompts?.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
   }
 
-  if (!fileConfig.implementer) throw new Error("workflow config is missing implementer")
-  if (!fileConfig.reviewer) throw new Error("workflow config is missing reviewer")
+  if (!fileConfig.implementer) throw new Error("[Config] workflow config is missing implementer")
+  if (!fileConfig.reviewer) throw new Error("[Config] workflow config is missing reviewer")
 
   return {
     ...fileConfig,
@@ -143,7 +143,7 @@ const loadSkill = async (configDir: string, skillPath: string) => {
   try {
     await fsAccess(resolvedPath)
   } catch {
-    throw new Error(`Skill not found: ${skillPath} (resolved to ${resolvedPath})`)
+    throw new Error(`[Config] Skill not found: ${skillPath} (resolved to ${resolvedPath})`)
   }
   const content = await readFile(resolvedPath, "utf8")
   return stripSkillFrontmatter(content)

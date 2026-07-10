@@ -125,12 +125,12 @@ const sendControllerRevise = async (
   const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
-      `Implementer has questions during controller revise round ${round} — needs human input.`,
+      `[Controller] Implementer has questions during controller revise round ${round} — needs human input.`,
     )
   }
   if (implementStatus === "unknown") {
     console.warn(
-      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
+      `[Controller] Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
     )
   }
 }
@@ -144,7 +144,7 @@ const conductReview = async (
 ) => {
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.baseSha, round)
   if (reviewContext.diffFile) {
-    console.log(`Review package: ${reviewContext.diffFile}`)
+    console.log(`[Review] Review package: ${reviewContext.diffFile}`)
   }
 
   const diffFileSection = buildDiffFileSection(reviewContext.diffFile, !runtime.hasGit)
@@ -201,16 +201,16 @@ const handleNeedsCheck = async (
 
   switch (decision.action) {
     case "approve":
-      console.log(`\nWorkflow finished: manually approved after needs_check in round ${round}.`)
+      console.log(`\n[NeedsCheck] Workflow finished: manually approved after needs_check in round ${round}.`)
       return { type: "approved" }
     case "abort":
-      throw new Error(`Workflow aborted by user after needs_check in round ${round}.`)
+      throw new Error(`[NeedsCheck] Workflow aborted by user after needs_check in round ${round}.`)
     case "revise":
-      console.log("Needs check → revise: sending controller notes to implementer.")
+      console.log("[NeedsCheck] Needs check → revise: sending controller notes to implementer.")
       await sendControllerRevise(runtime, round, decision.notes, reviewOutput)
       return { type: "continue_round" }
     case "retry-review":
-      console.log("Needs check → retry-review: re-reviewing same round with controller context.")
+      console.log("[NeedsCheck] Needs check → retry-review: re-reviewing same round with controller context.")
       return {
         type: "retry_same_round",
         controllerNotes: decision.notes,
@@ -218,7 +218,7 @@ const handleNeedsCheck = async (
       }
     default: {
       const _exhaustive: never = decision.action
-      throw new Error(`Unknown needs-check action: ${_exhaustive}`)
+      throw new Error(`[NeedsCheck] Unknown needs-check action: ${_exhaustive}`)
     }
   }
 }
@@ -230,7 +230,7 @@ const sendPostReviewCheck = async (
   round: number,
   reviewStatus: PostReviewStatus,
 ) => {
-  console.log(`Review ${reviewStatus} — sending implementer to verify TypeScript and lint checks.`)
+  console.log(`[PostCheck] Review ${reviewStatus} — sending implementer to verify TypeScript and lint checks.`)
 
   const output = await sendTaskAndWait(
     runtime.implementerPane,
@@ -244,12 +244,12 @@ const sendPostReviewCheck = async (
   const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
-      `Implementer has questions during post-review check round ${round} — needs human input.`,
+      `[PostCheck] Implementer has questions during post-review check round ${round} — needs human input.`,
     )
   }
   if (implementStatus === "unknown") {
     console.warn(
-      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
+      `[PostCheck] Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
     )
   }
 }
@@ -259,7 +259,7 @@ const sendReviseAfterFail = async (
   round: number,
   reviewOutput: string,
 ) => {
-  console.log("Review failed — sending back to implementer.")
+  console.log("[Revise] Review failed — sending back to implementer.")
 
   const output = await sendTaskAndWait(
     runtime.implementerPane,
@@ -273,12 +273,12 @@ const sendReviseAfterFail = async (
   const implementStatus = parseImplementStatus(extractImplementResult(output))
   if (implementStatus === "needs_input") {
     throw new Error(
-      `Implementer has questions during revise round ${round} — needs human input.`,
+      `[Revise] Implementer has questions during revise round ${round} — needs human input.`,
     )
   }
   if (implementStatus === "unknown") {
     console.warn(
-      `Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
+      `[Revise] Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
     )
   }
 }
@@ -306,7 +306,7 @@ const runReviewLoop = async (
 
       if (verdict.kind === "pass") {
         await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
-        console.log(`\nWorkflow finished: review passed in round ${round}.`)
+        console.log(`\n[Review] Workflow finished: review passed in round ${round}.`)
         return
       }
 
@@ -338,7 +338,7 @@ const runReviewLoop = async (
       }
 
       if (round === runtime.config.maxReviewRounds) {
-        throw new Error(`Review failed after ${runtime.config.maxReviewRounds} rounds.`)
+        throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
       }
 
       await sendReviseAfterFail(runtime, round, reviewOutput)
@@ -346,7 +346,7 @@ const runReviewLoop = async (
     }
   }
 
-  throw new Error(`Review failed after ${runtime.config.maxReviewRounds} rounds.`)
+  throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
 }
 
 /**
@@ -374,7 +374,7 @@ const runSingleSpecCycle = async (
     runtime.config.projectDir, configPath, configContent, specPath, specContent, runtime.args,
   )
 
-  console.log(`Session: ${specSessionDir}`)
+  console.log(`[Session] Session: ${specSessionDir}`)
 
   const implementOutput = await sendTaskAndWait(
     runtime.implementerPane,
@@ -389,11 +389,11 @@ const runSingleSpecCycle = async (
   const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
   if (implementStatus === "needs_input") {
     printSection("Implementer Needs Input", implementOutput)
-    throw new Error("Implementer has questions — needs human input before review.")
+    throw new Error("[Implement] Implementer has questions — needs human input before review.")
   }
   if (implementStatus === "unknown") {
     console.warn(
-      "Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
+      "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
         "The implementation may be incomplete. Proceeding to review anyway.",
     )
   }
@@ -425,7 +425,7 @@ const runWorkflowResume = async (args: ParsedArgs) => {
   const action = parseNeedsCheckAction(args["needs-check-action"])
   const notes = (args["needs-check-notes"] ?? "").trim()
   if ((action === "revise" || action === "retry-review") && !notes) {
-    throw new Error(`--needs-check-notes is required for action: ${action}`)
+    throw new Error(`[Resume] --needs-check-notes is required for action: ${action}`)
   }
 
   const configPath = path.resolve(args.config ?? checkpoint.configPath)
@@ -449,19 +449,19 @@ const runWorkflowResume = async (args: ParsedArgs) => {
   delete runtime.args["needs-check-action"]
   delete runtime.args["needs-check-notes"]
 
-  console.log(`Resuming from checkpoint: ${checkpointPath}`)
-  console.log(`Needs-check action: ${action}`)
+  console.log(`[Resume] Resuming from checkpoint: ${checkpointPath}`)
+  console.log(`[Resume] Needs-check action: ${action}`)
 
   const currentIndex = checkpoint.currentIssueIndex
   const currentIssue = checkpoint.issues[currentIndex]
 
   if (!currentIssue) {
-    throw new Error(`Invalid checkpoint: issue index ${currentIndex} out of range`)
+    throw new Error(`[Resume] Invalid checkpoint: issue index ${currentIndex} out of range`)
   }
 
   switch (action) {
     case "approve":
-      console.log(`Issue approved: ${currentIssue.title}`)
+      console.log(`[Issue] Issue approved: ${currentIssue.title}`)
       // 若还有后续 issue，继续执行
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
@@ -471,10 +471,10 @@ const runWorkflowResume = async (args: ParsedArgs) => {
       // 最后一个 issue，清理 agent
       await stopAgent(runtime.implementerPane)
       await stopAgent(runtime.reviewerPane)
-      console.log("\nWorkflow finished: all issues manually approved.")
+      console.log("\n[Issue] Workflow finished: all issues manually approved.")
       return
     case "abort":
-      throw new Error(`Workflow aborted after needs_check in round ${checkpoint.round}.`)
+      throw new Error(`[Resume] Workflow aborted after needs_check in round ${checkpoint.round}.`)
     case "revise":
       await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
       await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues)
@@ -502,7 +502,7 @@ const runWorkflowResume = async (args: ParsedArgs) => {
       return
     default: {
       const _exhaustive: never = action
-      throw new Error(`Unknown needs-check action: ${_exhaustive}`)
+      throw new Error(`[Resume] Unknown needs-check action: ${_exhaustive}`)
     }
   }
 }
@@ -523,8 +523,8 @@ const runIssueQueueFromIndex = async (
 
   for (let index = startIndex; index < issues.length; index += 1) {
     const issue = issues[index]
-    console.log(`\n=== Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
-    console.log(`Spec path: ${issue.specPath}`)
+    console.log(`\n[Issue] === Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
+    console.log(`[Issue] Spec path: ${issue.specPath}`)
 
     // 清理上个 issue 残留的 agent（resume 路径会从 checkpoint 带入旧 pane）
     if (runtime.implementerPane) await stopAgent(runtime.implementerPane)
@@ -563,7 +563,7 @@ const advanceBaseline = async (runtime: WorkflowRuntime) => {
   const headSha = await getHeadShaSafe(runtime.config.projectDir)
   if (headSha) {
     runtime.baseSha = headSha
-    console.log(`Review baseline advanced: ${headSha}`)
+    console.log(`[Baseline] Review baseline advanced: ${headSha}`)
   }
 }
 
@@ -582,15 +582,15 @@ export const runWorkflow = async (args: ParsedArgs) => {
   const hasGit = await isGitRepo(config.projectDir)
   const baseSha = await getReviewBaselineSha(config.projectDir)
   if (baseSha) {
-    console.log(`Review baseline: ${baseSha}`)
+    console.log(`[Workflow] Review baseline: ${baseSha}`)
   } else if (hasGit) {
-    console.log("Review baseline: (no commits yet — will diff from repo start after implement)")
+    console.log("[Workflow] Review baseline: (no commits yet — will diff from repo start after implement)")
   } else {
-    console.log("Review baseline: (not a git repo)")
+    console.log("[Workflow] Review baseline: (not a git repo)")
   }
 
   if (needsCheckMode === "llm") {
-    console.log("Needs-check mode: llm (pause with checkpoint on REVIEW_NEEDS_CHECK)")
+    console.log("[Workflow] Needs-check mode: llm (pause with checkpoint on REVIEW_NEEDS_CHECK)")
   }
 
   const runtime: WorkflowRuntime = {

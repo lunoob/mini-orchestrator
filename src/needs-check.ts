@@ -33,7 +33,7 @@ export const parseNeedsCheckMode = (args: ParsedArgs): NeedsCheckMode =>
 export const parseNeedsCheckAction = (value: string | undefined): NeedsCheckAction => {
   if (!value || !VALID_ACTIONS.has(value)) {
     throw new Error(
-      `Invalid --needs-check-action: ${value ?? "(missing)"}. Expected approve | revise | retry-review | abort`,
+      `[NeedsCheck] Invalid --needs-check-action: ${value ?? "(missing)"}. Expected approve | revise | retry-review | abort`,
     )
   }
 
@@ -79,7 +79,7 @@ const promptChoice = async (): Promise<NeedsCheckAction> => {
         .toLowerCase()
 
       if (VALID_ACTIONS.has(answer)) return answer as NeedsCheckAction
-      console.log("无效输入，请输入：approve / revise / retry-review / abort")
+      console.log("[NeedsCheck] 无效输入，请输入：approve / revise / retry-review / abort")
     }
   } finally {
     rl.close()
@@ -97,7 +97,7 @@ const promptNotes = async (action: NeedsCheckAction) => {
     while (true) {
       const notes = (await rl.question(hint)).trim()
       if (notes) return notes
-      console.log("说明不能为空，请重新输入。")
+      console.log("[NeedsCheck] 说明不能为空，请重新输入。")
     }
   } finally {
     rl.close()
@@ -135,7 +135,7 @@ export const pauseForLlmNeedsCheck = async (
   console.log("STATUS: ORCHESTRATOR_NEEDS_CHECK")
   console.log(`CHECKPOINT: ${checkpointPath}`)
   console.log("")
-  console.log("（LLM 模式：脚本已暂停。请外层 agent 询问用户后，使用 --resume-from 继续。）")
+  console.log("[NeedsCheck] （LLM 模式：脚本已暂停。请外层 agent 询问用户后，使用 --resume-from 继续。）")
 
   throw new NeedsCheckPauseError(checkpointPath)
 }
@@ -147,7 +147,7 @@ export const decisionFromArgs = (args: ParsedArgs): NeedsCheckDecision | undefin
   const notes = (args["needs-check-notes"] ?? "").trim()
 
   if ((action === "revise" || action === "retry-review") && !notes) {
-    throw new Error(`--needs-check-notes is required for action: ${action}`)
+    throw new Error(`[NeedsCheck] --needs-check-notes is required for action: ${action}`)
   }
 
   return { action, notes }
