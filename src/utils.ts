@@ -105,7 +105,7 @@ export const extractImplementResult = (output: string): string => {
  * 用于将 reviewOutput 注入 revise / controller 等 prompt 前清理。
  */
 export const stripStatusLines = (output: string): string =>
-  output.replace(/^\s*STATUS: .+$/gm, "").trim()
+  output.replace(/STATUS: .+$/gm, "").trim()
 
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)
