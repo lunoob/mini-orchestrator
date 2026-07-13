@@ -35,13 +35,13 @@ disable-model-invocation: true
   "maxReviewRounds": 8,
   "implementer": {
     "name": "implementer",
-    "command": "claude --model haiku",
+    "command": "claude --model default",
     "agentReadyPattern": "Claude",
     "updateCommand": "claude update"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.4",
+    "command": "codex --model gpt-5.6-terra",
     "agentReadyPattern": "Codex",
     "updateCommand": "codex update"
   }
