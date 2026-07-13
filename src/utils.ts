@@ -79,8 +79,10 @@ export const extractReviewResult = (output: string): string => {
   if (startIdx === -1) return output
 
   const afterStart = startIdx + REVIEW_DELIMITER_START.length
-  const endIdx = output.indexOf(REVIEW_DELIMITER_END, afterStart)
-  if (endIdx === -1) return output
+  // 用 lastIndexOf 而非 indexOf：review prompt 模板中含 END 标记文本，
+  // herdr echo 到终端后，indexOf 可能错误匹配到 prompt 中的标记，导致内容截断
+  const endIdx = output.lastIndexOf(REVIEW_DELIMITER_END)
+  if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output
 }
@@ -94,8 +96,8 @@ export const extractImplementResult = (output: string): string => {
   if (startIdx === -1) return output
 
   const afterStart = startIdx + IMPLEMENT_DELIMITER_START.length
-  const endIdx = output.indexOf(IMPLEMENT_DELIMITER_END, afterStart)
-  if (endIdx === -1) return output
+  const endIdx = output.lastIndexOf(IMPLEMENT_DELIMITER_END)
+  if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output
 }
@@ -105,7 +107,7 @@ export const extractImplementResult = (output: string): string => {
  * 用于将 reviewOutput 注入 revise / controller 等 prompt 前清理。
  */
 export const stripStatusLines = (output: string): string =>
-  output.replace(/STATUS: .+$/gm, "").trim()
+  output.replace(/^STATUS: .+$/gm, "").trim()
 
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)
