@@ -29,6 +29,7 @@
 - 全部检查通过（或确认项目无对应检查）后，输出 `STATUS: IMPLEMENT_DONE`
 
 ## 输出
+必须严格遵循以下步骤:
 1. 先输出起始前缀: ---IMPLEMENT_RESULT_START---
 2. 再输出其他内容（含 STATUS 标记）
 3. 最后输出结束后缀: ---IMPLEMENT_RESULT_END---

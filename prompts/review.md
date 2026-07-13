@@ -12,6 +12,7 @@
 若同时有需修复项与 ⚠️ 项，输出 `STATUS: REVIEW_FAIL`（修复项优先）。
 
 ## 输出
+必须严格遵循以下步骤:
 1. 先输出起始前缀: ---REVIEW_RESULT_START---
 2. 再输出其他内容（含 STATUS 标记）
 3. 最后输出结束后缀: ---REVIEW_RESULT_END---
