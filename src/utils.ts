@@ -116,8 +116,11 @@ export const printSection = (title: string, body: string) => {
   console.log(body.trim())
 }
 
+// 未提供的 key 保留占位符，支持 loadPrompts 与 workflow 分阶段注入
 export const render = (template: string, values: Record<string, string>) =>
-  template.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => values[key] ?? "")
+  template.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) =>
+    key in values ? values[key] : match,
+  )
 
 export const splitCommand = (command: string) => {
   const parts: string[] = []

@@ -76,4 +76,18 @@ describe("loadPrompts", () => {
       `CUSTOM REVIEW OUTPUT: ${REVIEW_RESULT_START} / ${REVIEW_RESULT_END}`,
     )
   })
+
+  it("preserves runtime placeholders after outputFormat injection", async () => {
+    const config = buildMinimalConfig(PROJECT_ROOT)
+
+    const prompts = await loadPrompts(config, PROJECT_ROOT)
+
+    expect(prompts.implement).toContain("{{specPath}}")
+    expect(prompts.implement).not.toContain("{{outputFormat}}")
+    expect(prompts.review).toContain("{{specPath}}")
+    expect(prompts.revise).toContain("{{round}}")
+    expect(prompts.revise).toContain("{{reviewOutput}}")
+    expect(prompts.controllerImplementer).toContain("{{controllerNotes}}")
+    expect(prompts.postReviewCheck).toContain("{{reviewStatus}}")
+  })
 })
