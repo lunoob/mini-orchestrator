@@ -3,7 +3,14 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import {
+  IMPLEMENT_RESULT_END,
+  IMPLEMENT_RESULT_START,
+  REVIEW_RESULT_END,
+  REVIEW_RESULT_START,
+} from "./prompt-delimiters.js"
 import type { IssueConfig, LoadedPrompts, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
+import { render } from "./utils.js"
 
 const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
@@ -22,6 +29,8 @@ const DEFAULT_REVISE_PROMPT = path.join(PROJECT_ROOT, "prompts/revise.md")
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-implementer.md")
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-re-review.md")
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-review-check.md")
+const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
+const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
 
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
@@ -77,6 +86,10 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       fileConfig.prompts?.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
     postReviewCheck:
       fileConfig.prompts?.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
+    outputFormatImplement:
+      fileConfig.prompts?.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
+    outputFormatReview:
+      fileConfig.prompts?.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
   }
 
   if (!fileConfig.implementer) throw new Error("[Config] workflow config is missing implementer")
@@ -102,24 +115,62 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
 const readPrompt = async (configDir: string, file: string) =>
   readFile(path.resolve(configDir, file), "utf8")
 
+const injectOutputFormat = (template: string, outputFormat: string) =>
+  render(template, { outputFormat })
+
+const loadOutputFormat = async (
+  configDir: string,
+  partialPath: string,
+  delimiterStart: string,
+  delimiterEnd: string,
+) => {
+  const template = await readPrompt(configDir, partialPath)
+  return render(template, { delimiterEnd, delimiterStart })
+}
+
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
-  const implement = await readPrompt(configDir, config.prompts.implement)
-  const reReview = await readPrompt(configDir, config.prompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT)
-  const review = await readPrompt(configDir, config.prompts.review)
-  const revise = await readPrompt(configDir, config.prompts.revise)
-  const controllerImplementer = await readPrompt(
-    configDir,
-    config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
-  )
-  const controllerReReview = await readPrompt(
-    configDir,
-    config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
-  )
-  const postReviewCheck = await readPrompt(
-    configDir,
-    config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
-  )
-  return { controllerImplementer, controllerReReview, implement, postReviewCheck, reReview, review, revise }
+  const [implementOutput, reviewOutput] = await Promise.all([
+    loadOutputFormat(
+      configDir,
+      config.prompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
+      IMPLEMENT_RESULT_START,
+      IMPLEMENT_RESULT_END,
+    ),
+    loadOutputFormat(
+      configDir,
+      config.prompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
+      REVIEW_RESULT_START,
+      REVIEW_RESULT_END,
+    ),
+  ])
+
+  const [
+    implement,
+    reReview,
+    review,
+    revise,
+    controllerImplementer,
+    controllerReReview,
+    postReviewCheck,
+  ] = await Promise.all([
+    readPrompt(configDir, config.prompts.implement),
+    readPrompt(configDir, config.prompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT),
+    readPrompt(configDir, config.prompts.review),
+    readPrompt(configDir, config.prompts.revise),
+    readPrompt(configDir, config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT),
+    readPrompt(configDir, config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT),
+    readPrompt(configDir, config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT),
+  ])
+
+  return {
+    controllerImplementer: injectOutputFormat(controllerImplementer, implementOutput),
+    controllerReReview: injectOutputFormat(controllerReReview, reviewOutput),
+    implement: injectOutputFormat(implement, implementOutput),
+    postReviewCheck: injectOutputFormat(postReviewCheck, implementOutput),
+    reReview: injectOutputFormat(reReview, reviewOutput),
+    review: injectOutputFormat(review, reviewOutput),
+    revise: injectOutputFormat(revise, implementOutput),
+  }
 }
 
 const stripSkillFrontmatter = (content: string) => {

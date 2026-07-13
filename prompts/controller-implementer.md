@@ -17,8 +17,4 @@
 - 若不清楚 Controller 或 reviewer 的要求，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题，不要猜测
 - 完成后输出 `STATUS: IMPLEMENT_DONE`
 
-## 输出
-必须严格遵循以下步骤:
-1. 先输出起始前缀: ---IMPLEMENT_RESULT_START---
-2. 再输出其他内容（含 STATUS 标记）
-3. 最后输出结束后缀: ---IMPLEMENT_RESULT_END---
+{{outputFormat}}

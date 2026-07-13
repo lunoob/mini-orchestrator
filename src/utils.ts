@@ -1,3 +1,10 @@
+import {
+  IMPLEMENT_RESULT_END,
+  IMPLEMENT_RESULT_START,
+  REVIEW_RESULT_END,
+  REVIEW_RESULT_START,
+} from "./prompt-delimiters.js"
+
 export type ImplementStatus = "done" | "needs_input" | "unknown"
 
 export const parseImplementStatus = (output: string): ImplementStatus => {
@@ -63,11 +70,6 @@ export const parseReviewVerdict = (output: string): ReviewVerdict => {
   }
 }
 
-const REVIEW_DELIMITER_START = "---REVIEW_RESULT_START---"
-const REVIEW_DELIMITER_END = "---REVIEW_RESULT_END---"
-const IMPLEMENT_DELIMITER_START = "---IMPLEMENT_RESULT_START---"
-const IMPLEMENT_DELIMITER_END = "---IMPLEMENT_RESULT_END---"
-
 /**
  * 从 reviewer 的完整终端输出中提取最后一对标记之间的最终结果。
  * 终端输出可能包含多对标记（prompt 中的格式说明 + reviewer 的实际回复），
@@ -75,13 +77,13 @@ const IMPLEMENT_DELIMITER_END = "---IMPLEMENT_RESULT_END---"
  * 标记缺失时回退到原始输出，不打断工作流。
  */
 export const extractReviewResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(REVIEW_DELIMITER_START)
+  const startIdx = output.lastIndexOf(REVIEW_RESULT_START)
   if (startIdx === -1) return output
 
-  const afterStart = startIdx + REVIEW_DELIMITER_START.length
+  const afterStart = startIdx + REVIEW_RESULT_START.length
   // 用 lastIndexOf 而非 indexOf：review prompt 模板中含 END 标记文本，
   // herdr echo 到终端后，indexOf 可能错误匹配到 prompt 中的标记，导致内容截断
-  const endIdx = output.lastIndexOf(REVIEW_DELIMITER_END)
+  const endIdx = output.lastIndexOf(REVIEW_RESULT_END)
   if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output
@@ -92,11 +94,11 @@ export const extractReviewResult = (output: string): string => {
  * 标记缺失时回退到原始输出，不打断工作流。
  */
 export const extractImplementResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(IMPLEMENT_DELIMITER_START)
+  const startIdx = output.lastIndexOf(IMPLEMENT_RESULT_START)
   if (startIdx === -1) return output
 
-  const afterStart = startIdx + IMPLEMENT_DELIMITER_START.length
-  const endIdx = output.lastIndexOf(IMPLEMENT_DELIMITER_END)
+  const afterStart = startIdx + IMPLEMENT_RESULT_START.length
+  const endIdx = output.lastIndexOf(IMPLEMENT_RESULT_END)
   if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output

@@ -12,6 +12,10 @@ export type PromptConfig = {
   controllerImplementer?: string
   controllerReReview?: string
   implement: string
+  /** 自定义 implement 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/implement-output.md` */
+  outputFormatImplement?: string
+  /** 自定义 review 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/review-output.md` */
+  outputFormatReview?: string
   postReviewCheck?: string
   reReview?: string
   review: string
