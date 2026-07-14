@@ -2,9 +2,8 @@ import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import type { ParsedArgs } from "./types.js"
+import type { ParsedArgs } from "../types.js"
 
-/** CLI 参数中与 resume/帮助相关的 key，不计入 session 身份 */
 const RESUME_ARGS = new Set(["resume-from", "needs-check-action", "needs-check-notes", "help"])
 
 export type SessionInfo = {
@@ -20,10 +19,6 @@ export type RunMetadata = {
   cliArgs: Record<string, string>
 }
 
-/**
- * 过滤出影响调度身份的 CLI 参数，
- * 排除 resume 相关参数和 --help。
- */
 const getIdentityArgs = (args: ParsedArgs): Record<string, string> => {
   const entries = Object.entries(args)
     .filter(([key]) => !RESUME_ARGS.has(key))
@@ -31,12 +26,6 @@ const getIdentityArgs = (args: ParsedArgs): Record<string, string> => {
   return Object.fromEntries(entries)
 }
 
-/**
- * 基于 spec 内容、config 内容和 CLI 参数创建 session 目录。
- *
- * 目录名 = `<spec文件名>-<sha256[:8]>`，保证相同输入 → 相同目录。
- * 目录内写入 run.json 记录本次调度的完整元数据。
- */
 export const createSession = async (
   projectDir: string,
   configPath: string,

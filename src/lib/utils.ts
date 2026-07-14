@@ -55,12 +55,11 @@ export const parseReviewVerdict = (output: string): ReviewVerdict => {
   const cannotVerifySummary = extractCannotVerifySummary(output)
   const hasCannotVerify = cannotVerifySummary !== null
 
-  // 根据 review prompt 的设计，三个状态标记互斥；安全优先排序
   const kind: ReviewVerdictKind =
     explicitFail ? "fail" :
     (explicitNeedsCheck || hasCannotVerify) ? "needs_check" :
     explicitPass ? "pass" :
-    /* 无任何状态标记 */ "fail"
+    "fail"
 
   return {
     cannotVerifySummary,
@@ -70,29 +69,17 @@ export const parseReviewVerdict = (output: string): ReviewVerdict => {
   }
 }
 
-/**
- * 从 reviewer 的完整终端输出中提取最后一对标记之间的最终结果。
- * 终端输出可能包含多对标记（prompt 中的格式说明 + reviewer 的实际回复），
- * 用 lastIndexOf 取最后那对，即 reviewer 本次实际输出的内容。
- * 标记缺失时回退到原始输出，不打断工作流。
- */
 export const extractReviewResult = (output: string): string => {
   const startIdx = output.lastIndexOf(REVIEW_RESULT_START)
   if (startIdx === -1) return output
 
   const afterStart = startIdx + REVIEW_RESULT_START.length
-  // 用 lastIndexOf 而非 indexOf：review prompt 模板中含 END 标记文本，
-  // herdr echo 到终端后，indexOf 可能错误匹配到 prompt 中的标记，导致内容截断
   const endIdx = output.lastIndexOf(REVIEW_RESULT_END)
   if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output
 }
 
-/**
- * 从 implementer 的完整终端输出中提取最后一对标记之间的最终结果。
- * 标记缺失时回退到原始输出，不打断工作流。
- */
 export const extractImplementResult = (output: string): string => {
   const startIdx = output.lastIndexOf(IMPLEMENT_RESULT_START)
   if (startIdx === -1) return output
@@ -104,10 +91,6 @@ export const extractImplementResult = (output: string): string => {
   return output.slice(afterStart, endIdx).trim() || output
 }
 
-/**
- * 从输出中移除编排器专用的 STATUS 标记行，只保留对人类 agent 有意义的内容。
- * 用于将 reviewOutput 注入 revise / controller 等 prompt 前清理。
- */
 export const stripStatusLines = (output: string): string =>
   output.trim().replace(/^STATUS: .+$/gm, "")
 
@@ -116,7 +99,6 @@ export const printSection = (title: string, body: string) => {
   console.log(body.trim())
 }
 
-// 未提供的 key 保留占位符，支持 loadPrompts 与 workflow 分阶段注入
 export const render = (template: string, values: Record<string, string>) =>
   template.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) =>
     key in values ? values[key] : match,

@@ -4,7 +4,7 @@ import path from "node:path"
 import os from "node:os"
 import { describe, expect, it } from "vitest"
 
-import { loadConfig } from "./config.js"
+import { loadConfig } from "./load.js"
 
 const MINIMAL_CONFIG_BASE = {
   maxReviewRounds: 8,

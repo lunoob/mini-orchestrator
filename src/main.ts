@@ -1,14 +1,13 @@
-import { NeedsCheckPauseError } from "./needs-check.js"
-import { notifyError, notifyNeedsCheck, notifySuccess } from "./notify.js"
-import { assertHerdrEnv, getErrorMessage } from "./utils.js"
-import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli.js"
-import { handleReportTaskCli } from "./task-status.js"
-import { runWorkflow } from "./workflow.js"
+import { NeedsCheckPauseError } from "./review/needs-check.js"
+import { notifyError, notifyNeedsCheck, notifySuccess } from "./notify/index.js"
+import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
+import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
+import { handleReportTaskCli } from "./task/index.js"
+import { runWorkflow } from "./workflow/index.js"
 
 export const main = async () => {
   const argv = process.argv.slice(2)
 
-  // 内部子命令：agent 回报任务状态，不经过 workflow
   if (argv[0] === "report-task") {
     await handleReportTaskCli(argv)
     return

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { GIT_EMPTY_TREE_SHA, runGitCommand } from "./git.js"
+import { GIT_EMPTY_TREE_SHA, runGitCommand } from "../git/index.js"
 
 export const generateReviewPackage = async (
   dir: string,

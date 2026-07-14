@@ -8,10 +8,6 @@ const SUBTITLES: Record<NotifyLevel, string> = {
   error: "❌ 错误",
 }
 
-/**
- * 使用 macOS terminal-notifier 发送桌面通知。
- * terminal-notifier 不可用时静默失败，不阻塞主流程。
- */
 const notify = (title: string, message: string, level: NotifyLevel) => {
   try {
     const result = spawnSync("terminal-notifier", [
@@ -28,7 +24,6 @@ const notify = (title: string, message: string, level: NotifyLevel) => {
   }
 }
 
-/** 编排器正常完成 */
 export const notifySuccess = () => {
   notify(
     "编排器",
@@ -37,7 +32,6 @@ export const notifySuccess = () => {
   )
 }
 
-/** needs_check 暂停，等待人工介入 */
 export const notifyNeedsCheck = (checkpointPath: string) => {
   notify(
     "编排器",
@@ -46,9 +40,7 @@ export const notifyNeedsCheck = (checkpointPath: string) => {
   )
 }
 
-/** 编排器出错 */
 export const notifyError = (errorMessage: string) => {
-  // terminal-notifier 的 -message 长度有限，截取前 200 字符
   const shortMsg = errorMessage.length > 200
     ? `${errorMessage.slice(0, 197)}...`
     : errorMessage

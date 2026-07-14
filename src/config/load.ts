@@ -8,9 +8,9 @@ import {
   IMPLEMENT_RESULT_START,
   REVIEW_RESULT_END,
   REVIEW_RESULT_START,
-} from "./prompt-delimiters.js"
-import type { IssueConfig, LoadedPrompts, ParsedArgs, PromptConfig, WorkflowConfig } from "./types.js"
-import { render } from "./utils.js"
+} from "../lib/prompt-delimiters.js"
+import type { IssueConfig, LoadedPrompts, ParsedArgs, PromptConfig, WorkflowConfig } from "../types.js"
+import { render } from "../lib/utils.js"
 
 const TEST_DRIVEN_DEVELOPMENT_SKILL_PATH =
   "~/.agents/skills/test-driven-development/SKILL.md"
@@ -19,8 +19,7 @@ const DEFAULT_IMPLEMENT_SKILLS = [
   TEST_DRIVEN_DEVELOPMENT_SKILL_PATH,
 ]
 
-// 本项目根目录，用于默认 prompt 模板的基准路径，不受 process.cwd() 影响
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
 const DEFAULT_IMPLEMENT_PROMPT = path.join(PROJECT_ROOT, "prompts/implement.md")
 const DEFAULT_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/review.md")
@@ -54,7 +53,6 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
 
   if (!projectDir) throw new Error("[Config] projectDir is required (workflow config or --projectDir)")
 
-  // 验证 issues（仅 issue 模式）
   if (!fileConfig.issues || fileConfig.issues.length === 0) {
     throw new Error("[Config] issues is required (non-empty array)")
   }
@@ -63,18 +61,15 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     if (!issue.specPath) throw new Error(`[Config] issues[${index}].specPath is required`)
   })
 
-  // 尽早校验 spec 文件存在性，避免执行到一半才报错
   for (let i = 0; i < fileConfig.issues.length; i += 1) {
     try { await fsAccess(fileConfig.issues[i].specPath) } catch {
       throw new Error(`[Config] Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
     }
   }
 
-  // CLI 参数覆盖 updateCommand
   const implementerUpdate = args["implementer-update"]
   const reviewerUpdate = args["reviewer-update"]
 
-  // 缺少 prompts 字段时使用项目中默认的 prompt 路径
   const prompts: PromptConfig = {
     implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
     reReview: fileConfig.prompts?.reReview ?? DEFAULT_RE_REVIEW_PROMPT,

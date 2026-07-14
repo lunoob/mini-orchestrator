@@ -3,8 +3,8 @@ import { stdin as input, stdout as output } from "node:process"
 
 import type { NeedsCheckCheckpointInput } from "./checkpoint.js"
 import { writeNeedsCheckCheckpoint } from "./checkpoint.js"
-import type { ParsedArgs } from "./types.js"
-import type { ReviewVerdict } from "./utils.js"
+import type { ParsedArgs } from "../types.js"
+import type { ReviewVerdict } from "../lib/utils.js"
 
 export type NeedsCheckAction = "approve" | "revise" | "retry-review" | "abort"
 

@@ -1,6 +1,6 @@
 import path from "node:path"
 
-import type { ParsedArgs } from "./types.js"
+import type { ParsedArgs } from "../types.js"
 
 export const wantsHelp = (argv: string[]) => argv.includes("--help") || argv.includes("-h")
 

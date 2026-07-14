@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import os from "node:os"
 
-import { installSkill, SKILL_NAME, uninstallSkill } from "../src/install-skill.js"
+import { installSkill, SKILL_NAME, uninstallSkill } from "../src/skills/install-skill.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SOURCE_DIR = path.resolve(__dirname, "../skills", SKILL_NAME)

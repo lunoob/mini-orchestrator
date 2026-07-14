@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import type { IssueConfig } from "./types.js"
+import type { IssueConfig } from "../types.js"
 
 export const CHECKPOINT_VERSION = 2
 

@@ -3,16 +3,16 @@ import path from "node:path"
 import os from "node:os"
 import { describe, expect, it } from "vitest"
 
-import { loadPrompts } from "./config.js"
+import { loadPrompts } from "./load.js"
 import {
   IMPLEMENT_RESULT_END,
   IMPLEMENT_RESULT_START,
   REVIEW_RESULT_END,
   REVIEW_RESULT_START,
-} from "./prompt-delimiters.js"
-import type { WorkflowConfig } from "./types.js"
+} from "../lib/prompt-delimiters.js"
+import type { WorkflowConfig } from "../types.js"
 
-const PROJECT_ROOT = path.resolve(import.meta.dirname, "..")
+const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..")
 
 const buildMinimalConfig = (dir: string, overrides: Record<string, string> = {}): WorkflowConfig => ({
   implementer: { name: "impl", command: "codex" },
