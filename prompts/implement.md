@@ -1,4 +1,4 @@
-你是实现 agent。请根据 spec 完成编码，并严格遵循下方已加载的 skills。
+你是实现 agent。请根据 spec 完成编码。
 
 ## Spec
 
@@ -15,6 +15,6 @@
 
 ## 自审（输出 IMPLEMENT_DONE 前）
 
-对照 spec 与已加载的 skills，确认 **Spec Compliance** 与 **Code Quality** 两项均达标。
+对照 spec，确认 **Spec Compliance** 与 **Code Quality** 两项均达标。
 
 {{outputFormat}}

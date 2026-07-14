@@ -22,11 +22,6 @@ export type PromptConfig = {
   revise: string
 }
 
-export type SkillsConfig = {
-  implement?: string[]
-  revise?: string[]
-}
-
 export type IssueConfig = {
   title: string
   specPath: string
@@ -38,7 +33,6 @@ export type WorkflowConfig = {
   projectDir: string
   prompts: PromptConfig
   reviewer: AgentConfig
-  skills?: SkillsConfig
   issues: IssueConfig[]
 }
 

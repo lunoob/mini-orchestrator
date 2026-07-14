@@ -1,7 +1,7 @@
 import path from "node:path"
 
 import { readNeedsCheckCheckpoint } from "../review/checkpoint.js"
-import { loadConfig, loadImplementSkills, loadPrompts } from "../config/load.js"
+import { loadConfig, loadPrompts } from "../config/load.js"
 import { parseNeedsCheckAction, parseNeedsCheckMode } from "../review/needs-check.js"
 import { stopAgent } from "../agent/index.js"
 import type { ParsedArgs } from "../types.js"
@@ -25,7 +25,6 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
   const config = await loadConfig(configPath, args)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
-  const implementSkills = await loadImplementSkills(config, configDir)
 
   const currentIndex = checkpoint.currentIssueIndex
 

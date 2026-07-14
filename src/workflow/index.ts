@@ -1,6 +1,6 @@
 import path from "node:path"
 
-import { loadConfig, loadImplementSkills, loadPrompts } from "../config/load.js"
+import { loadConfig, loadPrompts } from "../config/load.js"
 import { getReviewBaselineSha, isGitRepo } from "../git/index.js"
 import { parseNeedsCheckMode } from "../review/needs-check.js"
 import type { ParsedArgs } from "../types.js"
@@ -19,7 +19,6 @@ export const runWorkflow = async (args: ParsedArgs) => {
   const config = await loadConfig(configPath, args)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
-  const implementSkills = await loadImplementSkills(config, configDir)
   const needsCheckMode = parseNeedsCheckMode(args)
 
   const hasGit = await isGitRepo(config.projectDir)
@@ -48,5 +47,5 @@ export const runWorkflow = async (args: ParsedArgs) => {
     reviewerPane: "",
   }
 
-  await runIssueQueue(runtime, configPath, implementSkills)
+  await runIssueQueue(runtime, configPath)
 }

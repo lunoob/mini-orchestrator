@@ -8,7 +8,6 @@ import {
   stopAgent,
   waitForAgentReady,
 } from "../agent/index.js"
-import { loadImplementSkills } from "../config/load.js"
 import { createSession } from "../agent/session.js"
 import type { IssueConfig } from "../types.js"
 import { printSection, render } from "../lib/utils.js"
@@ -22,7 +21,6 @@ const runSingleSpecCycle = async (
   configPath: string,
   specPath: string,
   sessionDir: string,
-  implementSkills: string,
   issueIndex: number,
   issues: IssueConfig[],
   startRound?: number,
@@ -47,7 +45,6 @@ const runSingleSpecCycle = async (
   const { output: implementOutput, task: implementTask } = await sendTaskWithTaskFile(
     runtime.implementerPane,
     render(runtime.prompts.implement, {
-      implementSkills,
       maxReviewRounds: String(runtime.config.maxReviewRounds),
       specPath,
     }),
@@ -76,12 +73,7 @@ export const runIssueQueueFromIndex = async (
   configPath: string,
   startIndex: number,
   issues: IssueConfig[],
-  implementSkills?: string,
 ) => {
-  if (!implementSkills) {
-    implementSkills = await loadImplementSkills(runtime.config, path.dirname(configPath))
-  }
-
   for (let index = startIndex; index < issues.length; index += 1) {
     const issue = issues[index]
     console.log(`\n[Issue] === Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
@@ -108,7 +100,7 @@ export const runIssueQueueFromIndex = async (
       startedReviewer = true
       await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
 
-      await runSingleSpecCycle(runtime, configPath, issue.specPath, "", implementSkills, index, issues)
+      await runSingleSpecCycle(runtime, configPath, issue.specPath, "", index, issues)
 
       await advanceBaseline(runtime)
     } finally {
@@ -118,13 +110,9 @@ export const runIssueQueueFromIndex = async (
   }
 }
 
-export const runIssueQueue = async (
-  runtime: WorkflowRuntime,
-  configPath: string,
-  implementSkills: string,
-) => {
+export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
   await runAgentUpdate(runtime.config.projectDir, runtime.config.implementer)
   await runAgentUpdate(runtime.config.projectDir, runtime.config.reviewer)
 
-  await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues, implementSkills)
+  await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

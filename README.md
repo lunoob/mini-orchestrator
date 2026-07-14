@@ -2,7 +2,7 @@
 
 在 Herdr pane 内运行的最小 TypeScript 编排脚本，串起 implementer 与 reviewer agent：
 
-1. implementer 读 spec，按 skills 规划进度并 TDD 编码
+1. implementer 读 spec 并完成编码
 2. 编排器生成 **review package**（git diff 文件），交给 reviewer
 3. reviewer 审查后输出状态信号（`REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK`）
 4. review 失败时回到 implementer，按 review 反馈修复
@@ -19,7 +19,7 @@ mini-orchestrator/
 ├── src/
 │   ├── checkpoint.ts      # needs_check checkpoint 读写
 │   ├── cli.ts             # 参数解析与 --help
-│   ├── config.ts          # 配置、prompt、skill 加载
+│   ├── config.ts          # 配置与 prompt 加载
 │   ├── git.ts             # git 基线与命令封装
 │   ├── herdr.ts           # herdr CLI 封装（agent start/send/read）
 │   ├── install-skill.ts   # skill 安装/卸载核心逻辑
@@ -41,10 +41,8 @@ mini-orchestrator/
 ├── scripts/
 │   └── install-skill.ts   # skill 安装 CLI 入口
 ├── skills/
-│   ├── issue-config/
-│   │   └── SKILL.md               # 生成 issue 配置草案
-│   └── test-driven-development/
-│       └── DEPENDENCY.md           # 外部 skill 引用说明（不含正文）
+│   └── run-issue/
+│       └── SKILL.md               # 生成 issue 配置草案
 ├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
 ├── workflow.example.json
 ├── workflow.issue.example.json
@@ -181,20 +179,6 @@ start-orchestrator \
 
 `REVIEW_NEEDS_CHECK` 时，静态检查在暂停询问用户**之前**执行，避免把类型或 lint 问题留给人工核查。
 
-## Skill 依赖
-
-| 阶段 | Skill | 路径 | 说明 |
-|------|-------|------|------|
-| implement | test-driven-development | `~/.agents/skills/test-driven-development/SKILL.md` | 外部依赖，TDD 铁律 |
-
-`skills.implement` 与 `skills.revise` 均可在 `workflow.json` 中覆盖。加载时会自动剥离 skill 文件的 YAML frontmatter。
-
-### test-driven-development（外部依赖）
-
-编排器**不会**把该 skill 复制进本仓库，而是从 `~/.agents/skills/test-driven-development/SKILL.md` 读取并注入 implement prompt。辅助文档 `testing-anti-patterns.md` 与 SKILL 同目录，由 implementer 在 SKILL 正文指引下按需阅读。
-
-安装：将 [self-skills](https://github.com/lunoob/self-skills) 仓库克隆或同步到 `~/.agents/skills`。
-
 ## 运行方式
 
 先复制示例配置并修改其中的 `projectDir`、`issues[].specPath`、`implementer.command`、`reviewer.command`：
@@ -285,14 +269,11 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 `implementer.updateCommand` / `reviewer.updateCommand`（可选）：启动 agent 前先执行一次的命令。用于 agent 需要先 update 再启动的场景（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败。仅 workflow 首次启动 agent 前执行一次；不会为每个 issue 重复执行。
 
-`skills.*` 支持相对路径（相对配置文件目录）、绝对路径，以及以 `~/` 开头的用户目录路径。
-
 ## Prompt 模板变量
 
 - `implement.md`
   - `{{specPath}}`
   - `{{maxReviewRounds}}`
-  - `{{implementSkills}}`
 - `review.md`
   - `{{round}}`
   - `{{specPath}}`
@@ -301,12 +282,10 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 - `revise.md`
   - `{{round}}`
   - `{{reviewOutput}}`
-  - `{{reviseSkills}}`
 - `controller-implementer.md`
   - `{{round}}`
   - `{{controllerNotes}}`
   - `{{reviewOutput}}`
-  - `{{reviseSkills}}`
 - `controller-re-review.md`
   - `{{round}}`
   - `{{specPath}}`
@@ -320,7 +299,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 ## Skill 安装
 
-仓库内 `skills/issue-config/` 提供了手动调用的技能。通过安装脚本可将 skill 部署到 `~/.agents/skills/`，注册为 `/issue-config` 斜杠命令。
+仓库内 `skills/run-issue/` 提供了手动调用的技能。通过安装脚本可将 skill 部署到 `~/.agents/skills/`，注册为斜杠命令。
 
 ### 安装命令
 
