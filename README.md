@@ -21,15 +21,16 @@ mini-orchestrator/
 │   ├── cli.ts             # 参数解析与 --help
 │   ├── config.ts          # 配置、prompt、skill 加载
 │   ├── git.ts             # git 基线与命令封装
-│   ├── herdr.ts           # herdr CLI 封装（agent start/send/wait）
+│   ├── herdr.ts           # herdr CLI 封装（agent start/send/read）
 │   ├── install-skill.ts   # skill 安装/卸载核心逻辑
-│   ├── main.ts            # 入口：环境检查、错误码
+│   ├── main.ts            # 入口：report-task 子命令分派、工作流启动
 │   ├── needs-check.ts     # REVIEW_NEEDS_CHECK 交互与 LLM 暂停
 │   ├── review-package.ts  # 生成 diff 审查包
 │   ├── session.ts         # 工作流 session 管理
+│   ├── task-status.ts     # 任务状态文件：创建、原子读写、状态转换、等待
 │   ├── types.ts
 │   ├── utils.ts           # verdict 解析、模板渲染
-│   └── workflow.ts        # 主工作流编排（issue 队列）
+│   └── workflow.ts        # 主工作流编排（issue 队列，文件状态驱动）
 ├── prompts/
 │   ├── implement.md
 │   ├── review.md
@@ -53,10 +54,30 @@ mini-orchestrator/
 
 运行时会在 `projectDir/.orchestrator/` 下生成：
 
-| 文件 | 时机 |
-|------|------|
+| 文件/目录 | 时机 |
+|-----------|------|
 | `review-round-{n}-{timestamp}.md` | 每轮 review 前 |
 | `needs-check-round-{n}-{timestamp}.json` | LLM 模式下 REVIEW_NEEDS_CHECK 暂停时 |
+| `<sessionId>/tasks/<runId>.json` | agent 每次派发任务时创建，记录任务状态 |
+
+### 任务状态文件协议
+
+编排器通过持久化的任务状态文件驱动流程推进，**不再依赖 Herdr pane 的 agent_status (working/idle)**。
+
+每个派发给 agent 的任务都附带一个唯一的 `runId` 和状态文件路径，agent 必须在工作开始前回报 `started`，完成后回报 `completed` 与最终状态：
+
+```bash
+# agent 在 prompt 中收到协议后执行（由编排器通过 buildTaskProtocol 注入）：
+mini-orchestrator report-task --task "<绝对路径>" --state started
+mini-orchestrator report-task --task "<绝对路径>" --state completed --status IMPLEMENT_DONE
+```
+
+状态文件包含 `runId`、`role`、`state`、`status`、`createdAt`、`updatedAt`，**不含** agent 的完整输出正文。编排器通过 `fs.watch` + 定时轮询监听状态目录，agent 完成时从 pane output 读取结果正文。
+
+关键行为：
+- agent completed 后编排器固定等待 **5 秒**再读取 pane output，确保终端同步
+- output 为空时最多重试 **3 次**（间隔 1.5 秒），不重新派发任务
+- 流程分支以**状态文件的 status 为准**，不再解析 output 中的 `STATUS:` 行作为控制流依据
 
 ## Issue 队列
 
@@ -258,7 +279,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 `prompts.outputFormatImplement` / `prompts.outputFormatReview`（可选）：自定义 implement / review 类 prompt 的输出格式 partial。省略时使用 `prompts/partials/implement-output.md` 与 `prompts/partials/review-output.md`。partial 中可用 `{{delimiterStart}}`、`{{delimiterEnd}}` 占位符，加载时由编排器注入与解析逻辑一致的标记（见 `src/prompt-delimiters.ts`）。
 
-`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。发送后编排器会等待 `working → idle` 确认任务被接收并完成；若未进入 `working` 会重试一次发送。
+`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过任务状态文件（而非 pane 状态轮询）判定完成。
 
 常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
 
@@ -334,9 +355,9 @@ pnpm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 通过 `STATUS: REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` 判断流程；不解析 implementer 的 `STATUS: IMPLEMENT_DONE` 内容，以 `herdr agent wait --status working` 确认任务被接收、再以 `idle` 判断任务结束。
+- 流程推进由**任务状态文件**驱动（`pending → started → completed`），不再依赖 Herdr pane 的 `agent_status`（`working`/`idle`）。Pane 状态查询仅保留为可选日志诊断。
+- 任务完成超时为 30 分钟（`waitForTaskCompleted` 默认超时），超时信息包含当前状态与任务路径。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
 - Issue 队列为串行执行；并行调度不在此版本范围内。
-- agent 空闲等待超时为 30 分钟（`herdr agent wait --timeout 1800000`）。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。

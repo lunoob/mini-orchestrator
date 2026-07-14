@@ -282,3 +282,35 @@ export const readAgentOutput = async (paneId: string, lines: number) =>
     "--lines",
     String(lines),
   ])
+
+/**
+ * 读取 agent 输出，若未通过 `isValid` 校验则重试。
+ * 用于 task completed 后 5 秒首次读取时输出尚未同步的有限重试，
+ * 不重新派发任务。
+ *
+ * @param isValid — 输出内容合法判定：应校验结果分隔符与正文非空
+ * @param readFn  — 可注入的读取函数（默认 readAgentOutput），便于测试
+ */
+export const readAgentOutputWithRetry = async (
+  paneId: string,
+  lines: number,
+  isValid: (output: string) => boolean,
+  maxRetries = 3,
+  retryIntervalMs = 1500,
+  readFn: (paneId: string, lines: number) => Promise<string> = readAgentOutput,
+): Promise<string> => {
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    const output = await readFn(paneId, lines)
+    if (isValid(output)) return output
+
+    if (attempt < maxRetries - 1) {
+      console.log(`[Agent] Output not synced on attempt ${attempt + 1}/${maxRetries} for pane ${paneId}, retrying in ${retryIntervalMs}ms...`)
+      await new Promise(resolve => setTimeout(resolve, retryIntervalMs))
+    }
+  }
+
+  throw new Error(
+    `[Agent] Task completed but output not synced after ${maxRetries} retries for pane ${paneId}. ` +
+    "Output may not have synced to terminal.",
+  )
+}

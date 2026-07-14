@@ -84,6 +84,28 @@ export type PaneCurrentResult = {
   }
 }
 
+export type TaskRole = "implementer" | "reviewer"
+
+export type TaskState = "pending" | "started" | "completed"
+
+/** implementer 可回报的状态 */
+export type ImplementerStatus = "IMPLEMENT_DONE" | "IMPLEMENT_ASK"
+
+/** reviewer 可回报的状态 */
+export type ReviewerStatus = "REVIEW_PASS" | "REVIEW_FAIL" | "REVIEW_NEEDS_CHECK"
+
+export type TaskStatus = ImplementerStatus | ReviewerStatus
+
+export type TaskFile = {
+  runId: string
+  role: TaskRole
+  state: TaskState
+  /** completed 时必须带 status */
+  status?: TaskStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export type ParsedArgs = Record<string, string>
 
 export type LoadedPrompts = {
