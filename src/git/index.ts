@@ -31,12 +31,6 @@ export const getHeadShaSafe = async (projectDir: string) => {
   return code === 0 ? stdout : undefined
 }
 
-export const getHeadSha = async (projectDir: string) => {
-  const head = await getHeadShaSafe(projectDir)
-  if (!head) throw new Error(`[Git] git rev-parse HEAD failed in ${projectDir} (no commits yet?)`)
-  return head
-}
-
 /** 工作流启动时的 review 基线；非 git 或尚无 commit 时返回 undefined。 */
 export const getReviewBaselineSha = async (projectDir: string) => {
   if (!(await isGitRepo(projectDir))) return undefined

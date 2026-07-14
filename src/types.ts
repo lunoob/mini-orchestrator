@@ -70,14 +70,6 @@ export type AgentStartResult = {
   }
 }
 
-export type PaneCurrentResult = {
-  id: string
-  result: {
-    pane: HerdrPaneInfo
-    type: "pane_current"
-  }
-}
-
 export type TaskRole = "implementer" | "reviewer"
 
 export type TaskState = "pending" | "started" | "completed"

@@ -60,12 +60,6 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
   return args
 }
 
-export const isFlagEnabled = (args: ParsedArgs, key: string) => {
-  const value = args[key]
-  if (value === undefined) return false
-  return value !== "false"
-}
-
 export const getConfigPath = (args: ParsedArgs) => {
   const configPath = args.config
   if (configPath) return path.resolve(configPath)

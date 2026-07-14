@@ -14,22 +14,16 @@ import { printSection, render } from "../lib/utils.js"
 import { buildRunId, sendTaskWithTaskFile } from "./dispatch.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
-import type { ReviewLoopOptions, WorkflowRuntime } from "./types.js"
+import type { WorkflowRuntime } from "./types.js"
 
 const runSingleSpecCycle = async (
   runtime: WorkflowRuntime,
   configPath: string,
   specPath: string,
-  sessionDir: string,
   issueIndex: number,
   issues: IssueConfig[],
-  startRound?: number,
-  controllerReviewNotes?: string,
-  lastReviewOutput?: string,
 ) => {
-  const round = startRound ?? 1
-  const initialOptions: ReviewLoopOptions | undefined =
-    controllerReviewNotes && lastReviewOutput ? { controllerReviewNotes, lastReviewOutput } : undefined
+  const round = 1
 
   const specContent = await readFile(specPath, "utf8")
   const configContent = await readFile(configPath, "utf8")
@@ -65,7 +59,7 @@ const runSingleSpecCycle = async (
     )
   }
 
-  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues, tasksDir, initialOptions)
+  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues, tasksDir)
 }
 
 export const runIssueQueueFromIndex = async (
@@ -100,7 +94,7 @@ export const runIssueQueueFromIndex = async (
       startedReviewer = true
       await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
 
-      await runSingleSpecCycle(runtime, configPath, issue.specPath, "", index, issues)
+      await runSingleSpecCycle(runtime, configPath, issue.specPath, index, issues)
 
       await advanceBaseline(runtime)
     } finally {

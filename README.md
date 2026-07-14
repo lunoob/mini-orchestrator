@@ -334,7 +334,7 @@ pnpm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 流程推进由**任务状态文件**驱动（`pending → started → completed`），不再依赖 Herdr pane 的 `agent_status`（`working`/`idle`）。Pane 状态查询仅保留为可选日志诊断。
+- 流程推进由**任务状态文件**驱动（`pending → started → completed`），不再依赖 Herdr pane 的 `agent_status`（`working`/`idle`）。agent 启动时仍会等待 pane 进入 `idle`（及可选的 output pattern）。
 - 任务完成超时为 30 分钟（`waitForTaskCompleted` 默认超时），超时信息包含当前状态与任务路径。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。

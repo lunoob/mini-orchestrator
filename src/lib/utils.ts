@@ -1,17 +1,7 @@
 import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
   REVIEW_RESULT_END,
   REVIEW_RESULT_START,
 } from "./prompt-delimiters.js"
-
-export type ImplementStatus = "done" | "needs_input" | "unknown"
-
-export const parseImplementStatus = (output: string): ImplementStatus => {
-  if (hasStatus(output, "IMPLEMENT_DONE")) return "done"
-  if (hasStatus(output, "IMPLEMENT_ASK")) return "needs_input"
-  return "unknown"
-}
 
 export const assertHerdrEnv = () => {
   if (process.env.HERDR_ENV === "1") return
@@ -75,17 +65,6 @@ export const extractReviewResult = (output: string): string => {
 
   const afterStart = startIdx + REVIEW_RESULT_START.length
   const endIdx = output.lastIndexOf(REVIEW_RESULT_END)
-  if (endIdx <= afterStart) return output
-
-  return output.slice(afterStart, endIdx).trim() || output
-}
-
-export const extractImplementResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(IMPLEMENT_RESULT_START)
-  if (startIdx === -1) return output
-
-  const afterStart = startIdx + IMPLEMENT_RESULT_START.length
-  const endIdx = output.lastIndexOf(IMPLEMENT_RESULT_END)
   if (endIdx <= afterStart) return output
 
   return output.slice(afterStart, endIdx).trim() || output

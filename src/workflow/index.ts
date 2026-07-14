@@ -8,8 +8,6 @@ import { runIssueQueue } from "./issues.js"
 import { runWorkflowResume } from "./resume.js"
 import type { WorkflowRuntime } from "./types.js"
 
-export { buildRunId, mapTaskToReviewVerdict, waitForOutputAfterCompletion } from "./dispatch.js"
-
 export const runWorkflow = async (args: ParsedArgs) => {
   if (args["resume-from"]) {
     return runWorkflowResume(args)
