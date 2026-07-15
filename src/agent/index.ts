@@ -211,7 +211,7 @@ export const runAgentIntegration = async (agent: AgentConfig): Promise<boolean> 
     `[Agent] Running herdr integration for "${agent.name}": herdr integration ${agent.integrationAgent}`,
   )
 
-  const { code } = await tryRunHerdr(["integration", agent.integrationAgent])
+  const { code } = await tryRunHerdr(["integration", "install", agent.integrationAgent])
   if (code !== 0) {
     console.warn(
       `[Agent] Integration for "${agent.name}" failed (exit code ${code}), continuing anyway.`,
