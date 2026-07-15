@@ -198,7 +198,7 @@ start-orchestrator \
 
 ## 运行方式
 
-先复制示例配置并修改其中的 `projectDir`、`issues[].specPath`、`implementer.command`、`reviewer.command`：
+先复制示例配置并修改其中的 `projectDir`、`issues[].specPath`、`implementer.agent` / `model`、`reviewer.agent` / `model`：
 
 ```bash
 cp workflow.issue.example.json workflow.local.json
@@ -259,14 +259,13 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   "maxReviewRounds": 4,
   "implementer": {
     "name": "implementer",
-    "command": "cursor --model composer",
-    "agentReadyPattern": "Cursor Agent"
+    "agent": "cursor",
+    "model": "composer"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.5",
-    "agentReadyPattern": "codex",
-    "updateCommand": "codex update"
+    "agent": "codex",
+    "model": "gpt-5.5"
   },
   "prompts": {
     "implement": "./prompts/implement.md",
@@ -280,11 +279,17 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 `prompts.outputFormatImplement` / `prompts.outputFormatReview`（可选）：自定义 implement / review 类 prompt 的输出格式 partial。省略时使用 `prompts/partials/implement-output.md` 与 `prompts/partials/review-output.md`。partial 中可用 `{{delimiterStart}}`、`{{delimiterEnd}}` 占位符，加载时由编排器注入与解析逻辑一致的标记（见 `src/prompt-delimiters.ts`）。
 
-`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --status idle` 判定完成，并从 output 解析 `STATUS:`。
+`implementer` / `reviewer` 各需 `name`、`agent`、`model`。编排器根据 `agent` 自动推导启动命令、`agentReadyPattern` 与 `updateCommand`（见 `src/config/agents.ts`）：
 
-常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
+| agent | command | agentReadyPattern | updateCommand |
+|-------|---------|-------------------|---------------|
+| `cursor` | `cursor-agent --model <model>` | `Cursor Agent` | `cursor-agent update` |
+| `codex` | `codex --model <model>` | `Codex` | `codex update` |
+| `claude` | `claude --model <model>` | `Claude` | `claude update` |
 
-`implementer.updateCommand` / `reviewer.updateCommand`（可选）：启动 agent 前先执行一次的命令。用于 agent 需要先 update 再启动的场景（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败。仅 workflow 首次启动 agent 前执行一次；不会为每个 issue 重复执行。
+`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，还会用 `herdr wait output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --status idle` 判定完成，并从 output 解析 `STATUS:`。
+
+支持 update 的 agent 会在 workflow 首次启动前执行一次 `updateCommand`（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败；不会为每个 issue 重复执行。
 
 ## Prompt 模板变量
 

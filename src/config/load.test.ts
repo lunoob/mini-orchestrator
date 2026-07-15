@@ -8,8 +8,8 @@ import { loadConfig } from "./load.js"
 
 const MINIMAL_CONFIG_BASE = {
   maxReviewRounds: 8,
-  implementer: { name: "impl", command: "codex" },
-  reviewer: { name: "rev", command: "codex" },
+  implementer: { name: "impl", agent: "codex", model: "gpt-5.5" },
+  reviewer: { name: "rev", agent: "codex", model: "gpt-5.5" },
   prompts: {
     implement: "./prompts/implement.md",
     review: "./prompts/review.md",
@@ -95,6 +95,28 @@ describe("loadConfig", () => {
     expect(config.issues[0].specPath).toBe(spec1)
     expect(config.issues[1].title).toBe("Issue Two")
     expect(config.issues[1].specPath).toBe(spec2)
+  })
+
+  it("resolves agent config from agent and model", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    await mkdir(dir, { recursive: true })
+    const spec = createSpec(dir, "spec.md")
+    const configPath = writeTempConfig(dir, {
+      ...MINIMAL_CONFIG_BASE,
+      projectDir: dir,
+      implementer: { name: "implementer", agent: "cursor", model: "composer" },
+      reviewer: { name: "reviewer", agent: "codex", model: "gpt-5.6-terra" },
+      issues: [{ title: "Issue", specPath: spec }],
+    })
+
+    const config = await loadConfig(configPath, {})
+
+    expect(config.implementer.command).toBe("cursor-agent --model composer")
+    expect(config.implementer.agentReadyPattern).toBe("Cursor Agent")
+    expect(config.implementer.updateCommand).toBe("cursor-agent update")
+    expect(config.reviewer.command).toBe("codex --model gpt-5.6-terra")
+    expect(config.reviewer.agentReadyPattern).toBe("Codex")
+    expect(config.reviewer.updateCommand).toBe("codex update")
   })
 
   it("throws if issue spec file does not exist", async () => {

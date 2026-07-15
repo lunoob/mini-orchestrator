@@ -1,8 +1,15 @@
-export type AgentConfig = {
+/** workflow 配置文件中 implementer / reviewer 的输入字段 */
+export type AgentInputConfig = {
+  agent: string
+  model?: string
+  name: string
+}
+
+/** 由 agent + model 解析后的运行时 agent 配置 */
+export type AgentConfig = AgentInputConfig & {
   /** herdr wait output --match：等待启动输出中出现该文本后再发送首条 prompt */
   agentReadyPattern?: string
   command: string
-  name: string
   /** 启动 agent 前先执行的 update 命令（如 "codex update"），
    *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */
   updateCommand?: string

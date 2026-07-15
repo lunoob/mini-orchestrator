@@ -17,8 +17,6 @@ Options:
   --config <path>           workflow 配置文件路径（首次启动必填；resume 时可省略）
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
-  --implementer-update <cmd> 覆盖 implementer 的 updateCommand（如 "cursor update"）
-  --reviewer-update <cmd>    覆盖 reviewer 的 updateCommand（如 "codex update"）
   --needs-check-mode <mode> needs_check 交互模式：interactive（默认）| llm
   --resume-from <path>      从 needs_check checkpoint 恢复工作流
   --needs-check-action <a>  恢复时的选择：approve | revise | retry-review | abort

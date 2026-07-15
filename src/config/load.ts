@@ -8,8 +8,16 @@ import {
   REVIEW_RESULT_END,
   REVIEW_RESULT_START,
 } from "../lib/prompt-delimiters.js"
-import type { IssueConfig, LoadedPrompts, ParsedArgs, PromptConfig, WorkflowConfig } from "../types.js"
+import type {
+  AgentInputConfig,
+  IssueConfig,
+  LoadedPrompts,
+  ParsedArgs,
+  PromptConfig,
+  WorkflowConfig,
+} from "../types.js"
 import { render } from "../lib/utils.js"
+import { resolveAgentConfig } from "./agents.js"
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
@@ -59,9 +67,6 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     }
   }
 
-  const implementerUpdate = args["implementer-update"]
-  const reviewerUpdate = args["reviewer-update"]
-
   const prompts: PromptConfig = {
     implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
     reReview: fileConfig.prompts?.reReview ?? DEFAULT_RE_REVIEW_PROMPT,
@@ -82,19 +87,19 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   if (!fileConfig.implementer) throw new Error("[Config] workflow config is missing implementer")
   if (!fileConfig.reviewer) throw new Error("[Config] workflow config is missing reviewer")
 
+  const resolveAgentInput = (input: AgentInputConfig, role: string) => {
+    if (!input.agent) throw new Error(`[Config] ${role}.agent is required`)
+    if (!input.name) throw new Error(`[Config] ${role}.name is required`)
+    return resolveAgentConfig(input)
+  }
+
   return {
     ...fileConfig,
-    implementer: {
-      ...fileConfig.implementer,
-      updateCommand: implementerUpdate ?? fileConfig.implementer.updateCommand,
-    },
+    implementer: resolveAgentInput(fileConfig.implementer, "implementer"),
     maxReviewRounds,
     projectDir,
     prompts,
-    reviewer: {
-      ...fileConfig.reviewer,
-      updateCommand: reviewerUpdate ?? fileConfig.reviewer.updateCommand,
-    },
+    reviewer: resolveAgentInput(fileConfig.reviewer, "reviewer"),
     issues: fileConfig.issues,
   } as WorkflowConfig
 }

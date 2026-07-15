@@ -35,15 +35,13 @@ disable-model-invocation: true
   "maxReviewRounds": 8,
   "implementer": {
     "name": "implementer",
-    "command": "claude --model default",
-    "agentReadyPattern": "Claude",
-    "updateCommand": "claude update"
+    "agent": "claude",
+    "model": "default"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.6-terra",
-    "agentReadyPattern": "Codex",
-    "updateCommand": "codex update"
+    "agent": "codex",
+    "model": "gpt-5.6-terra"
   }
 }
 ```
@@ -127,12 +125,13 @@ zsh -ic 'start-orchestrator \
   "maxReviewRounds": 8,
   "implementer": {
     "name": "implementer",
-    "command": "claude --model haiku"
+    "agent": "claude",
+    "model": "haiku"
   },
   "reviewer": {
     "name": "reviewer",
-    "command": "codex --model gpt-5.4",
-    "updateCommand": "codex update"
+    "agent": "codex",
+    "model": "gpt-5.4"
   }
 }
 ```
