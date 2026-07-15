@@ -113,9 +113,11 @@ describe("loadConfig", () => {
 
     expect(config.implementer.command).toBe("cursor-agent --model composer")
     expect(config.implementer.agentReadyPattern).toBe("Cursor Agent")
+    expect(config.implementer.integrationAgent).toBe("cursor")
     expect(config.implementer.updateCommand).toBe("cursor-agent update")
     expect(config.reviewer.command).toBe("codex --model gpt-5.6-terra")
     expect(config.reviewer.agentReadyPattern).toBe("Codex")
+    expect(config.reviewer.integrationAgent).toBe("codex")
     expect(config.reviewer.updateCommand).toBe("codex update")
   })
 

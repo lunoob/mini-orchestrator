@@ -279,17 +279,17 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 `prompts.outputFormatImplement` / `prompts.outputFormatReview`（可选）：自定义 implement / review 类 prompt 的输出格式 partial。省略时使用 `prompts/partials/implement-output.md` 与 `prompts/partials/review-output.md`。partial 中可用 `{{delimiterStart}}`、`{{delimiterEnd}}` 占位符，加载时由编排器注入与解析逻辑一致的标记（见 `src/prompt-delimiters.ts`）。
 
-`implementer` / `reviewer` 各需 `name`、`agent`、`model`。编排器根据 `agent` 自动推导启动命令、`agentReadyPattern` 与 `updateCommand`（见 `src/config/agents.ts`）：
+`implementer` / `reviewer` 各需 `name`、`agent`、`model`。编排器根据 `agent` 自动推导启动命令、`agentReadyPattern`、`updateCommand` 与 `herdr integration` 参数（见 `src/config/agents.ts`）：
 
-| agent | command | agentReadyPattern | updateCommand |
-|-------|---------|-------------------|---------------|
-| `cursor` | `cursor-agent --model <model>` | `Cursor Agent` | `cursor-agent update` |
-| `codex` | `codex --model <model>` | `Codex` | `codex update` |
-| `claude` | `claude --model <model>` | `Claude` | `claude update` |
+| agent | command | agentReadyPattern | updateCommand | herdr integration |
+|-------|---------|-------------------|---------------|-------------------|
+| `cursor` | `cursor-agent --model <model>` | `Cursor Agent` | `cursor-agent update` | `herdr integration cursor` |
+| `codex` | `codex --model <model>` | `Codex` | `codex update` | `herdr integration codex` |
+| `claude` | `claude --model <model>` | `Claude` | `claude update` | `herdr integration claude` |
 
 `agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，还会用 `herdr wait output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --status idle` 判定完成，并从 output 解析 `STATUS:`。
 
-支持 update 的 agent 会在 workflow 首次启动前执行一次 `updateCommand`（如 `codex update`），避免 update 完成后 pane 关闭导致后续流程失败；不会为每个 issue 重复执行。
+支持 update 的 agent 会在 workflow 首次启动前并行执行 `updateCommand`（如 `codex update`）与 `herdr integration <agent>`（如 `herdr integration cursor`），避免 update 完成后 pane 关闭导致后续流程失败；不会为每个 issue 重复执行。
 
 ## Prompt 模板变量
 

@@ -13,6 +13,8 @@ export type AgentConfig = AgentInputConfig & {
   /** 启动 agent 前先执行的 update 命令（如 "codex update"），
    *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */
   updateCommand?: string
+  /** herdr integration 子命令参数，如 cursor → `herdr integration cursor` */
+  integrationAgent: string
 }
 
 export type PromptConfig = {

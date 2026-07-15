@@ -15,8 +15,8 @@ import type { WorkflowConfig } from "../types.js"
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..")
 
 const buildMinimalConfig = (dir: string, overrides: Record<string, string> = {}): WorkflowConfig => ({
-  implementer: { name: "impl", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5" },
-  reviewer: { name: "rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5" },
+  implementer: { name: "impl", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
+  reviewer: { name: "rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
   maxReviewRounds: 8,
   projectDir: dir,
   issues: [{ title: "Test", specPath: path.join(dir, "spec.md") }],

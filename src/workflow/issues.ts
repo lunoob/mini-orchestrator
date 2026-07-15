@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 
 import {
   agentWaitOptions,
+  runAgentIntegration,
   runAgentUpdate,
   sendTaskAndWait,
   startAgent,
@@ -99,8 +100,14 @@ export const runIssueQueueFromIndex = async (
 }
 
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
-  await runAgentUpdate(runtime.config.projectDir, runtime.config.implementer)
-  await runAgentUpdate(runtime.config.projectDir, runtime.config.reviewer)
+  const { implementer, reviewer, projectDir } = runtime.config
+
+  await Promise.all([
+    runAgentUpdate(projectDir, implementer),
+    runAgentUpdate(projectDir, reviewer),
+    runAgentIntegration(implementer),
+    runAgentIntegration(reviewer),
+  ])
 
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }
