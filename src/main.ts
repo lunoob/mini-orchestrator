@@ -2,16 +2,10 @@ import { NeedsCheckPauseError } from "./review/needs-check.js"
 import { notifyError, notifyNeedsCheck, notifySuccess } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
-import { handleReportTaskCli } from "./task/index.js"
 import { runWorkflow } from "./workflow/index.js"
 
 export const main = async () => {
   const argv = process.argv.slice(2)
-
-  if (argv[0] === "report-task") {
-    await handleReportTaskCli(argv)
-    return
-  }
 
   if (wantsHelp(argv)) {
     printHelp()

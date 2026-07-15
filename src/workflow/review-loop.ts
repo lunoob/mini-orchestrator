@@ -1,7 +1,18 @@
 import { resolveNeedsCheckDecision } from "../review/needs-check.js"
 import type { IssueConfig } from "../types.js"
-import { extractReviewResult, printSection, render, stripStatusLines } from "../lib/utils.js"
-import { buildRunId, mapTaskToReviewVerdict, sendTaskWithTaskFile } from "./dispatch.js"
+import {
+  agentWaitOptions,
+  sendTaskAndWait,
+} from "../agent/index.js"
+import {
+  extractImplementResult,
+  extractReviewResult,
+  parseImplementStatus,
+  parseReviewVerdict,
+  printSection,
+  render,
+  stripStatusLines,
+} from "../lib/utils.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
 import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
 
@@ -10,29 +21,26 @@ export const sendControllerRevise = async (
   round: number,
   controllerNotes: string,
   reviewOutput: string,
-  tasksDir: string,
 ) => {
-  const runId = buildRunId(runtime.issueIndex, "implementer", round, "controller")
-  const { output, task } = await sendTaskWithTaskFile(
+  const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.controllerImplementer, {
       controllerNotes,
       reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
     }),
-    tasksDir,
-    runId,
-    "implementer",
+    agentWaitOptions(runtime.config.implementer),
   )
 
-  if (task.status === "IMPLEMENT_ASK") {
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
+  if (implementStatus === "needs_input") {
     throw new Error(
       `[Controller] Implementer has questions during controller revise round ${round} — needs human input.`,
     )
   }
-  if (task.status !== "IMPLEMENT_DONE") {
+  if (implementStatus === "unknown") {
     console.warn(
-      `[Controller] Warning: implementer status is ${task.status ?? "missing"} after controller revise round ${round}.`,
+      `[Controller] Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
     )
   }
 }
@@ -42,7 +50,6 @@ const conductReview = async (
   round: number,
   sessionDir: string,
   specPath: string,
-  tasksDir: string,
   options: ReviewLoopOptions = {},
 ) => {
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.baseSha, round)
@@ -70,17 +77,14 @@ const conductReview = async (
           specPath,
         })
 
-  const runId = buildRunId(runtime.issueIndex, "reviewer", round)
-  const { output: reviewOutput, task } = await sendTaskWithTaskFile(
+  const reviewOutput = await sendTaskAndWait(
     runtime.reviewerPane,
     prompt,
-    tasksDir,
-    runId,
-    "reviewer",
+    agentWaitOptions(runtime.config.reviewer),
   )
   printSection(`Review Round ${round}`, reviewOutput)
 
-  return { reviewOutput, verdict: mapTaskToReviewVerdict(task, reviewOutput) }
+  return { reviewOutput, verdict: parseReviewVerdict(extractReviewResult(reviewOutput)) }
 }
 
 const handleNeedsCheck = async (
@@ -88,13 +92,12 @@ const handleNeedsCheck = async (
   configPath: string,
   round: number,
   reviewOutput: string,
-  verdict: ReturnType<typeof mapTaskToReviewVerdict>,
+  verdict: ReturnType<typeof parseReviewVerdict>,
   reuseCurrentPane: boolean,
   sessionDir: string,
   specPath: string,
   issueIndex: number,
   issues: IssueConfig[],
-  tasksDir: string,
 ): Promise<NeedsCheckOutcome> => {
   const decision = await resolveNeedsCheckDecision(
     runtime.args,
@@ -114,7 +117,7 @@ const handleNeedsCheck = async (
       throw new Error(`[NeedsCheck] Workflow aborted by user after needs_check in round ${round}.`)
     case "revise":
       console.log("[NeedsCheck] Needs check → revise: sending controller notes to implementer.")
-      await sendControllerRevise(runtime, round, decision.notes, reviewOutput, tasksDir)
+      await sendControllerRevise(runtime, round, decision.notes, reviewOutput)
       return { type: "continue_round" }
     case "retry-review":
       console.log("[NeedsCheck] Needs check → retry-review: re-reviewing same round with controller context.")
@@ -134,30 +137,27 @@ const sendPostReviewCheck = async (
   runtime: WorkflowRuntime,
   round: number,
   reviewStatus: PostReviewStatus,
-  tasksDir: string,
 ) => {
   console.log(`[PostCheck] Review ${reviewStatus} — sending implementer to verify TypeScript and lint checks.`)
 
-  const runId = buildRunId(runtime.issueIndex, "implementer", round, "postcheck")
-  const { task } = await sendTaskWithTaskFile(
+  const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.postReviewCheck, {
       reviewStatus,
       round: String(round),
     }),
-    tasksDir,
-    runId,
-    "implementer",
+    agentWaitOptions(runtime.config.implementer),
   )
 
-  if (task.status === "IMPLEMENT_ASK") {
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
+  if (implementStatus === "needs_input") {
     throw new Error(
       `[PostCheck] Implementer has questions during post-review check round ${round} — needs human input.`,
     )
   }
-  if (task.status !== "IMPLEMENT_DONE") {
+  if (implementStatus === "unknown") {
     console.warn(
-      `[PostCheck] Warning: implementer status is ${task.status ?? "missing"} after post-review check round ${round}.`,
+      `[PostCheck] Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
     )
   }
 }
@@ -166,30 +166,27 @@ const sendReviseAfterFail = async (
   runtime: WorkflowRuntime,
   round: number,
   reviewOutput: string,
-  tasksDir: string,
 ) => {
   console.log("[Revise] Review failed — sending back to implementer.")
 
-  const runId = buildRunId(runtime.issueIndex, "implementer", round, "revise")
-  const { task } = await sendTaskWithTaskFile(
+  const output = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.revise, {
       reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
     }),
-    tasksDir,
-    runId,
-    "implementer",
+    agentWaitOptions(runtime.config.implementer),
   )
 
-  if (task.status === "IMPLEMENT_ASK") {
+  const implementStatus = parseImplementStatus(extractImplementResult(output))
+  if (implementStatus === "needs_input") {
     throw new Error(
       `[Revise] Implementer has questions during revise round ${round} — needs human input.`,
     )
   }
-  if (task.status !== "IMPLEMENT_DONE") {
+  if (implementStatus === "unknown") {
     console.warn(
-      `[Revise] Warning: implementer status is ${task.status ?? "missing"} after revise round ${round}.`,
+      `[Revise] Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
     )
   }
 }
@@ -203,7 +200,6 @@ export const runReviewLoop = async (
   specPath: string,
   issueIndex: number,
   issues: IssueConfig[],
-  tasksDir: string,
   initialOptions?: ReviewLoopOptions,
 ) => {
   for (let round = startRound; round <= runtime.config.maxReviewRounds; round += 1) {
@@ -213,17 +209,17 @@ export const runReviewLoop = async (
     while (retrySameRound) {
       retrySameRound = false
 
-      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, specPath, tasksDir, activeLoopOptions ?? {})
+      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
       activeLoopOptions = undefined
 
       if (verdict.kind === "pass") {
-        await sendPostReviewCheck(runtime, round, "REVIEW_PASS", tasksDir)
+        await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
         console.log(`\n[Review] Workflow finished: review passed in round ${round}.`)
         return
       }
 
       if (verdict.kind === "needs_check") {
-        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK", tasksDir)
+        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK")
         const outcome = await handleNeedsCheck(
           runtime,
           configPath,
@@ -235,7 +231,6 @@ export const runReviewLoop = async (
           specPath,
           issueIndex,
           issues,
-          tasksDir,
         )
 
         if (outcome.type === "approved") return
@@ -254,7 +249,7 @@ export const runReviewLoop = async (
         throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
       }
 
-      await sendReviseAfterFail(runtime, round, reviewOutput, tasksDir)
+      await sendReviseAfterFail(runtime, round, reviewOutput)
       break
     }
   }

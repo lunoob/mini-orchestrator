@@ -53,8 +53,6 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     throw new Error(`[Resume] Invalid checkpoint: issue index ${currentIndex} out of range`)
   }
 
-  const tasksDir = path.join(sessionDir, "tasks")
-
   switch (action) {
     case "approve":
       console.log(`[Issue] Issue approved: ${currentIssue.title}`)
@@ -70,8 +68,8 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     case "abort":
       throw new Error(`[Resume] Workflow aborted after needs_check in round ${checkpoint.round}.`)
     case "revise":
-      await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput, tasksDir)
-      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues, tasksDir)
+      await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
+      await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues)
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
@@ -81,7 +79,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
       await stopAgent(runtime.reviewerPane)
       return
     case "retry-review":
-      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues, tasksDir, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput })
+      await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput })
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)

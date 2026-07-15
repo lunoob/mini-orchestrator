@@ -1,17 +1,16 @@
-import path from "node:path"
 import { readFile } from "node:fs/promises"
 
 import {
   agentWaitOptions,
   runAgentUpdate,
+  sendTaskAndWait,
   startAgent,
   stopAgent,
   waitForAgentReady,
 } from "../agent/index.js"
 import { createSession } from "../agent/session.js"
 import type { IssueConfig } from "../types.js"
-import { printSection, render } from "../lib/utils.js"
-import { buildRunId, sendTaskWithTaskFile } from "./dispatch.js"
+import { extractImplementResult, parseImplementStatus, printSection, render } from "../lib/utils.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -33,33 +32,28 @@ const runSingleSpecCycle = async (
 
   console.log(`[Session] Session: ${specSessionDir}`)
 
-  const tasksDir = path.join(specSessionDir, "tasks")
-
-  const runId = buildRunId(issueIndex, "implementer", round)
-  const { output: implementOutput, task: implementTask } = await sendTaskWithTaskFile(
+  const implementOutput = await sendTaskAndWait(
     runtime.implementerPane,
     render(runtime.prompts.implement, {
       maxReviewRounds: String(runtime.config.maxReviewRounds),
       specPath,
     }),
-    tasksDir,
-    runId,
-    "implementer",
+    agentWaitOptions(runtime.config.implementer),
   )
 
-  if (implementTask.status === "IMPLEMENT_ASK") {
+  const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
+  if (implementStatus === "needs_input") {
     printSection("Implementer Needs Input", implementOutput)
     throw new Error("[Implement] Implementer has questions — needs human input before review.")
   }
-  if (implementTask.status !== "IMPLEMENT_DONE") {
+  if (implementStatus === "unknown") {
     console.warn(
-      "[Implement] Warning: implementer status is " +
-        `${implementTask.status ?? "missing"}. ` +
+      "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
         "The implementation may be incomplete. Proceeding to review anyway.",
     )
   }
 
-  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues, tasksDir)
+  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues)
 }
 
 export const runIssueQueueFromIndex = async (

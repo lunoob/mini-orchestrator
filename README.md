@@ -17,33 +17,53 @@ Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的
 ```text
 mini-orchestrator/
 ├── src/
-│   ├── checkpoint.ts      # needs_check checkpoint 读写
-│   ├── cli.ts             # 参数解析与 --help
-│   ├── config.ts          # 配置与 prompt 加载
-│   ├── git.ts             # git 基线与命令封装
-│   ├── herdr.ts           # herdr CLI 封装（agent start/send/read）
-│   ├── install-skill.ts   # skill 安装/卸载核心逻辑
-│   ├── main.ts            # 入口：report-task 子命令分派、工作流启动
-│   ├── needs-check.ts     # REVIEW_NEEDS_CHECK 交互与 LLM 暂停
-│   ├── review-package.ts  # 生成 diff 审查包
-│   ├── session.ts         # 工作流 session 管理
-│   ├── task-status.ts     # 任务状态文件：创建、原子读写、状态转换、等待
-│   ├── types.ts
-│   ├── utils.ts           # verdict 解析、模板渲染
-│   └── workflow.ts        # 主工作流编排（issue 队列，文件状态驱动）
+│   ├── agent/
+│   │   ├── index.ts           # herdr 封装：start / send / sendTaskAndWait / waitForIdle
+│   │   ├── subprocess.ts      # herdr 子进程调用
+│   │   └── session.ts         # 工作流 session 目录管理
+│   ├── cli/
+│   │   └── index.ts           # 参数解析与 --help
+│   ├── config/
+│   │   └── load.ts            # 配置与 prompt 加载
+│   ├── git/
+│   │   └── index.ts           # git 基线与命令封装
+│   ├── lib/
+│   │   ├── prompt-delimiters.ts  # 输出分隔符常量
+│   │   └── utils.ts           # STATUS 解析、verdict、模板渲染
+│   ├── notify/
+│   │   └── index.ts           # 工作流结束通知
+│   ├── review/
+│   │   ├── checkpoint.ts      # needs_check checkpoint 读写
+│   │   ├── needs-check.ts     # REVIEW_NEEDS_CHECK 交互与 LLM 暂停
+│   │   └── package.ts         # 生成 diff 审查包
+│   ├── skills/
+│   │   └── install-skill.ts   # skill 安装/卸载核心逻辑
+│   ├── workflow/
+│   │   ├── index.ts           # 工作流入口
+│   │   ├── issues.ts          # issue 队列调度
+│   │   ├── review-context.ts  # review 上下文与 baseline
+│   │   ├── review-loop.ts     # review / revise / needs_check 循环
+│   │   ├── resume.ts          # checkpoint 恢复
+│   │   └── types.ts           # workflow 内部类型
+│   ├── main.ts                # CLI 入口
+│   └── types.ts
 ├── prompts/
 │   ├── implement.md
 │   ├── review.md
 │   ├── revise.md
+│   ├── re-review.md
 │   ├── controller-implementer.md   # needs_check → revise 专用
 │   ├── controller-re-review.md     # needs_check → retry-review 专用
-│   └── post-review-check.md        # REVIEW_PASS / NEEDS_CHECK 后 typecheck / lint
+│   ├── post-review-check.md        # REVIEW_PASS / NEEDS_CHECK 后 typecheck / lint
+│   └── partials/
+│       ├── implement-output.md     # implement 类 prompt 输出格式
+│       └── review-output.md        # review 类 prompt 输出格式
 ├── scripts/
-│   └── install-skill.ts   # skill 安装 CLI 入口
+│   └── install-skill.ts       # skill 安装 CLI 入口
 ├── skills/
 │   └── run-issue/
-│       └── SKILL.md               # 生成 issue 配置草案
-├── run-post-spec.ts       # CLI 入口（薄包装，实际逻辑在 src/）
+│       └── SKILL.md           # 生成 issue 配置草案
+├── run-post-spec.ts           # CLI 入口（薄包装，实际逻辑在 src/）
 ├── workflow.example.json
 ├── workflow.issue.example.json
 ├── vitest.config.ts
@@ -56,26 +76,23 @@ mini-orchestrator/
 |-----------|------|
 | `review-round-{n}-{timestamp}.md` | 每轮 review 前 |
 | `needs-check-round-{n}-{timestamp}.json` | LLM 模式下 REVIEW_NEEDS_CHECK 暂停时 |
-| `<sessionId>/tasks/<runId>.json` | agent 每次派发任务时创建，记录任务状态 |
 
-### 任务状态文件协议
+### 任务完成检测
 
-编排器通过持久化的任务状态文件驱动流程推进，**不再依赖 Herdr pane 的 agent_status (working/idle)**。
+编排器通过 **Herdr agent 状态** 判断 agent 是否完成当前轮次，再从 pane output 解析 `STATUS:` 驱动流程分支：
 
-每个派发给 agent 的任务都附带一个唯一的 `runId` 和状态文件路径，agent 必须在工作开始前回报 `started`，完成后回报 `completed` 与最终状态：
+1. `sendTask` 发送 prompt
+2. `herdr agent wait --status working` 确认 prompt 已被接收（超时未进入 working 会重发一次）
+3. `herdr agent wait --status idle` 等待 agent 完成（含 2 秒缓冲 + `agent list` 二次确认）
+4. `readAgentOutput` 读取 pane 最近输出（默认 280 行）
+5. 从分隔符块（`---IMPLEMENT_RESULT_START---` / `---REVIEW_RESULT_START---` 等）内解析 `STATUS:`
 
-```bash
-# agent 在 prompt 中收到协议后执行（由编排器通过 buildTaskProtocol 注入）：
-mini-orchestrator report-task --task "<绝对路径>" --state started
-mini-orchestrator report-task --task "<绝对路径>" --state completed --status IMPLEMENT_DONE
-```
+| 角色 | 输出分隔符 | 状态标记 |
+|------|-----------|----------|
+| implementer | `---IMPLEMENT_RESULT_START---` … `END---` | `IMPLEMENT_DONE` / `IMPLEMENT_ASK` |
+| reviewer | `---REVIEW_RESULT_START---` … `END---` | `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` |
 
-状态文件包含 `runId`、`role`、`state`、`status`、`createdAt`、`updatedAt`，**不含** agent 的完整输出正文。编排器通过 `fs.watch` + 定时轮询监听状态目录，agent 完成时从 pane output 读取结果正文。
-
-关键行为：
-- agent completed 后编排器固定等待 **5 秒**再读取 pane output，确保终端同步
-- output 为空时最多重试 **3 次**（间隔 1.5 秒），不重新派发任务
-- 流程分支以**状态文件的 status 为准**，不再解析 output 中的 `STATUS:` 行作为控制流依据
+任务完成超时为 30 分钟（`waitForIdle` 默认超时）。
 
 ## Issue 队列
 
@@ -259,11 +276,11 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 }
 ```
 
-`prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用默认路径（见源代码 `src/config.ts` 中的常量）。
+`prompts.controllerImplementer`、`prompts.controllerReReview` 与 `prompts.postReviewCheck` 为可选项，省略时使用默认路径（见 `src/config/load.ts` 中的常量）。
 
 `prompts.outputFormatImplement` / `prompts.outputFormatReview`（可选）：自定义 implement / review 类 prompt 的输出格式 partial。省略时使用 `prompts/partials/implement-output.md` 与 `prompts/partials/review-output.md`。partial 中可用 `{{delimiterStart}}`、`{{delimiterEnd}}` 占位符，加载时由编排器注入与解析逻辑一致的标记（见 `src/prompt-delimiters.ts`）。
 
-`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过任务状态文件（而非 pane 状态轮询）判定完成。
+`implementer.agentReadyPattern` / `reviewer.agentReadyPattern`（可选）：`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，再用 `herdr wait output --match` 等待 pane 输出中出现该文本，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --status idle` 判定完成，并从 output 解析 `STATUS:`。
 
 常见示例：Cursor Agent 用 `"Cursor Agent"`，Codex 用 `"codex"` 或启动横幅中的特征字符串。省略时仅依赖 `idle` 状态等待。
 
@@ -334,8 +351,10 @@ pnpm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 流程推进由**任务状态文件**驱动（`pending → started → completed`），不再依赖 Herdr pane 的 `agent_status`（`working`/`idle`）。agent 启动时仍会等待 pane 进入 `idle`（及可选的 output pattern）。
-- 任务完成超时为 30 分钟（`waitForTaskCompleted` 默认超时），超时信息包含当前状态与任务路径。
+- 流程推进由 **Herdr `agent_status`（working/idle）** 与 output 中的 `STATUS:` 标记共同驱动；不依赖任务状态文件或 `report-task` 命令。
+- 任务完成超时为 30 分钟（`waitForIdle` 默认超时）。
+- 后台 pane（`--no-focus`）上 `herdr agent wait` 的事件推送可能不可靠；若出现提前结束或长时间卡住，需检查 Herdr 版本与 pane 状态。
+- Agent 输出须包含约定分隔符与 `STATUS:` 行；编排器从最后一组分隔符块内解析，未遵守格式时可能误判或仅 warn 后继续。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
 - Issue 队列为串行执行；并行调度不在此版本范围内。

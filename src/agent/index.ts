@@ -2,15 +2,18 @@ import { spawn } from "node:child_process"
 
 import type { AgentConfig, AgentListResult, AgentStartResult } from "../types.js"
 import { splitCommand } from "../lib/utils.js"
-import { runHerdr } from "./subprocess.js"
+import { runHerdr, tryRunHerdr } from "./subprocess.js"
 
 const DEFAULT_READY_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_MATCH_TIMEOUT_MS = 60_000
+const DEFAULT_WORKING_TIMEOUT_MS = 60_000
+const IDLE_TIMEOUT_MS = 1_800_000
 
 export type AgentWaitOptions = {
   agentReadyPattern?: string
   outputMatchTimeoutMs?: number
   readyTimeoutMs?: number
+  workingTimeoutMs?: number
 }
 
 export const listAgentNames = async () => {
@@ -103,6 +106,74 @@ export const waitForAgentReady = async (paneId: string, options: AgentWaitOption
 export const sendTask = async (paneId: string, prompt: string) => {
   await runHerdr(["agent", "send", paneId, prompt])
   await runHerdr(["pane", "send-keys", paneId, "enter"])
+}
+
+const tryWaitStatus = async (paneId: string, status: string, timeoutMs: number) => {
+  const { code } = await tryRunHerdr([
+    "agent",
+    "wait",
+    paneId,
+    "--status",
+    status,
+    "--timeout",
+    String(timeoutMs),
+  ])
+  return code === 0
+}
+
+export const waitForIdle = async (paneId: string): Promise<void> => {
+  await runHerdr([
+    "agent",
+    "wait",
+    paneId,
+    "--status",
+    "idle",
+    "--timeout",
+    String(IDLE_TIMEOUT_MS),
+  ])
+
+  await new Promise(resolve => setTimeout(resolve, 2000))
+
+  const output = await runHerdr(["agent", "list"])
+  const parsed = JSON.parse(output) as AgentListResult
+  const agent = parsed.result.agents.find(a => a.pane_id === paneId)
+
+  if (agent?.agent_status === "idle") return
+
+  return waitForIdle(paneId)
+}
+
+const waitForWorkingAfterSend = async (
+  paneId: string,
+  prompt: string,
+  options: AgentWaitOptions,
+) => {
+  const workingTimeoutMs = options.workingTimeoutMs ?? DEFAULT_WORKING_TIMEOUT_MS
+
+  if (await tryWaitStatus(paneId, "working", workingTimeoutMs)) return
+
+  console.log(`[Agent] Pane ${paneId} did not enter working; retrying after ready wait...`)
+  await waitForAgentReady(paneId, options)
+  await sendTask(paneId, prompt)
+
+  if (await tryWaitStatus(paneId, "working", workingTimeoutMs)) return
+
+  throw new Error(
+    `[Agent] Pane ${paneId} did not enter working after send — prompt likely lost. ` +
+      "Check agentReadyPattern or agent startup.",
+  )
+}
+
+export const sendTaskAndWait = async (
+  paneId: string,
+  prompt: string,
+  options: AgentWaitOptions = {},
+): Promise<string> => {
+  await sendTask(paneId, prompt)
+  await waitForWorkingAfterSend(paneId, prompt, options)
+  await waitForIdle(paneId)
+
+  return readAgentOutput(paneId, 280)
 }
 
 export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({

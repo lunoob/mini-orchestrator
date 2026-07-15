@@ -31,3 +31,8 @@ export const runHerdr = async (args: string[]) => {
 
   throw new Error(`[Agent] ${stderr.trim() || `herdr ${args.join(" ")} failed with code ${code}`}`)
 }
+
+export const tryRunHerdr = async (args: string[]) => {
+  const { code, stderr, stdout } = await run("herdr", args)
+  return { code, stderr: stderr.trim(), stdout: stdout.trim() }
+}
