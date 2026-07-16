@@ -74,19 +74,21 @@ export const startAgent = async (
   return startAgentWithName(projectDir, agent, name)
 }
 
+const waitAgentStatusArgs = (paneId: string, status: string, timeoutMs: number) => [
+  "wait",
+  "agent-status",
+  paneId,
+  "--status",
+  status,
+  "--timeout",
+  String(timeoutMs),
+] as const
+
 export const waitForAgentReady = async (paneId: string, options: AgentWaitOptions = {}) => {
   const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS
   const outputMatchTimeoutMs = options.outputMatchTimeoutMs ?? DEFAULT_OUTPUT_MATCH_TIMEOUT_MS
 
-  await runHerdr([
-    "agent",
-    "wait",
-    paneId,
-    "--status",
-    "idle",
-    "--timeout",
-    String(readyTimeoutMs),
-  ])
+  await runHerdr([...waitAgentStatusArgs(paneId, "idle", readyTimeoutMs)])
 
   if (!options.agentReadyPattern) return
 
@@ -109,28 +111,12 @@ export const sendTask = async (paneId: string, prompt: string) => {
 }
 
 const tryWaitStatus = async (paneId: string, status: string, timeoutMs: number) => {
-  const { code } = await tryRunHerdr([
-    "agent",
-    "wait",
-    paneId,
-    "--status",
-    status,
-    "--timeout",
-    String(timeoutMs),
-  ])
+  const { code } = await tryRunHerdr([...waitAgentStatusArgs(paneId, status, timeoutMs)])
   return code === 0
 }
 
 export const waitForIdle = async (paneId: string): Promise<void> => {
-  await runHerdr([
-    "agent",
-    "wait",
-    paneId,
-    "--status",
-    "idle",
-    "--timeout",
-    String(IDLE_TIMEOUT_MS),
-  ])
+  await runHerdr([...waitAgentStatusArgs(paneId, "idle", IDLE_TIMEOUT_MS)])
 
   await new Promise(resolve => setTimeout(resolve, 2000))
 
