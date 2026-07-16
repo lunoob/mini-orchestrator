@@ -8,6 +8,7 @@
 
 ## 工作约束
 
+- 不需要做 plan，只需按照 spec 实现
 - 若 spec 或需求不清楚，先提问并输出 `STATUS: IMPLEMENT_ASK`，不要猜测
 - 完成全部实现且通过提交前自审后，输出 `STATUS: IMPLEMENT_DONE`
 - 若 review 驳回，根据反馈修改后再次输出 `STATUS: IMPLEMENT_DONE`
