@@ -3,7 +3,7 @@ import path from "node:path"
 import os from "node:os"
 import { describe, expect, it } from "vitest"
 
-import { markIssueFinished } from "./persist.js"
+import { markIssueFinished, markIssueInReview } from "./persist.js"
 import type { IssueConfig } from "../types.js"
 
 const writeConfig = (dir: string, data: Record<string, unknown>) => {
@@ -45,5 +45,31 @@ describe("markIssueFinished", () => {
     })
 
     await expect(markIssueFinished(configPath, 3)).rejects.toThrow(/issues\[3\]/)
+  })
+})
+
+describe("markIssueInReview", () => {
+  it("writes state=review for the issue at index and syncs memory", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "persist-test-"))
+    const configPath = writeConfig(dir, {
+      projectDir: dir,
+      issues: [
+        { title: "One", specPath: "/a.md", state: "ready" },
+        { title: "Two", specPath: "/b.md", state: "review" },
+      ],
+      maxReviewRounds: 4,
+    })
+    const issues: IssueConfig[] = [
+      { title: "One", specPath: "/a.md", state: "ready" },
+      { title: "Two", specPath: "/b.md", state: "review" },
+    ]
+
+    await markIssueInReview(configPath, 0, issues)
+
+    const saved = JSON.parse(readFileSync(configPath, "utf8"))
+    expect(saved.issues[0].state).toBe("review")
+    expect(saved.issues[1].state).toBe("review")
+    expect(issues[0].state).toBe("review")
+    expect(issues[1].state).toBe("review")
   })
 })

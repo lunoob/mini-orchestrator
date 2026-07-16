@@ -112,24 +112,27 @@ describe("loadConfig", () => {
     expect(config.issues[0].state).toBe("ready")
   })
 
-  it("preserves explicit issue state ready and finish", async () => {
+  it("preserves explicit issue state ready, review and finish", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
     await mkdir(dir, { recursive: true })
     const spec1 = createSpec(dir, "spec1.md")
     const spec2 = createSpec(dir, "spec2.md")
+    const spec3 = createSpec(dir, "spec3.md")
     const configPath = writeTempConfig(dir, {
       ...MINIMAL_CONFIG_BASE,
       projectDir: dir,
       issues: [
         { title: "Done", specPath: spec1, state: "finish" },
-        { title: "Todo", specPath: spec2, state: "ready" },
+        { title: "InReview", specPath: spec2, state: "review" },
+        { title: "Todo", specPath: spec3, state: "ready" },
       ],
     })
 
     const config = await loadConfig(configPath, {})
 
     expect(config.issues[0].state).toBe("finish")
-    expect(config.issues[1].state).toBe("ready")
+    expect(config.issues[1].state).toBe("review")
+    expect(config.issues[2].state).toBe("ready")
   })
 
   it("throws if issue state is invalid", async () => {
@@ -143,7 +146,7 @@ describe("loadConfig", () => {
     })
 
     await expect(loadConfig(configPath, {})).rejects.toThrow(
-      /issues\[0\]\.state must be one of: ready, finish/,
+      /issues\[0\]\.state must be one of: ready, review, finish/,
     )
   })
 

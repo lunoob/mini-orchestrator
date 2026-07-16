@@ -107,7 +107,8 @@ mini-orchestrator/
 }
 ```
 
-- `state` 可选，取值 `ready`（可开发，默认）或 `finish`（已完成）；`finish` 的 issue 会被跳过
+- `state` 可选，取值 `ready`（可开发，默认）、`review`（已实现、待审查）或 `finish`（已完成）；`finish` 的 issue 会被跳过，`review` 会跳过 implement 直接进入 review
+- 进入 review 环节时，会将配置文件中对应项的 `state` 回写为 `review`
 - issue 完成后会将配置文件中对应项的 `state` 回写为 `finish`
 - issue 按数组顺序**串行**执行
 - 每个 issue 创建一对全新的 implementer + reviewer agent，issue 完成后销毁

@@ -10,7 +10,7 @@ import {
   waitForAgentReady,
 } from "../agent/index.js"
 import { createSession } from "../agent/session.js"
-import { markIssueFinished } from "../config/persist.js"
+import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { extractImplementResult, parseImplementStatus, printSection, render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
@@ -21,6 +21,9 @@ import type { WorkflowRuntime } from "./types.js"
 /** finish 状态的 issue 已完成开发，队列中应跳过；缺省按 ready 处理 */
 export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
 
+/** review 状态的 issue 已实现，跳过 implement prompt，直接进入 review */
+export const shouldSkipImplement = (issue: IssueConfig) => (issue.state ?? "ready") === "review"
+
 /** 多 issue 时中间完成才通知，最后一个留给 workflow 结束的 notifySuccess */
 export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
   index < issueCount - 1
@@ -28,11 +31,12 @@ export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
 const runSingleSpecCycle = async (
   runtime: WorkflowRuntime,
   configPath: string,
-  specPath: string,
+  issue: IssueConfig,
   issueIndex: number,
   issues: IssueConfig[],
 ) => {
   const round = 1
+  const { specPath } = issue
 
   const specContent = await readFile(specPath, "utf8")
   const configContent = await readFile(configPath, "utf8")
@@ -42,27 +46,32 @@ const runSingleSpecCycle = async (
 
   console.log(`[Session] Session: ${specSessionDir}`)
 
-  const implementOutput = await sendTaskAndWait(
-    runtime.implementerPane,
-    render(runtime.prompts.implement, {
-      maxReviewRounds: String(runtime.config.maxReviewRounds),
-      specPath,
-    }),
-    agentWaitOptions(runtime.config.implementer),
-  )
-
-  const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
-  if (implementStatus === "needs_input") {
-    printSection("Implementer Needs Input", implementOutput)
-    throw new Error("[Implement] Implementer has questions — needs human input before review.")
-  }
-  if (implementStatus === "unknown") {
-    console.warn(
-      "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
-        "The implementation may be incomplete. Proceeding to review anyway.",
+  if (shouldSkipImplement(issue)) {
+    console.log(`[Implement] Skipping (state=review): ${issue.title}`)
+  } else {
+    const implementOutput = await sendTaskAndWait(
+      runtime.implementerPane,
+      render(runtime.prompts.implement, {
+        maxReviewRounds: String(runtime.config.maxReviewRounds),
+        specPath,
+      }),
+      agentWaitOptions(runtime.config.implementer),
     )
+
+    const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
+    if (implementStatus === "needs_input") {
+      printSection("Implementer Needs Input", implementOutput)
+      throw new Error("[Implement] Implementer has questions — needs human input before review.")
+    }
+    if (implementStatus === "unknown") {
+      console.warn(
+        "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
+          "The implementation may be incomplete. Proceeding to review anyway.",
+      )
+    }
   }
 
+  await markIssueInReview(configPath, issueIndex, issues)
   await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues)
 }
 
@@ -103,7 +112,7 @@ export const runIssueQueueFromIndex = async (
       startedReviewer = true
       await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
 
-      await runSingleSpecCycle(runtime, configPath, issue.specPath, index, issues)
+      await runSingleSpecCycle(runtime, configPath, issue, index, issues)
 
       await advanceBaseline(runtime)
       await markIssueFinished(configPath, index, issues)

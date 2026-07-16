@@ -31,13 +31,13 @@ export type PromptConfig = {
   revise: string
 }
 
-/** ready: 已准备好可开发；finish: 已完成开发，workflow 会跳过 */
-export type IssueState = "ready" | "finish"
+/** ready: 可开发；review: 已实现、待审查；finish: 已完成，workflow 会跳过 */
+export type IssueState = "ready" | "review" | "finish"
 
 export type IssueConfig = {
   title: string
   specPath: string
-  /** 省略时视为 ready；loadConfig 会归一化为 ready 或 finish */
+  /** 省略时视为 ready；loadConfig 会归一化为 ready、review 或 finish */
   state?: IssueState
 }
 

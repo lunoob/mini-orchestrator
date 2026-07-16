@@ -1,14 +1,25 @@
 import { describe, expect, it } from "vitest"
 
-import { shouldNotifyIssueComplete, shouldSkipIssue } from "./issues.js"
+import { shouldNotifyIssueComplete, shouldSkipImplement, shouldSkipIssue } from "./issues.js"
 
 describe("shouldSkipIssue", () => {
   it("skips finish issues", () => {
     expect(shouldSkipIssue({ title: "Done", specPath: "/x.md", state: "finish" })).toBe(true)
   })
 
-  it("does not skip ready issues", () => {
+  it("does not skip ready or review issues", () => {
     expect(shouldSkipIssue({ title: "Todo", specPath: "/x.md", state: "ready" })).toBe(false)
+    expect(shouldSkipIssue({ title: "InReview", specPath: "/x.md", state: "review" })).toBe(false)
+  })
+})
+
+describe("shouldSkipImplement", () => {
+  it("skips implement for review issues", () => {
+    expect(shouldSkipImplement({ title: "InReview", specPath: "/x.md", state: "review" })).toBe(true)
+  })
+
+  it("does not skip implement for ready issues", () => {
+    expect(shouldSkipImplement({ title: "Todo", specPath: "/x.md", state: "ready" })).toBe(false)
   })
 })
 

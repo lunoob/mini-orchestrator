@@ -32,7 +32,7 @@ const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-r
 const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
 const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
 
-const ISSUE_STATES: readonly IssueState[] = ["ready", "finish"]
+const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
 
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
@@ -49,7 +49,7 @@ const parseIssueState = (value: unknown, index: number): IssueState => {
   if (typeof value === "string" && (ISSUE_STATES as readonly string[]).includes(value)) {
     return value as IssueState
   }
-  throw new Error(`[Config] issues[${index}].state must be one of: ready, finish`)
+  throw new Error(`[Config] issues[${index}].state must be one of: ready, review, finish`)
 }
 
 export const loadConfig = async (configPath: string, args: ParsedArgs) => {
