@@ -32,7 +32,7 @@ disable-model-invocation: true
       "specPath": "<issue 文档绝对路径>"
     }
   ],
-  "maxReviewRounds": 8,
+  "maxReviewRounds": 30,
   "implementer": {
     "name": "implementer",
     "agent": "claude",
