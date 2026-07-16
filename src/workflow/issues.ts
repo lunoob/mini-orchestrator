@@ -103,8 +103,14 @@ export const runIssueQueueFromIndex = async (
       await advanceBaseline(runtime)
       await markIssueFinished(configPath, index, issues)
     } finally {
-      if (startedReviewer) await stopAgent(runtime.reviewerPane)
-      if (startedImplementer) await stopAgent(runtime.implementerPane)
+      const reviewerPane = startedReviewer ? runtime.reviewerPane : undefined
+      const implementerPane = startedImplementer ? runtime.implementerPane : undefined
+      if (startedReviewer) runtime.reviewerPane = ""
+      if (startedImplementer) runtime.implementerPane = ""
+      await Promise.all([
+        reviewerPane ? stopAgent(reviewerPane) : Promise.resolve(),
+        implementerPane ? stopAgent(implementerPane) : Promise.resolve(),
+      ])
     }
   }
 }

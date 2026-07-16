@@ -197,8 +197,17 @@ export const runAgentIntegration = async (agent: AgentConfig): Promise<boolean> 
   return true
 }
 
+export const isPaneNotFoundError = (stderr: string) =>
+  /"code"\s*:\s*"pane_not_found"|pane .+ not found/i.test(stderr)
+
 export const stopAgent = async (paneId: string) => {
-  await runHerdr(["pane", "close", paneId])
+  const { code, stderr } = await tryRunHerdr(["pane", "close", paneId])
+  if (code === 0) return
+  if (isPaneNotFoundError(stderr)) {
+    console.warn(`[Agent] Pane already closed, skipping stop: ${paneId}`)
+    return
+  }
+  throw new Error(`[Agent] ${stderr || `herdr pane close ${paneId} failed with code ${code}`}`)
 }
 
 export const readAgentOutput = async (paneId: string, lines: number) =>
