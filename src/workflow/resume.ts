@@ -8,6 +8,7 @@ import type { ParsedArgs } from "../types.js"
 import { sendControllerRevise, runReviewLoop } from "./review-loop.js"
 import { advanceBaseline } from "./review-context.js"
 import { runIssueQueueFromIndex } from "./issues.js"
+import { markIssueFinished } from "../config/persist.js"
 import type { WorkflowRuntime } from "./types.js"
 
 export const runWorkflowResume = async (args: ParsedArgs) => {
@@ -56,6 +57,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
   switch (action) {
     case "approve":
       console.log(`[Issue] Issue approved: ${currentIssue.title}`)
+      await markIssueFinished(configPath, currentIndex, checkpoint.issues)
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
@@ -70,6 +72,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     case "revise":
       await sendControllerRevise(runtime, checkpoint.round, notes, checkpoint.reviewOutput)
       await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues)
+      await markIssueFinished(configPath, currentIndex, checkpoint.issues)
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
@@ -80,6 +83,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
       return
     case "retry-review":
       await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput })
+      await markIssueFinished(configPath, currentIndex, checkpoint.issues)
       if (currentIndex + 1 < checkpoint.issues.length) {
         await advanceBaseline(runtime)
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)

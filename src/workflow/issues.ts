@@ -10,6 +10,7 @@ import {
   waitForAgentReady,
 } from "../agent/index.js"
 import { createSession } from "../agent/session.js"
+import { markIssueFinished } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { extractImplementResult, parseImplementStatus, printSection, render } from "../lib/utils.js"
 import { advanceBaseline } from "./review-context.js"
@@ -100,6 +101,7 @@ export const runIssueQueueFromIndex = async (
       await runSingleSpecCycle(runtime, configPath, issue.specPath, index, issues)
 
       await advanceBaseline(runtime)
+      await markIssueFinished(configPath, index, issues)
     } finally {
       if (startedReviewer) await stopAgent(runtime.reviewerPane)
       if (startedImplementer) await stopAgent(runtime.implementerPane)
