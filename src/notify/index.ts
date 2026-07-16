@@ -32,6 +32,14 @@ export const notifySuccess = () => {
   )
 }
 
+export const notifyIssueComplete = (title: string) => {
+  notify(
+    "编排器",
+    `Issue 已完成：${title}`,
+    "success",
+  )
+}
+
 export const notifyTestStatusComplete = () => {
   notify(
     "编排器",

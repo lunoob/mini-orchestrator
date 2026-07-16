@@ -13,12 +13,17 @@ import { createSession } from "../agent/session.js"
 import { markIssueFinished } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { extractImplementResult, parseImplementStatus, printSection, render } from "../lib/utils.js"
+import { notifyIssueComplete } from "../notify/index.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
 
 /** finish 状态的 issue 已完成开发，队列中应跳过；缺省按 ready 处理 */
 export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
+
+/** 多 issue 时中间完成才通知，最后一个留给 workflow 结束的 notifySuccess */
+export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
+  index < issueCount - 1
 
 const runSingleSpecCycle = async (
   runtime: WorkflowRuntime,
@@ -102,6 +107,10 @@ export const runIssueQueueFromIndex = async (
 
       await advanceBaseline(runtime)
       await markIssueFinished(configPath, index, issues)
+      // 最后一个 issue 不在此通知，由 main 的 notifySuccess 统一收尾
+      if (shouldNotifyIssueComplete(index, issues.length)) {
+        notifyIssueComplete(issue.title)
+      }
     } finally {
       const reviewerPane = startedReviewer ? runtime.reviewerPane : undefined
       const implementerPane = startedImplementer ? runtime.implementerPane : undefined
