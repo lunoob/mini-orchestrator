@@ -92,7 +92,7 @@ mini-orchestrator/
 | implementer | `---IMPLEMENT_RESULT_START---` … `END---` | `IMPLEMENT_DONE` / `IMPLEMENT_ASK` |
 | reviewer | `---REVIEW_RESULT_START---` … `END---` | `REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK` |
 
-任务完成超时为 30 分钟（`waitForIdle` 默认超时）。
+任务完成超时为 1 小时（`waitForIdle` 默认超时）。
 
 ## Issue 队列
 
@@ -359,7 +359,7 @@ pnpm run typecheck   # tsc --noEmit
 ## 当前限制
 
 - 流程推进由 **Herdr `agent_status`（working / idle / done）** 与 output 中的 `STATUS:` 标记共同驱动；不依赖任务状态文件或 `report-task` 命令。
-- 任务完成超时为 30 分钟（`waitForIdle` 默认超时）。
+- 任务完成超时为 1 小时（`waitForIdle` 默认超时）。
 - 任务完成判定接受 `idle` 或 `done`（Claude 等 agent 完成后可能上报 `done` 而非 `idle`）。
 - 可选的 agent list 轮询兜底保留在代码中（`POLLING_FALLBACK_ENABLED`），默认关闭，使用 `herdr wait agent-status` 事件等待。
 - Agent 输出须包含约定分隔符与 `STATUS:` 行；编排器从最后一组分隔符块内解析，未遵守格式时可能误判或仅 warn 后继续。

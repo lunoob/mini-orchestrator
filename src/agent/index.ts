@@ -8,7 +8,7 @@ import { AGENT_COMPLETE_STATUSES, isAgentCompleteStatus, readAgentStatus, waitFo
 const DEFAULT_READY_TIMEOUT_MS = 120_000
 const DEFAULT_OUTPUT_MATCH_TIMEOUT_MS = 60_000
 const DEFAULT_WORKING_TIMEOUT_MS = 60_000
-const IDLE_TIMEOUT_MS = 1_800_000
+const IDLE_TIMEOUT_MS = 3_600_000
 
 export type AgentWaitOptions = {
   agentReadyPattern?: string
