@@ -1,8 +1,9 @@
 import { NeedsCheckPauseError } from "./review/needs-check.js"
-import { notifyError, notifyNeedsCheck, notifySuccess } from "./notify/index.js"
+import { notifyError, notifyNeedsCheck, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runWorkflow } from "./workflow/index.js"
+import { runTestStatus } from "./workflow/test-status.js"
 
 export const main = async () => {
   const argv = process.argv.slice(2)
@@ -15,6 +16,13 @@ export const main = async () => {
   assertHerdrEnv()
 
   const args = parseArgs(argv)
+
+  if (args.testStatus === "true") {
+    await runTestStatus(args)
+    notifyTestStatusComplete()
+    return
+  }
+
   if (args.config) {
     args.config = getConfigPath(args)
   } else if (!args["resume-from"]) {

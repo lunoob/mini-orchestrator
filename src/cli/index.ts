@@ -14,6 +14,7 @@ export const printHelp = () => {
 按配置中的 issues[] 数组顺序串行执行多个 issue。
 
 Options:
+  --testStatus              进入 herdr 状态测试模式（无需 --config）
   --config <path>           workflow 配置文件路径（首次启动必填；resume 时可省略）
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
@@ -27,6 +28,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 resume 时可从 checkpoint 读取 configPath，因此可省略 --config。
 
 Examples:
+  npx tsx run-post-spec.ts --testStatus
   npx tsx run-post-spec.ts --config workflow.json
   npx tsx run-post-spec.ts --config workflow.json --projectDir . --maxReviewRounds 6
   start-orchestrator --resume-from .orchestrator/needs-check-round-1-*.json \\

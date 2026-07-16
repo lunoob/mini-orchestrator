@@ -32,6 +32,14 @@ export const notifySuccess = () => {
   )
 }
 
+export const notifyTestStatusComplete = () => {
+  notify(
+    "编排器",
+    "herdr 状态测试完成，请查看 agent 输出。",
+    "success",
+  )
+}
+
 export const notifyNeedsCheck = (checkpointPath: string) => {
   notify(
     "编排器",
