@@ -83,7 +83,7 @@ mini-orchestrator/
 
 1. `sendTask` 发送 prompt
 2. `herdr wait agent-status --status working` 确认 prompt 已被接收（超时未进入 working 会重发一次）
-3. `herdr wait agent-status --status idle` 等待 agent 完成（含 2 秒缓冲 + `agent list` 二次确认）
+3. `herdr wait agent-status --status idle|done` 等待 agent 完成（含 2 秒缓冲 + `agent list` 二次确认）
 4. `readAgentOutput` 读取 pane 最近输出（默认 280 行）
 5. 从分隔符块（`---IMPLEMENT_RESULT_START---` / `---REVIEW_RESULT_START---` 等）内解析 `STATUS:`
 
@@ -287,7 +287,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | `codex` | `codex --model <model>` | `Codex` | `codex update` | `herdr integration codex` |
 | `claude` | `claude --model <model>` | `Claude` | `claude update` | `herdr integration claude` |
 
-`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，还会用 `herdr wait output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr wait agent-status --status idle` 判定完成，并从 output 解析 `STATUS:`。
+`agent start` 后、`send` 首条 prompt 前，除等待 `idle` 外，还会用 `herdr wait output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr wait agent-status --status idle` 或 `--status done` 判定完成，并从 output 解析 `STATUS:`。
 
 支持 update 的 agent 会在 workflow 首次启动前并行执行 `updateCommand`（如 `codex update`）与 `herdr integration <agent>`（如 `herdr integration cursor`），避免 update 完成后 pane 关闭导致后续流程失败；不会为每个 issue 重复执行。
 
@@ -356,9 +356,10 @@ pnpm run typecheck   # tsc --noEmit
 
 ## 当前限制
 
-- 流程推进由 **Herdr `agent_status`（working/idle）** 与 output 中的 `STATUS:` 标记共同驱动；不依赖任务状态文件或 `report-task` 命令。
+- 流程推进由 **Herdr `agent_status`（working / idle / done）** 与 output 中的 `STATUS:` 标记共同驱动；不依赖任务状态文件或 `report-task` 命令。
 - 任务完成超时为 30 分钟（`waitForIdle` 默认超时）。
-- 后台 pane（`--no-focus`）上 `herdr wait agent-status` 的事件推送可能不可靠；若出现提前结束或长时间卡住，需检查 Herdr 版本与 pane 状态。
+- 任务完成判定接受 `idle` 或 `done`（Claude 等 agent 完成后可能上报 `done` 而非 `idle`）。
+- 可选的 agent list 轮询兜底保留在代码中（`POLLING_FALLBACK_ENABLED`），默认关闭，使用 `herdr wait agent-status` 事件等待。
 - Agent 输出须包含约定分隔符与 `STATUS:` 行；编排器从最后一组分隔符块内解析，未遵守格式时可能误判或仅 warn 后继续。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
 - 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
