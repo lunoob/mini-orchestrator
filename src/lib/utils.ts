@@ -92,7 +92,11 @@ export const extractImplementResult = (output: string): string => {
 }
 
 export const stripStatusLines = (output: string): string =>
-  output.trim().replace(/^STATUS: .+$/gm, "")
+  output
+    .replaceAll("\\n", "\n")
+    .trim()
+    .replace(/^[ \t]*STATUS: .+$/gm, "")
+    .trim()
 
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)

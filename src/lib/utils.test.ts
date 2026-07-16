@@ -6,6 +6,7 @@ import {
   parseImplementStatus,
   parseReviewVerdict,
   render,
+  stripStatusLines,
 } from "./utils.js"
 
 describe("render", () => {
@@ -47,5 +48,21 @@ describe("parseReviewVerdict", () => {
     ].join("\n")
 
     expect(parseReviewVerdict(extractReviewResult(output)).kind).toBe("pass")
+  })
+})
+
+describe("stripStatusLines", () => {
+  it("removes indented STATUS lines", () => {
+    const output = "天气晴\n  STATUS: IMPLEMENT_DONE\n"
+    expect(stripStatusLines(output)).toBe("天气晴")
+    expect(stripStatusLines(output)).not.toMatch(/STATUS:/)
+  })
+
+  it("removes STATUS after literal \\n escapes", () => {
+    const output = "天气晴\\n\\n  STATUS: IMPLEMENT_DONE\\n\\n"
+    const result = stripStatusLines(output)
+    expect(result).toContain("天气晴")
+    expect(result).not.toMatch(/STATUS:/)
+    expect(result).not.toContain("\\n")
   })
 })
