@@ -3,7 +3,7 @@
 在 Herdr pane 内运行的最小 TypeScript 编排脚本，串起 implementer 与 reviewer agent：
 
 1. implementer 读 spec 并完成编码
-2. 编排器生成 **review package**（git diff 文件），交给 reviewer
+2. 编排器每轮 review 前生成 **review package**（git diff 归档文件）；`review.md` / `re-review.md` **不**引用该文件，reviewer 自行审查工作区
 3. reviewer 审查后输出状态信号（`REVIEW_PASS` / `REVIEW_FAIL` / `REVIEW_NEEDS_CHECK`）
 4. review 失败时回到 implementer，按 review 反馈修复
 5. 最多循环固定轮数
@@ -72,10 +72,10 @@ mini-orchestrator/
 
 运行时会在 `projectDir/.orchestrator/` 下生成：
 
-| 文件/目录 | 时机 |
-|-----------|------|
-| `review-round-{n}-{timestamp}.md` | 每轮 review 前 |
-| `needs-check-round-{n}-{timestamp}.json` | LLM 模式下 REVIEW_NEEDS_CHECK 暂停时 |
+| 文件/目录 | 时机 | 读取方 |
+|-----------|------|--------|
+| `review-round-{n}-{timestamp}.md` | 每轮 review 前 | 仅 `controller-re-review`（needs_check → retry-review）通过 `{{diffFileSection}}` 指引 reviewer 读取；`review.md` / `re-review.md` 不使用 |
+| `needs-check-round-{n}-{timestamp}.json` | LLM 模式下 REVIEW_NEEDS_CHECK 暂停时 | `--resume-from` 恢复时由编排器读取 |
 
 ### 任务完成检测
 
@@ -145,7 +145,11 @@ flowchart TD
     P --> D
 ```
 
-每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包。基线为工作流启动时的 `HEAD`（若当时尚无 commit，则从 git 空树 SHA 对比到当前 `HEAD`）。reviewer **先读该文件**再审查。
+每轮 review 前，编排器在 `projectDir/.orchestrator/` 生成 diff 审查包（基线为工作流启动时的 `HEAD`；若当时尚无 commit，则从 git 空树 SHA 对比到当前 `HEAD`）。该文件主要供归档与 `controller-re-review` 使用。
+
+**`review.md` / `re-review.md` 不包含 `{{diffFileSection}}`**，编排器虽会传入该变量，但 prompt 模板未引用，reviewer **不会**被指引读取审查包，需自行查看工作区改动。
+
+仅 **needs_check → retry-review** 使用的 `controller-re-review.md` 含 `{{diffFileSection}}`，会提示 reviewer 先读审查包再重审。
 
 ### Review package 内容
 
@@ -155,7 +159,7 @@ flowchart TD
 - **Diff Stat / Diff** — 完整 diff（`-U10` 上下文）
 - **Uncommitted Changes**（若有）— `git status`、工作区与暂存区的 stat / diff
 
-非 git 项目或无法生成 diff 时，review prompt 会降级为提示 reviewer 直接审查工作区改动。
+非 git 项目或无法生成 diff 时，仅 `controller-re-review` 的 `{{diffFileSection}}` 会降级为提示 reviewer 直接审查工作区改动。
 
 ### 审查结果
 
@@ -300,10 +304,9 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
   - `{{specPath}}`
   - `{{maxReviewRounds}}`
 - `review.md`
-  - `{{round}}`
   - `{{specPath}}`
-  - `{{baseSha}}` / `{{headSha}}`
-  - `{{diffFileSection}}` — diff 文件路径或降级说明
+- `re-review.md`
+  - `{{round}}`
 - `revise.md`
   - `{{round}}`
   - `{{reviewOutput}}`
@@ -365,6 +368,6 @@ pnpm run typecheck   # tsc --noEmit
 - 可选的 agent list 轮询兜底保留在代码中（`POLLING_FALLBACK_ENABLED`），默认关闭，使用 `herdr wait agent-status` 事件等待。
 - Agent 输出须包含约定分隔符与 `STATUS:` 行；编排器从最后一组分隔符块内解析，未遵守格式时可能误判或仅 warn 后继续。
 - `REVIEW_NEEDS_CHECK` 在 LLM 模式下依赖 checkpoint 恢复；resume 须复用原 implementer/reviewer pane（勿关闭 Herdr session）。
-- 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；reviewer 审查工作区改动。
+- 非 git 项目或尚无 commit 时，review package 仅含未提交变更说明；`review.md` / `re-review.md` 不引用该文件，reviewer 仍须自行审查工作区改动。
 - Issue 队列为串行执行；并行调度不在此版本范围内。
 - `splitCommand` 只覆盖常见引号场景，复杂 shell 语法还不适合直接塞进 `command`。
