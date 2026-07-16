@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   extractImplementResult,
   extractReviewResult,
+  extractStatusLines,
   parseImplementStatus,
   parseReviewVerdict,
   render,
@@ -64,5 +65,27 @@ describe("stripStatusLines", () => {
     expect(result).toContain("天气晴")
     expect(result).not.toMatch(/STATUS:/)
     expect(result).not.toContain("\\n")
+  })
+})
+
+describe("extractStatusLines", () => {
+  it("keeps only STATUS markers from review output", () => {
+    const output = [
+      "### Summary",
+      "Looks good overall.",
+      "STATUS: REVIEW_PASS",
+      "extra trailing notes",
+    ].join("\n")
+
+    expect(extractStatusLines(output)).toBe("STATUS: REVIEW_PASS")
+  })
+
+  it("keeps indented STATUS lines and trims them", () => {
+    const output = "body\n  STATUS: REVIEW_NEEDS_CHECK\n"
+    expect(extractStatusLines(output)).toBe("STATUS: REVIEW_NEEDS_CHECK")
+  })
+
+  it("returns empty string when STATUS is missing", () => {
+    expect(extractStatusLines("no status here")).toBe("")
   })
 })

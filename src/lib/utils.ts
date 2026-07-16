@@ -91,12 +91,24 @@ export const extractImplementResult = (output: string): string => {
   return output.slice(afterStart, endIdx).trim() || output
 }
 
+/** 整行 STATUS 标记（允许前导空白）；每次新建 RegExp，避免 g 标志的 lastIndex 串扰 */
+const STATUS_LINE_PATTERN = "^[ \\t]*STATUS: .+$"
+const statusLineRe = () => new RegExp(STATUS_LINE_PATTERN, "gm")
+
 export const stripStatusLines = (output: string): string =>
   output
     .replaceAll("\\n", "\n")
     .trim()
-    .replace(/^[ \t]*STATUS: .+$/gm, "")
+    .replace(statusLineRe(), "")
     .trim()
+
+/** 仅保留 STATUS 行，供控制台摘要打印（避免刷完整 agent 输出） */
+export const extractStatusLines = (output: string): string => {
+  const normalized = output.replaceAll("\\n", "\n")
+  const matches = normalized.match(statusLineRe())
+  if (!matches) return ""
+  return matches.map((line) => line.trim()).join("\n")
+}
 
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)

@@ -7,6 +7,7 @@ import {
 import {
   extractImplementResult,
   extractReviewResult,
+  extractStatusLines,
   parseImplementStatus,
   parseReviewVerdict,
   printSection,
@@ -82,9 +83,10 @@ const conductReview = async (
     prompt,
     agentWaitOptions(runtime.config.reviewer),
   )
-  printSection(`Review Round ${round}`, reviewOutput)
+  const reviewResult = extractReviewResult(reviewOutput)
+  printSection(`Review Round ${round}`, extractStatusLines(reviewResult) || "(no STATUS)")
 
-  return { reviewOutput, verdict: parseReviewVerdict(extractReviewResult(reviewOutput)) }
+  return { reviewOutput, verdict: parseReviewVerdict(reviewResult) }
 }
 
 const handleNeedsCheck = async (
