@@ -16,6 +16,9 @@ import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
 
+/** finish 状态的 issue 已完成开发，队列中应跳过；缺省按 ready 处理 */
+export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
+
 const runSingleSpecCycle = async (
   runtime: WorkflowRuntime,
   configPath: string,
@@ -67,6 +70,11 @@ export const runIssueQueueFromIndex = async (
     const issue = issues[index]
     console.log(`\n[Issue] === Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
     console.log(`[Issue] Spec path: ${issue.specPath}`)
+
+    if (shouldSkipIssue(issue)) {
+      console.log(`[Issue] Skipping (state=finish): ${issue.title}`)
+      continue
+    }
 
     runtime.issueIndex = index
 

@@ -4,7 +4,8 @@
   "issues": [
     {
       "title": "Step 1: Setup database schema",
-      "specPath": "/absolute/path/to/specs/db-schema.md"
+      "specPath": "/absolute/path/to/specs/db-schema.md",
+      "state": "ready"
     },
     {
       "title": "Step 2: Implement API endpoints",
@@ -12,7 +13,8 @@
     },
     {
       "title": "Step 3: Add frontend integration",
-      "specPath": "/absolute/path/to/specs/frontend.md"
+      "specPath": "/absolute/path/to/specs/frontend.md",
+      "state": "finish"
     }
   ],
   "maxReviewRounds": 4,

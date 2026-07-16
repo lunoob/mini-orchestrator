@@ -101,12 +101,13 @@ mini-orchestrator/
 ```json
 {
   "issues": [
-    { "title": "Step 1: Setup database schema",  "specPath": "/path/to/specs/db-schema.md" },
-    { "title": "Step 2: Implement API endpoints", "specPath": "/path/to/specs/api-endpoints.md" }
+    { "title": "Step 1: Setup database schema",  "specPath": "/path/to/specs/db-schema.md", "state": "finish" },
+    { "title": "Step 2: Implement API endpoints", "specPath": "/path/to/specs/api-endpoints.md", "state": "ready" }
   ]
 }
 ```
 
+- `state` 可选，取值 `ready`（可开发，默认）或 `finish`（已完成）；`finish` 的 issue 会被跳过
 - issue 按数组顺序**串行**执行
 - 每个 issue 创建一对全新的 implementer + reviewer agent，issue 完成后销毁
 - 当前 issue 的 review 通过后，git baseline 推进到 `HEAD`，后续 issue 的 diff 只包含其自身变更

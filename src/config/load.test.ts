@@ -97,6 +97,56 @@ describe("loadConfig", () => {
     expect(config.issues[1].specPath).toBe(spec2)
   })
 
+  it("defaults issue state to ready when omitted", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    await mkdir(dir, { recursive: true })
+    const spec = createSpec(dir, "spec.md")
+    const configPath = writeTempConfig(dir, {
+      ...MINIMAL_CONFIG_BASE,
+      projectDir: dir,
+      issues: [{ title: "Issue", specPath: spec }],
+    })
+
+    const config = await loadConfig(configPath, {})
+
+    expect(config.issues[0].state).toBe("ready")
+  })
+
+  it("preserves explicit issue state ready and finish", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    await mkdir(dir, { recursive: true })
+    const spec1 = createSpec(dir, "spec1.md")
+    const spec2 = createSpec(dir, "spec2.md")
+    const configPath = writeTempConfig(dir, {
+      ...MINIMAL_CONFIG_BASE,
+      projectDir: dir,
+      issues: [
+        { title: "Done", specPath: spec1, state: "finish" },
+        { title: "Todo", specPath: spec2, state: "ready" },
+      ],
+    })
+
+    const config = await loadConfig(configPath, {})
+
+    expect(config.issues[0].state).toBe("finish")
+    expect(config.issues[1].state).toBe("ready")
+  })
+
+  it("throws if issue state is invalid", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    await mkdir(dir, { recursive: true })
+    const spec = createSpec(dir, "spec.md")
+    const configPath = writeTempConfig(dir, {
+      ...MINIMAL_CONFIG_BASE,
+      projectDir: dir,
+      issues: [{ title: "Issue", specPath: spec, state: "done" }],
+    })
+
+    await expect(loadConfig(configPath, {})).rejects.toThrow(
+      /issues\[0\]\.state must be one of: ready, finish/,
+    )
+  })
+
   it("resolves agent config from agent and model", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
     await mkdir(dir, { recursive: true })

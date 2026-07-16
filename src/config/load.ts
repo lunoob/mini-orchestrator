@@ -11,6 +11,7 @@ import {
 import type {
   AgentInputConfig,
   IssueConfig,
+  IssueState,
   LoadedPrompts,
   ParsedArgs,
   PromptConfig,
@@ -31,6 +32,8 @@ const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-r
 const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
 const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
 
+const ISSUE_STATES: readonly IssueState[] = ["ready", "finish"]
+
 const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
 
 const parseMaxReviewRounds = (value: string) => {
@@ -39,6 +42,14 @@ const parseMaxReviewRounds = (value: string) => {
     throw new Error(`[Config] Invalid maxReviewRounds: ${value}`)
   }
   return rounds
+}
+
+const parseIssueState = (value: unknown, index: number): IssueState => {
+  if (value === undefined) return "ready"
+  if (typeof value === "string" && (ISSUE_STATES as readonly string[]).includes(value)) {
+    return value as IssueState
+  }
+  throw new Error(`[Config] issues[${index}].state must be one of: ready, finish`)
 }
 
 export const loadConfig = async (configPath: string, args: ParsedArgs) => {
@@ -56,14 +67,19 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
   if (!fileConfig.issues || fileConfig.issues.length === 0) {
     throw new Error("[Config] issues is required (non-empty array)")
   }
-  fileConfig.issues.forEach((issue, index) => {
+  const issues: IssueConfig[] = fileConfig.issues.map((issue, index) => {
     if (!issue.title) throw new Error(`[Config] issues[${index}].title is required`)
     if (!issue.specPath) throw new Error(`[Config] issues[${index}].specPath is required`)
+    return {
+      title: issue.title,
+      specPath: issue.specPath,
+      state: parseIssueState(issue.state, index),
+    }
   })
 
-  for (let i = 0; i < fileConfig.issues.length; i += 1) {
-    try { await fsAccess(fileConfig.issues[i].specPath) } catch {
-      throw new Error(`[Config] Issue ${i} spec file not found: ${fileConfig.issues[i].specPath}`)
+  for (let i = 0; i < issues.length; i += 1) {
+    try { await fsAccess(issues[i].specPath) } catch {
+      throw new Error(`[Config] Issue ${i} spec file not found: ${issues[i].specPath}`)
     }
   }
 
@@ -100,7 +116,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     projectDir,
     prompts,
     reviewer: resolveAgentInput(fileConfig.reviewer, "reviewer"),
-    issues: fileConfig.issues,
+    issues,
   } as WorkflowConfig
 }
 
