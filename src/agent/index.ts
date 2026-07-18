@@ -101,15 +101,41 @@ export const sendTask = async (paneId: string, prompt: string) => {
   await runHerdr(["pane", "send-keys", paneId, "enter"])
 }
 
-export const waitForIdle = async (paneId: string): Promise<void> => {
-  await waitForAgentStatus(paneId, AGENT_COMPLETE_STATUSES, IDLE_TIMEOUT_MS)
+export type WaitForIdleOptions = {
+  /** null = 不设总超时（按 chunk 一直等）；默认 IDLE_TIMEOUT_MS */
+  timeoutMs?: number | null
+}
+
+const waitForCompleteStatus = async (paneId: string, timeoutMs: number | null) => {
+  if (timeoutMs !== null) {
+    await waitForAgentStatus(paneId, AGENT_COMPLETE_STATUSES, timeoutMs)
+    return
+  }
+
+  // ASK 恢复等场景：用不超时的分片等待，避免 herdr 单次 timeout 上限卡住
+  while (true) {
+    try {
+      await waitForAgentStatus(paneId, AGENT_COMPLETE_STATUSES, IDLE_TIMEOUT_MS)
+      return
+    } catch {
+      // chunk 超时后继续等
+    }
+  }
+}
+
+export const waitForIdle = async (
+  paneId: string,
+  options: WaitForIdleOptions = {},
+): Promise<void> => {
+  const timeoutMs = options.timeoutMs === undefined ? IDLE_TIMEOUT_MS : options.timeoutMs
+  await waitForCompleteStatus(paneId, timeoutMs)
 
   await new Promise(resolve => setTimeout(resolve, 2000))
 
   const status = await readAgentStatus(paneId)
   if (isAgentCompleteStatus(status)) return
 
-  return waitForIdle(paneId)
+  return waitForIdle(paneId, options)
 }
 
 const waitForWorkingAfterSend = async (

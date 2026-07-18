@@ -2,6 +2,7 @@ import { NeedsCheckPauseError } from "./review/needs-check.js"
 import { notifyError, notifyNeedsCheck, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
+import { ImplementAskAbortError } from "./workflow/implement-ask.js"
 import { runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
 
@@ -37,6 +38,13 @@ void main().catch((error) => {
   if (error instanceof NeedsCheckPauseError) {
     notifyNeedsCheck(error.checkpointPath)
     process.exitCode = 2
+    return
+  }
+
+  // IMPLEMENT_ASK 时用户选 no：正常中止，不当作工作流失败
+  if (error instanceof ImplementAskAbortError) {
+    console.log(`\n[Workflow] ${error.message}`)
+    process.exitCode = 0
     return
   }
 

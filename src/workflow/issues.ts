@@ -12,8 +12,9 @@ import {
 import { createSession } from "../agent/session.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
-import { extractImplementResult, parseImplementStatus, printSection, render } from "../lib/utils.js"
+import { extractImplementResult, parseImplementStatus, render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
+import { handleImplementAskIfNeeded } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -58,11 +59,12 @@ const runSingleSpecCycle = async (
       agentWaitOptions(runtime.config.implementer),
     )
 
-    const implementStatus = parseImplementStatus(extractImplementResult(implementOutput))
-    if (implementStatus === "needs_input") {
-      printSection("Implementer Needs Input", implementOutput)
-      throw new Error("[Implement] Implementer has questions — needs human input before review.")
-    }
+    const resolvedOutput = await handleImplementAskIfNeeded(
+      runtime.implementerPane,
+      implementOutput,
+      "implement",
+    )
+    const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
     if (implementStatus === "unknown") {
       console.warn(
         "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +

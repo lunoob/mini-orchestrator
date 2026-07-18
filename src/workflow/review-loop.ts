@@ -14,6 +14,7 @@ import {
   render,
   stripStatusLines,
 } from "../lib/utils.js"
+import { handleImplementAskIfNeeded } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
 import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
 
@@ -33,12 +34,12 @@ export const sendControllerRevise = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(extractImplementResult(output))
-  if (implementStatus === "needs_input") {
-    throw new Error(
-      `[Controller] Implementer has questions during controller revise round ${round} — needs human input.`,
-    )
-  }
+  const resolvedOutput = await handleImplementAskIfNeeded(
+    runtime.implementerPane,
+    output,
+    `controller revise round ${round}`,
+  )
+  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {
     console.warn(
       `[Controller] Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
@@ -151,12 +152,12 @@ const sendPostReviewCheck = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(extractImplementResult(output))
-  if (implementStatus === "needs_input") {
-    throw new Error(
-      `[PostCheck] Implementer has questions during post-review check round ${round} — needs human input.`,
-    )
-  }
+  const resolvedOutput = await handleImplementAskIfNeeded(
+    runtime.implementerPane,
+    output,
+    `post-review check round ${round}`,
+  )
+  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {
     console.warn(
       `[PostCheck] Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
@@ -180,12 +181,12 @@ const sendReviseAfterFail = async (
     agentWaitOptions(runtime.config.implementer),
   )
 
-  const implementStatus = parseImplementStatus(extractImplementResult(output))
-  if (implementStatus === "needs_input") {
-    throw new Error(
-      `[Revise] Implementer has questions during revise round ${round} — needs human input.`,
-    )
-  }
+  const resolvedOutput = await handleImplementAskIfNeeded(
+    runtime.implementerPane,
+    output,
+    `revise round ${round}`,
+  )
+  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {
     console.warn(
       `[Revise] Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
