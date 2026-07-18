@@ -73,9 +73,10 @@ disable-model-invocation: true
 > 例：若 `issues[0].specPath` 为 `/home/user/my-project/specs/db-schema.md`，则配置保存至 `/home/user/my-project/specs/db-schema_workflow.issue.json`。
 
 记录 `CONFIG_PATH` = 已保存配置文件的**绝对路径**。
+输出执行命令
 
-### 3. 启动编排器
-
+### 3. 询问是否启动编排器
+如果用户确认启动编排器的话，
 使用 `start-orchestrator` 启动编排器，传入已保存的配置文件：
 
 ```bash
