@@ -6,8 +6,8 @@ export const wantsHelp = (argv: string[]) => argv.includes("--help") || argv.inc
 
 export const printHelp = () => {
   console.log(`[CLI] Usage:
-  run-post-spec.ts --config <path> [options]
-  run-post-spec.ts --resume-from <path> --needs-check-action <action> [options]
+  start-orchestrator --config <path> [options]
+  start-orchestrator --resume-from <path> --needs-check-action <action> [options]
 
 在 Herdr pane 内串起 implementer 与 reviewer agent 工作流。
 
@@ -28,9 +28,9 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 resume 时可从 checkpoint 读取 configPath，因此可省略 --config。
 
 Examples:
-  npx tsx run-post-spec.ts --testStatus
-  npx tsx run-post-spec.ts --config workflow.json
-  npx tsx run-post-spec.ts --config workflow.json --projectDir . --maxReviewRounds 6
+  pnpm start -- --testStatus
+  pnpm start -- --config workflow.json
+  pnpm start -- --config workflow.json --projectDir . --maxReviewRounds 6
   start-orchestrator --resume-from .orchestrator/needs-check-round-1-*.json \\
     --needs-check-action retry-review --needs-check-notes "已本地验证通过"
 

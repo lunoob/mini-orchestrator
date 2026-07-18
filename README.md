@@ -59,11 +59,11 @@ mini-orchestrator/
 │       ├── implement-output.md     # implement 类 prompt 输出格式
 │       └── review-output.md        # review 类 prompt 输出格式
 ├── scripts/
+│   ├── install-alias.ts       # shell 别名安装 CLI 入口
 │   └── install-skill.ts       # skill 安装 CLI 入口
 ├── skills/
 │   └── run-issue/
 │       └── SKILL.md           # 生成 issue 配置草案
-├── run-post-spec.ts           # CLI 入口（薄包装，实际逻辑在 src/）
 ├── workflow.example.json
 ├── workflow.issue.example.json
 ├── vitest.config.ts
@@ -214,15 +214,16 @@ cp workflow.issue.example.json workflow.local.json
 然后运行：
 
 ```bash
-pnpm tsx run-post-spec.ts --config workflow.local.json
-pnpm tsx run-post-spec.ts --help          # 不需要 HERDR_ENV=1
-pnpm start -- --config workflow.local.json  # 等价于 tsx ./src/main.ts
+pnpm start -- --config workflow.local.json
+pnpm start -- --help                      # 不需要 HERDR_ENV=1
 ```
 
-也可以用别名（若 shell 已配置 `start-orchestrator` 指向 `run-post-spec.ts`，默认读取当前目录下的 `workflow.local.json`）：
+安装 shell 别名：
 
 ```bash
-start-orchestrator
+pnpm run install-alias
+source ~/.zshrc   # 或重启 shell
+start-orchestrator --config workflow.local.json
 ```
 
 ### 退出码

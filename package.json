@@ -6,6 +6,8 @@
   "description": "最小可运行的 TypeScript 编排脚本，串起 implementer 与 reviewer agent",
   "scripts": {
     "start": "tsx ./src/main.ts",
+    "install-alias": "tsx ./scripts/install-alias.ts",
+    "uninstall-alias": "tsx ./scripts/install-alias.ts --uninstall",
     "install-skill": "tsx ./scripts/install-skill.ts",
     "uninstall-skill": "tsx ./scripts/install-skill.ts --uninstall",
     "test": "vitest run",

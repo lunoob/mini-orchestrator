@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["run-post-spec.ts", "src/**/*.ts"]
+  "include": ["scripts/**/*.ts", "src/**/*.ts"]
 }
