@@ -3,7 +3,13 @@ import path from "node:path"
 import os from "node:os"
 import { describe, expect, it } from "vitest"
 
-import { installSkill, uninstallSkill } from "./install-skill.js"
+import {
+  getSkillInfos,
+  installSkill,
+  listAvailableSkills,
+  parseSkillSelection,
+  uninstallSkill,
+} from "./install-skill.js"
 
 /** 在临时目录创建源 skill 目录，包含 SKILL.md 文件 */
 const createSource = async (dir: string): Promise<string> => {
@@ -12,6 +18,80 @@ const createSource = async (dir: string): Promise<string> => {
   await writeFile(path.join(source, "SKILL.md"), "# Test Skill\n", "utf8")
   return source
 }
+
+describe("listAvailableSkills", () => {
+  it("lists directories that contain SKILL.md", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "list-skills-"))
+    await mkdir(path.join(tmp, "alpha"), { recursive: true })
+    await mkdir(path.join(tmp, "beta"), { recursive: true })
+    await mkdir(path.join(tmp, "ignored"), { recursive: true })
+    await writeFile(path.join(tmp, "alpha", "SKILL.md"), "# Alpha\n", "utf8")
+    await writeFile(path.join(tmp, "beta", "SKILL.md"), "# Beta\n", "utf8")
+
+    const skills = await listAvailableSkills(tmp)
+
+    expect(skills).toEqual(["alpha", "beta"])
+  })
+
+  it("returns empty array when source directory does not exist", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "list-skills-"))
+    const skills = await listAvailableSkills(path.join(tmp, "missing"))
+    expect(skills).toEqual([])
+  })
+})
+
+describe("getSkillInfos", () => {
+  it("marks installed skills", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "skill-infos-"))
+    const sourceDir = path.join(tmp, "source")
+    const targetBaseDir = path.join(tmp, "target")
+
+    await mkdir(path.join(sourceDir, "alpha"), { recursive: true })
+    await mkdir(path.join(sourceDir, "beta"), { recursive: true })
+    await writeFile(path.join(sourceDir, "alpha", "SKILL.md"), "# Alpha\n", "utf8")
+    await writeFile(path.join(sourceDir, "beta", "SKILL.md"), "# Beta\n", "utf8")
+
+    await installSkill(path.join(sourceDir, "alpha"), path.join(targetBaseDir, "alpha"))
+
+    const infos = await getSkillInfos(sourceDir, targetBaseDir)
+    expect(infos).toEqual([
+      { name: "alpha", installed: true },
+      { name: "beta", installed: false },
+    ])
+  })
+})
+
+describe("parseSkillSelection", () => {
+  const skills = ["run-issue", "evaluate-integration-tests"]
+
+  it("parses comma-separated indices", () => {
+    expect(parseSkillSelection("1,2", skills)).toEqual({
+      ok: true,
+      selected: ["run-issue", "evaluate-integration-tests"],
+    })
+  })
+
+  it("supports all", () => {
+    expect(parseSkillSelection("all", skills)).toEqual({
+      ok: true,
+      selected: skills,
+    })
+  })
+
+  it("returns empty selection for blank input", () => {
+    expect(parseSkillSelection("   ", skills)).toEqual({
+      ok: true,
+      selected: [],
+    })
+  })
+
+  it("rejects invalid indices", () => {
+    expect(parseSkillSelection("9", skills)).toEqual({
+      ok: false,
+      message: "无效选择：9",
+    })
+  })
+})
 
 describe("installSkill", () => {
   it("default (symlink) mode creates a symlink at target", async () => {
