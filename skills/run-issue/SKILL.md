@@ -35,8 +35,8 @@ disable-model-invocation: true
   "maxReviewRounds": 30,
   "implementer": {
     "name": "implementer",
-    "agent": "claude",
-    "model": "default"
+    "agent": "cursor",
+    "model": "cursor-grok-4.5-medium"
   },
   "reviewer": {
     "name": "reviewer",
