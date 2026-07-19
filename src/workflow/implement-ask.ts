@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from "node:process"
 
 import { readAgentOutput, waitForIdle } from "../agent/index.js"
 import { extractImplementResult, parseImplementStatus } from "../lib/utils.js"
+import { notifyImplementAsk } from "../notify/index.js"
 
 /** 用户在 IMPLEMENT_ASK 交互中选择 no：正常中止，非故障 */
 export class ImplementAskAbortError extends Error {
@@ -64,6 +65,8 @@ export const handleImplementAskIfNeeded = async (
       `[ImplementAsk] implementer 有问题需要确认（${context}）。` +
         "可在 implementer 侧继续交互，完成后选择是否继续。",
     )
+
+    notifyImplementAsk()
 
     const shouldContinue = await deps.promptContinue()
     if (!shouldContinue) throw new ImplementAskAbortError(context)
