@@ -2,7 +2,7 @@
 name: run-issue
 description: >-
   基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，
-  确认后保存配置并启动编排器。编排器暂停或结束时向用户报告结果。
+  确认后保存配置, 输出执行命令, 启询问是否启动编排器。编排器暂停或结束时向用户报告结果。
 disable-model-invocation: true
 ---
 
