@@ -36,7 +36,7 @@ disable-model-invocation: true
   "implementer": {
     "name": "implementer",
     "agent": "cursor",
-    "model": "cursor-grok-4.5-medium"
+    "model": "composer-2.5"
   },
   "reviewer": {
     "name": "reviewer",
