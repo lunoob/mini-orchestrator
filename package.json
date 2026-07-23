@@ -6,7 +6,7 @@
   "type": "module",
   "description": "最小可运行的 TypeScript 编排脚本，串起 implementer 与 reviewer agent",
   "bin": {
-    "mini-orch": "./bin/mini-orch.mjs"
+    "mini-orch": "bin/mini-orch.mjs"
   },
   "files": [
     "bin",
