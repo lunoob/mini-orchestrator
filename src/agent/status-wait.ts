@@ -4,7 +4,7 @@ import { runHerdr, tryRunHerdr } from "./subprocess.js"
 const POLL_INTERVAL_MS = 2_000
 const EVENT_CHUNK_MS = 5_000
 
-/** 设为 true 时启用 agent list 轮询兜底；默认仅用 wait agent-status 事件等待。 */
+/** 设为 true 时启用 agent list 轮询兜底；默认仅用 agent wait 事件等待。 */
 export const POLLING_FALLBACK_ENABLED = false
 
 export const AGENT_COMPLETE_STATUSES = ["idle", "done"] as const
@@ -17,15 +17,17 @@ export const normalizeTargetStatuses = (target: string | readonly string[]) =>
 export const isAgentCompleteStatus = (status: string | undefined): status is AgentCompleteStatus =>
   status !== undefined && (AGENT_COMPLETE_STATUSES as readonly string[]).includes(status)
 
-export const waitAgentStatusArgs = (paneId: string, status: string, timeoutMs: number) => [
-  "wait",
-  "agent-status",
-  paneId,
-  "--status",
-  status,
-  "--timeout",
-  String(timeoutMs),
-] as const
+export const waitAgentStatusArgs = (
+  paneId: string,
+  status: string | readonly string[],
+  timeoutMs: number,
+) => {
+  const args = ["agent", "wait", paneId, "--timeout", String(timeoutMs)] as string[]
+  for (const target of normalizeTargetStatuses(status)) {
+    args.push("--until", target)
+  }
+  return args
+}
 
 export const parseAgentStatus = (listOutput: string, paneId: string): string | undefined => {
   const parsed = JSON.parse(listOutput) as AgentListResult
@@ -76,16 +78,7 @@ export const waitForAgentStatusEvent = async (
   target: string | readonly string[],
   timeoutMs: number,
 ): Promise<void> => {
-  const targets = normalizeTargetStatuses(target)
-
-  if (targets.length === 1) {
-    await runHerdr([...waitAgentStatusArgs(paneId, targets[0], timeoutMs)])
-    return
-  }
-
-  await Promise.race(
-    targets.map(status => runHerdr([...waitAgentStatusArgs(paneId, status, timeoutMs)])),
-  )
+  await runHerdr(waitAgentStatusArgs(paneId, target, timeoutMs))
 }
 
 export const waitForAgentStatusWithPolling = async (

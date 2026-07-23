@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 
-import type { AgentConfig, AgentListResult, AgentStartResult } from "../types.js"
+import type { AgentConfig, AgentListResult, AgentStartResult, PaneSplitResult } from "../types.js"
 import { splitCommand } from "../lib/utils.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
 import { AGENT_COMPLETE_STATUSES, isAgentCompleteStatus, readAgentStatus, waitForAgentStatus } from "./status-wait.js"
@@ -44,17 +44,35 @@ export type StartAgentOptions = {
   ensureUniqueName?: boolean
 }
 
-const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: string) => {
+const createAgentPane = async (projectDir: string) => {
   const output = await runHerdr([
-    "agent",
-    "start",
-    name,
+    "pane",
+    "split",
+    "--current",
+    "--direction",
+    "right",
     "--cwd",
     projectDir,
     "--no-focus",
-    "--",
-    ...splitCommand(agent.command),
   ])
+  const parsed = JSON.parse(output) as PaneSplitResult
+  return parsed.result.pane.pane_id
+}
+
+const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: string) => {
+  const paneId = await createAgentPane(projectDir)
+  const agentArgs = splitCommand(agent.command).slice(1)
+  const startArgs = [
+    "agent",
+    "start",
+    name,
+    "--kind",
+    agent.integrationAgent,
+    "--pane",
+    paneId,
+    ...(agentArgs.length > 0 ? ["--", ...agentArgs] : []),
+  ]
+  const output = await runHerdr(startArgs)
   const parsed = JSON.parse(output) as AgentStartResult
   return parsed.result.agent.pane_id
 }
@@ -84,8 +102,8 @@ export const waitForAgentReady = async (paneId: string, options: AgentWaitOption
   if (!options.agentReadyPattern) return
 
   await runHerdr([
-    "wait",
-    "output",
+    "pane",
+    "wait-output",
     paneId,
     "--match",
     options.agentReadyPattern,
@@ -97,8 +115,7 @@ export const waitForAgentReady = async (paneId: string, options: AgentWaitOption
 }
 
 export const sendTask = async (paneId: string, prompt: string) => {
-  await runHerdr(["agent", "send", paneId, prompt])
-  await runHerdr(["pane", "send-keys", paneId, "enter"])
+  await runHerdr(["agent", "prompt", paneId, prompt])
 }
 
 export type WaitForIdleOptions = {
