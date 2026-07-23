@@ -1,18 +1,44 @@
 {
-  "name": "mini-orchestrator",
+  "name": "mini-orch",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "license": "MIT",
   "type": "module",
   "description": "最小可运行的 TypeScript 编排脚本，串起 implementer 与 reviewer agent",
+  "bin": {
+    "mini-orch": "./bin/mini-orch.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "prompts",
+    "skills",
+    "workflow.example.json",
+    "workflow.issue.example.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lunoob/mini-orchestrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lunoob/mini-orchestrator/issues"
+  },
   "scripts": {
     "start": "tsx ./src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
     "install-alias": "tsx ./scripts/install-alias.ts",
     "uninstall-alias": "tsx ./scripts/install-alias.ts --uninstall",
     "install-skill": "tsx ./scripts/install-skill.ts",
     "uninstall-skill": "tsx ./scripts/install-skill.ts --uninstall",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run test && npm run typecheck && npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

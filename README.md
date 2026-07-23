@@ -1,4 +1,4 @@
-# mini-orchestrator
+# mini-orch
 
 在 Herdr pane 内运行的最小 TypeScript 编排脚本，串起 implementer 与 reviewer agent：
 
@@ -187,7 +187,7 @@ Reviewer 无法从 diff 单独验证的项**不等于实现缺陷**。编排器�
 **LLM 模式（`--needs-check-mode llm`）**：脚本写入 `projectDir/.orchestrator/needs-check-round-*.json` checkpoint，输出 `STATUS: ORCHESTRATOR_NEEDS_CHECK` 与 `CHECKPOINT: <path>`，以 **exit code 2** 退出。外层 agent 询问用户后，用 `--resume-from` 带上用户选择继续：
 
 ```bash
-start-orchestrator \
+mini-orch \
   --resume-from "$PROJECT_DIR/.orchestrator/needs-check-round-1-....json" \
   --needs-check-action retry-review \
   --needs-check-notes "已在本地跑通 E2E，行为符合 spec"
@@ -218,12 +218,19 @@ pnpm start -- --config workflow.local.json
 pnpm start -- --help                      # 不需要 HERDR_ENV=1
 ```
 
+发布为 npm 包后，也可以直接使用：
+
+```bash
+npm install -g mini-orch
+mini-orch --config workflow.local.json
+```
+
 安装 shell 别名：
 
 ```bash
 pnpm run install-alias
 source ~/.zshrc   # 或重启 shell
-start-orchestrator --config workflow.local.json
+mini-orch --config workflow.local.json
 ```
 
 ### 退出码
