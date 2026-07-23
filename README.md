@@ -18,7 +18,7 @@ Review 流程设计参考 [superpowers](https://github.com/obra/superpowers) 的
 mini-orchestrator/
 ├── src/
 │   ├── agent/
-│   │   ├── index.ts           # herdr 封装：start / prompt / sendTaskAndWait / waitForIdle
+│   │   ├── index.ts           # herdr 封装：start / send-text+enter / sendTaskAndWait / waitForIdle
 │   │   ├── subprocess.ts      # herdr 子进程调用
 │   │   └── session.ts         # 工作流 session 目录管理
 │   ├── cli/
@@ -81,7 +81,7 @@ mini-orchestrator/
 
 编排器通过 **Herdr agent 状态** 判断 agent 是否完成当前轮次，再从 pane output 解析 `STATUS:` 驱动流程分支：
 
-1. `sendTask` 通过 `agent prompt` 发送 prompt
+1. `sendTask` 通过 `pane send-text` 写入 prompt，再用 `pane send-keys enter` 提交
 2. `herdr agent wait --until working` 确认 prompt 已被接收（超时未进入 working 会重发一次）
 3. `herdr agent wait --until idle --until done` 等待 agent 完成（含 2 秒缓冲 + `agent list` 二次确认）
 4. `readAgentOutput` 读取 pane 最近输出（默认 280 行）
@@ -295,7 +295,7 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 | `codex` | `codex --model <model>` | `Codex` | `codex update` | `herdr integration codex` |
 | `claude` | `claude --model <model>` | `Claude` | `claude update` | `herdr integration claude` |
 
-启动 agent 时，编排器先用 `herdr pane split --cwd <projectDir>` 创建 pane，再执行 `herdr agent start <name> --kind <agent> --pane <id> -- --model <model>`。`agent start` 后、首条 `agent prompt` 前，除等待 `idle` 外，还会用 `herdr pane wait-output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --until idle --until done` 判定完成，并从 output 解析 `STATUS:`。
+启动 agent 时，编排器先用 `herdr pane split --cwd <projectDir>` 创建 pane，再执行 `herdr agent start <name> --kind <agent> --pane <id> -- --model <model>`。`agent start` 后、首条 prompt 前，除等待 `idle` 外，还会用 `herdr pane wait-output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --until idle --until done` 判定完成，并从 output 解析 `STATUS:`。
 
 支持 update 的 agent 会在 workflow 首次启动前并行执行 `updateCommand`（如 `codex update`）与 `herdr integration <agent>`（如 `herdr integration cursor`），避免 update 完成后 pane 关闭导致后续流程失败；不会为每个 issue 重复执行。
 

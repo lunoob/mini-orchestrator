@@ -115,7 +115,8 @@ export const waitForAgentReady = async (paneId: string, options: AgentWaitOption
 }
 
 export const sendTask = async (paneId: string, prompt: string) => {
-  await runHerdr(["agent", "prompt", paneId, prompt])
+  await runHerdr(["pane", "send-text", paneId, prompt])
+  await runHerdr(["pane", "send-keys", paneId, "enter"])
 }
 
 export type WaitForIdleOptions = {
