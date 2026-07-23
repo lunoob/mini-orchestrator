@@ -2,8 +2,8 @@ import { access, appendFile, constants, readFile, writeFile } from "node:fs/prom
 import os from "node:os"
 import path from "node:path"
 
-export const ALIAS_NAME = "start-orchestrator"
-export const ALIAS_MARKER_START = "# mini-orchestrator:start-orchestrator"
+export const ALIAS_NAME = "mini-orch"
+export const ALIAS_MARKER_START = "# mini-orchestrator:mini-orch"
 export const ALIAS_MARKER_END = "# mini-orchestrator:end"
 
 export type InstallAliasResult = {
@@ -46,7 +46,7 @@ const readRcFile = async (rcPath: string): Promise<string> => {
   }
 }
 
-/** 在 shell rc 文件中安装 start-orchestrator 别名 */
+/** 在 shell rc 文件中安装 mini-orch 别名 */
 export const installAlias = async (
   mainTsPath: string,
   rcPath: string,
@@ -88,7 +88,7 @@ export const installAlias = async (
   }
 }
 
-/** 从 shell rc 文件中移除 start-orchestrator 别名 */
+/** 从 shell rc 文件中移除 mini-orch 别名 */
 export const uninstallAlias = async (rcPath: string): Promise<InstallAliasResult> => {
   const content = await readRcFile(rcPath)
 
