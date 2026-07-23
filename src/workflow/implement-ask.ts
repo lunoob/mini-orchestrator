@@ -42,7 +42,9 @@ export const defaultImplementAskDeps = (): ImplementAskDeps => ({
   log: (message) => console.log(message),
   promptContinue: promptContinueInteractive,
   // 与 sendTaskAndWait 后半段一致：等 idle/done，再读输出；ASK 路径不设总超时
-  waitAfterContinue: (paneId) => waitForIdle(paneId, { timeoutMs: null }),
+  waitAfterContinue: async (paneId) => {
+    await waitForIdle(paneId, { timeoutMs: null })
+  },
   readOutput: (paneId) => readAgentOutput(paneId, 280),
 })
 

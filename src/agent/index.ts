@@ -2,6 +2,7 @@ import { spawn } from "node:child_process"
 
 import type { AgentConfig, AgentListResult, AgentStartResult, PaneSplitResult } from "../types.js"
 import { splitCommand } from "../lib/utils.js"
+import { waitForCompletionWithFallback } from "./completion-wait.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
 import { AGENT_COMPLETE_STATUSES, isAgentCompleteStatus, readAgentStatus, waitForAgentStatus } from "./status-wait.js"
 
@@ -124,29 +125,24 @@ export type WaitForIdleOptions = {
   timeoutMs?: number | null
 }
 
-const waitForCompleteStatus = async (paneId: string, timeoutMs: number | null) => {
-  if (timeoutMs !== null) {
-    await waitForAgentStatus(paneId, AGENT_COMPLETE_STATUSES, timeoutMs)
-    return
-  }
-
-  // ASK 恢复等场景：用不超时的分片等待，避免 herdr 单次 timeout 上限卡住
-  while (true) {
-    try {
-      await waitForAgentStatus(paneId, AGENT_COMPLETE_STATUSES, IDLE_TIMEOUT_MS)
-      return
-    } catch {
-      // chunk 超时后继续等
-    }
-  }
-}
-
 export const waitForIdle = async (
   paneId: string,
   options: WaitForIdleOptions = {},
-): Promise<void> => {
+): Promise<string | undefined> => {
   const timeoutMs = options.timeoutMs === undefined ? IDLE_TIMEOUT_MS : options.timeoutMs
-  await waitForCompleteStatus(paneId, timeoutMs)
+  const fallbackOutput = await waitForCompletionWithFallback(paneId, {
+    log: (message) => console.log(message),
+    readOutput: () => readAgentOutput(paneId, 280),
+    sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+    // null 原本代表无限等待；兜底触发后统一改为 10 分钟重试，避免永久卡在 Herdr 的错误状态。
+    waitForStatus: (waitTimeoutMs) =>
+      waitForAgentStatus(
+        paneId,
+        AGENT_COMPLETE_STATUSES,
+        timeoutMs === null ? waitTimeoutMs : Math.min(waitTimeoutMs, timeoutMs),
+      ),
+  })
+  if (fallbackOutput) return fallbackOutput
 
   await new Promise(resolve => setTimeout(resolve, 2000))
 
@@ -191,9 +187,9 @@ export const sendTaskAndWait = async (
 ): Promise<string> => {
   await sendTask(paneId, prompt)
   await waitForWorkingAfterSend(paneId, prompt, options)
-  await waitForIdle(paneId)
+  const fallbackOutput = await waitForIdle(paneId)
 
-  return readAgentOutput(paneId, 280)
+  return fallbackOutput ?? readAgentOutput(paneId, 280)
 }
 
 export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({
