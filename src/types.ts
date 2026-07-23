@@ -1,6 +1,8 @@
 /** workflow 配置文件中 implementer / reviewer 的输入字段 */
 export type AgentInputConfig = {
   agent: string
+  /** codex / claude 的思考强度；cursor 请写入 model 后缀（如 composer-2.5-high） */
+  effort?: string
   model?: string
   name: string
 }

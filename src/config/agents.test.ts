@@ -16,6 +16,20 @@ describe("resolveAgentConfig", () => {
     expect(config.updateCommand).toBe("codex update")
   })
 
+  it("resolves codex with effort", () => {
+    const config = resolveAgentConfig({
+      agent: "codex",
+      effort: "high",
+      model: "gpt-5.6-terra",
+      name: "reviewer",
+    })
+
+    expect(config.command).toBe(
+      'codex --model gpt-5.6-terra -c model_reasoning_effort="high"',
+    )
+    expect(config.effort).toBe("high")
+  })
+
   it("resolves cursor with cursor-agent cli", () => {
     const config = resolveAgentConfig({
       agent: "cursor",
@@ -29,6 +43,27 @@ describe("resolveAgentConfig", () => {
     expect(config.updateCommand).toBe("cursor-agent update")
   })
 
+  it("resolves cursor with effort in model suffix", () => {
+    const config = resolveAgentConfig({
+      agent: "cursor",
+      model: "composer-2.5-high",
+      name: "implementer",
+    })
+
+    expect(config.command).toBe("cursor-agent --model composer-2.5-high")
+  })
+
+  it("throws when cursor has effort field", () => {
+    expect(() =>
+      resolveAgentConfig({
+        agent: "cursor",
+        effort: "high",
+        model: "composer-2.5",
+        name: "implementer",
+      }),
+    ).toThrow(/effort is not supported for cursor/)
+  })
+
   it("resolves claude with updateCommand", () => {
     const config = resolveAgentConfig({
       agent: "claude",
@@ -39,6 +74,29 @@ describe("resolveAgentConfig", () => {
     expect(config.command).toBe("claude --model haiku")
     expect(config.agentReadyPattern).toBe("Claude")
     expect(config.updateCommand).toBe("claude update")
+  })
+
+  it("resolves claude with effort", () => {
+    const config = resolveAgentConfig({
+      agent: "claude",
+      effort: "high",
+      model: "haiku",
+      name: "implementer",
+    })
+
+    expect(config.command).toBe("claude --model haiku --effort high")
+    expect(config.effort).toBe("high")
+  })
+
+  it("throws for invalid codex effort", () => {
+    expect(() =>
+      resolveAgentConfig({
+        agent: "codex",
+        effort: "max",
+        model: "gpt-5.6-terra",
+        name: "reviewer",
+      }),
+    ).toThrow(/Invalid reviewer\.effort "max"/)
   })
 
   it("throws for unknown agent", () => {

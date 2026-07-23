@@ -287,13 +287,19 @@ CLI 参数优先级高于 workflow 配置文件中的同名字段。
 
 `prompts.outputFormatImplement` / `prompts.outputFormatReview`（可选）：自定义 implement / review 类 prompt 的输出格式 partial。省略时使用 `prompts/partials/implement-output.md` 与 `prompts/partials/review-output.md`。partial 中可用 `{{delimiterStart}}`、`{{delimiterEnd}}` 占位符，加载时由编排器注入与解析逻辑一致的标记（见 `src/prompt-delimiters.ts`）。
 
-`implementer` / `reviewer` 各需 `name`、`agent`、`model`。编排器根据 `agent` 自动推导启动命令、`agentReadyPattern`、`updateCommand` 与 `herdr integration` 参数（见 `src/config/agents.ts`）：
+`implementer` / `reviewer` 各需 `name`、`agent`、`model`。可选 `effort` 用于指定思考强度（仅 `codex` / `claude` 生效；`cursor` 请写入 model 后缀，如 `composer-2.5-high`）。编排器根据 `agent` 自动推导启动命令、`agentReadyPattern`、`updateCommand` 与 `herdr integration` 参数（见 `src/config/agents.ts`）：
 
-| agent | command | agentReadyPattern | updateCommand | herdr integration |
-|-------|---------|-------------------|---------------|-------------------|
-| `cursor` | `cursor-agent --model <model>` | `Cursor Agent` | `cursor-agent update` | `herdr integration cursor` |
-| `codex` | `codex --model <model>` | `Codex` | `codex update` | `herdr integration codex` |
-| `claude` | `claude --model <model>` | `Claude` | `claude update` | `herdr integration claude` |
+| agent | command | effort |
+|-------|---------|--------|
+| `cursor` | `cursor-agent --model <model>` | 写入 model 后缀，如 `composer-2.5-high` |
+| `codex` | `codex --model <model> [-c model_reasoning_effort="…"]` | `none` / `minimal` / `low` / `medium` / `high` / `xhigh` |
+| `claude` | `claude --model <model> [--effort …]` | `low` / `medium` / `high` / `xhigh` / `max` |
+
+| agent | agentReadyPattern | updateCommand | herdr integration |
+|-------|-------------------|---------------|-------------------|
+| `cursor` | `Cursor Agent` | `cursor-agent update` | `herdr integration cursor` |
+| `codex` | `Codex` | `codex update` | `herdr integration codex` |
+| `claude` | `Claude` | `claude update` | `herdr integration claude` |
 
 启动 agent 时，编排器先用 `herdr pane split --cwd <projectDir>` 创建 pane，再执行 `herdr agent start <name> --kind <agent> --pane <id> -- --model <model>`。`agent start` 后、首条 prompt 前，除等待 `idle` 外，还会用 `herdr pane wait-output --match` 等待 pane 输出中出现 `agentReadyPattern`，避免 agent UI 尚未就绪时 prompt 丢失。任务完成后，编排器通过 `herdr agent wait --until idle --until done` 判定完成，并从 output 解析 `STATUS:`。
 

@@ -41,7 +41,8 @@ disable-model-invocation: true
   "reviewer": {
     "name": "reviewer",
     "agent": "codex",
-    "model": "gpt-5.6-terra"
+    "model": "gpt-5.6-terra",
+    "effort": "high"
   }
 }
 ```
