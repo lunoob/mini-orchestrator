@@ -77,17 +77,23 @@ disable-model-invocation: true
 
 ### 3. 输出执行命令
 
-把执行命令输出给用户
+把执行命令输出给用户(包括 LLM 和终端两种模式下的命令)
 
-### 4. 询问是否启动编排器
-
-用户要启动的话就使用 `start-orchestrator` 启动编排器，传入已保存的配置文件：
-
+llm 模式命令为:
 ```bash
 zsh -ic 'start-orchestrator \
   --config "'"$CONFIG_PATH"'" \
   --needs-check-mode llm'
 ```
+
+终端模式命令为:
+```bash
+start-orchestrator --config "'"$CONFIG_PATH"'"
+```
+
+### 4. 询问是否启动编排器
+
+用户要启动的话就使用 `start-orchestrator` 启动编排器，传入已保存的配置文件：
 
 > `start-orchestrator` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
 
