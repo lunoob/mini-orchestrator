@@ -32,6 +32,27 @@ npm install -g mini-orch
 mini-orch --help
 ```
 
+## 安装 Skill
+
+查看可用 skill：
+
+```bash
+mini-orch skill list
+```
+
+交互式安装，或指定 skill 安装：
+
+```bash
+mini-orch skill install
+mini-orch skill install --skill run-issue
+```
+
+卸载指定 skill：
+
+```bash
+mini-orch skill uninstall --skill run-issue
+```
+
 ## 快速开始
 
 ### 1. 准备需求文件

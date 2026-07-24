@@ -34,6 +34,11 @@ Examples:
   mini-orch --resume-from .orchestrator/needs-check-round-1-*.json \\
     --needs-check-action retry-review --needs-check-notes "已本地验证通过"
 
+Skill commands:
+  mini-orch skill install [options]
+  mini-orch skill uninstall [options]
+  mini-orch skill list
+
 Environment:
   HERDR_ENV=1               必须在 Herdr pane 内运行（--help 除外）
 `)

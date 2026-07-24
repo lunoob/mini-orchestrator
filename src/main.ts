@@ -2,12 +2,18 @@ import { NeedsCheckPauseError } from "./review/needs-check.js"
 import { notifyError, notifyNeedsCheck, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
+import { runSkillCli } from "./cli/skill.js"
 import { ImplementAskAbortError } from "./workflow/implement-ask.js"
 import { runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
 
 export const main = async () => {
   const argv = process.argv.slice(2)
+
+  if (argv[0] === "skill") {
+    process.exitCode = await runSkillCli(argv.slice(1))
+    return
+  }
 
   if (wantsHelp(argv)) {
     printHelp()
