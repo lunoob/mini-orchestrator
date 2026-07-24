@@ -13,6 +13,7 @@
     "dist",
     "prompts",
     "skills",
+    "assets",
     "workflow.example.json",
     "workflow.issue.example.json",
     "README.md",
