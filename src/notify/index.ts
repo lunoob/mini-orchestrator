@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process"
 
 type NotifyLevel = "success" | "warning" | "error"
+type NotificationCommand = {
+  args: string[]
+  command: string
+}
 
 const SUBTITLES: Record<NotifyLevel, string> = {
   success: "✅ 工作流完成",
@@ -8,16 +12,46 @@ const SUBTITLES: Record<NotifyLevel, string> = {
   error: "❌ 错误",
 }
 
+const escapeAppleScriptString = (value: string) => {
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"', '\\"')
+    .replaceAll("\r", "\\r")
+    .replaceAll("\n", "\\n")
+
+  return `"${escaped}"`
+}
+
+export const buildNotificationCommand = (
+  platform: NodeJS.Platform,
+  title: string,
+  message: string,
+  level: NotifyLevel,
+): NotificationCommand | undefined => {
+  if (platform !== "darwin") return
+
+  // osascript is built into macOS, so npm users do not need another notifier binary.
+  const script = [
+    `display notification ${escapeAppleScriptString(message)}`,
+    `with title ${escapeAppleScriptString(title)}`,
+    `subtitle ${escapeAppleScriptString(SUBTITLES[level])}`,
+  ].join(" ")
+
+  return {
+    args: ["-e", script],
+    command: "osascript",
+  }
+}
+
 const notify = (title: string, message: string, level: NotifyLevel) => {
+  const command = buildNotificationCommand(process.platform, title, message, level)
+  if (!command) return
+
   try {
-    const result = spawnSync("terminal-notifier", [
-      "-title", title,
-      "-subtitle", SUBTITLES[level],
-      "-message", message,
-    ], { timeout: 5000 })
+    const result = spawnSync(command.command, command.args, { timeout: 5000 })
 
     if (result.error) {
-      // terminal-notifier 不可用，静默忽略
+      // 系统通知不可用时不影响主工作流。
     }
   } catch {
     // 静默失败

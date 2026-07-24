@@ -32,6 +32,38 @@ npm install -g mini-orch
 mini-orch --help
 ```
 
+## 安装 Skill
+
+查看可用 skill：
+
+```bash
+mini-orch skill list
+```
+
+交互式安装，或指定 skill 安装：
+
+```bash
+mini-orch skill install
+mini-orch skill install --skill run-issue
+```
+
+卸载指定 skill：
+
+```bash
+mini-orch skill uninstall --skill run-issue
+```
+
+## 我的工作流
+
+我通常按照下面的流程推进开发任务：
+
+1. 和 agent 交流，先对齐想法和目标
+2. 使用 `writing-agent-issues` 产出可执行的 spec / issue 文档
+3. 使用 `run-issue` 生成编排器配置
+4. 在 LLM / terminal 环境中执行 `mini-orch`
+
+![我的工作流](assets/agent-workflow.png)
+
 ## 快速开始
 
 ### 1. 准备需求文件
