@@ -1,3 +1,5 @@
+![mini-orch 运行效果](assets/mini-orch-runtime.png)
+
 # mini-orch
 
 `mini-orch` 是一个自动编排开发与代码审查的 CLI 工具。
