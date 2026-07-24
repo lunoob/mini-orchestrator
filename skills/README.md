@@ -17,20 +17,6 @@ mini-orch skill install --skill <skill-name>
 
 > `run-integration-tests` 是项目中的安装名称；它的 skill 元数据名称是 `evaluate-integration-tests`。
 
-## 推荐工作流
-
-```text
-和 agent 对齐想法
-  ↓
-writing-agent-issues 产出 issue
-  ↓
-run-issue 生成编排器配置
-  ↓
-mini-orch 在 LLM / terminal 环境执行
-```
-
-实现 agent 执行 issue 时，应加载 `test-driven-development` skill。
-
 ## 安装示例
 
 安装完整工作流所需的 skill：
