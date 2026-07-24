@@ -53,6 +53,8 @@ mini-orch skill install --skill run-issue
 mini-orch skill uninstall --skill run-issue
 ```
 
+各个 skill 的作用、依赖关系和安装方式见 [Skill 说明](skills/README.md)。
+
 ## 我的工作流
 
 我通常按照下面的流程推进开发任务：
