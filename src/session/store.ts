@@ -100,9 +100,10 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
     getTurns(sessionId).find(turn => !terminalStatuses.has(turn.status))
 
   const statusFor = (session: SessionRecord, nextTurns: Turn[]): SessionRecord["status"] => {
-    if (session.status === "stopped") return "stopped"
+    if (session.runnerStatus === "stopped" || session.status === "stopped") return "stopped"
+    if (session.runnerStatus === "failed" || session.status === "failed") return "failed"
+    if (session.runnerStatus === "stopping" || session.status === "stopping") return "stopping"
     if (nextTurns.some(turn => !terminalStatuses.has(turn.status))) return "running"
-    if (session.status === "failed") return "failed"
     if (session.runnerReady) return "ready"
     return "starting"
   }
@@ -171,6 +172,9 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
 
   const submitMessage = (input: SubmitMessageInput): SubmitMessageResult => {
     const session = requireSession(input.sessionId)
+    if (["failed", "stopping", "stopped"].includes(session.status)) {
+      throw new Error(`[Session] Session is not accepting messages: ${session.status}`)
+    }
     const eventKey = `${input.sessionId}:${input.eventId}`
     const previous = submittedEvents.get(eventKey)
     if (previous) return previous

@@ -1,23 +1,17 @@
+import path from "node:path"
 import { readFile } from "node:fs/promises"
 
-import {
-  agentWaitOptions,
-  runAgentIntegration,
-  runAgentUpdate,
-  sendTaskAndWait,
-  startAgent,
-  stopAgent,
-  waitForAgentReady,
-} from "../agent/index.js"
+import { runAgentUpdate } from "../agent/index.js"
 import { createWorkflowRunContext } from "./run-context.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { extractImplementResult, parseImplementStatus, render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
-import { handleImplementAskIfNeeded } from "./implement-ask.js"
+import { handleSessionImplementAskIfNeeded } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
+import { startRuntimeAgents, stopRuntimeAgents } from "./agent-runtime.js"
 
 /** finish 状态的 issue 已完成开发，队列中应跳过；缺省按 ready 处理 */
 export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
@@ -50,19 +44,19 @@ const runSingleSpecCycle = async (
   if (shouldSkipImplement(issue)) {
     console.log(`[Implement] Skipping (state=review): ${issue.title}`)
   } else {
-    const implementOutput = await sendTaskAndWait(
-      runtime.implementerPane,
+    const implementer = runtime.implementerSession
+    if (!implementer) throw new Error("[Workflow] Implementer session is not started")
+    const implementOutput = await implementer.sendTaskAndWait(
       render(runtime.prompts.implement, {
         maxReviewRounds: String(runtime.config.maxReviewRounds),
         specPath,
       }),
-      agentWaitOptions(runtime.config.implementer),
     )
 
-    const resolvedOutput = await handleImplementAskIfNeeded(
-      runtime.implementerPane,
+    const resolvedOutput = await handleSessionImplementAskIfNeeded(
       implementOutput,
       "implement",
+      () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
     )
     const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
     if (implementStatus === "unknown") {
@@ -95,24 +89,8 @@ export const runIssueQueueFromIndex = async (
 
     runtime.issueIndex = index
 
-    if (runtime.implementerPane) await stopAgent(runtime.implementerPane)
-    if (runtime.reviewerPane) await stopAgent(runtime.reviewerPane)
-
-    let startedImplementer = false
-    let startedReviewer = false
-
     try {
-      runtime.implementerPane = await startAgent(runtime.config.projectDir, runtime.config.implementer, {
-        ensureUniqueName: true,
-      })
-      startedImplementer = true
-      await waitForAgentReady(runtime.implementerPane, agentWaitOptions(runtime.config.implementer))
-
-      runtime.reviewerPane = await startAgent(runtime.config.projectDir, runtime.config.reviewer, {
-        ensureUniqueName: true,
-      })
-      startedReviewer = true
-      await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
+      await startRuntimeAgents(runtime, path.join(runtime.config.projectDir, ".orchestrator"))
 
       await runSingleSpecCycle(runtime, configPath, issue, index, issues)
 
@@ -123,14 +101,7 @@ export const runIssueQueueFromIndex = async (
         notifyIssueComplete(issue.title)
       }
     } finally {
-      const reviewerPane = startedReviewer ? runtime.reviewerPane : undefined
-      const implementerPane = startedImplementer ? runtime.implementerPane : undefined
-      if (startedReviewer) runtime.reviewerPane = ""
-      if (startedImplementer) runtime.implementerPane = ""
-      await Promise.all([
-        reviewerPane ? stopAgent(reviewerPane) : Promise.resolve(),
-        implementerPane ? stopAgent(implementerPane) : Promise.resolve(),
-      ])
+      await stopRuntimeAgents(runtime)
     }
   }
 }
@@ -141,8 +112,6 @@ export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string
   await Promise.all([
     runAgentUpdate(projectDir, implementer),
     runAgentUpdate(projectDir, reviewer),
-    runAgentIntegration(implementer),
-    runAgentIntegration(reviewer),
   ])
 
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)

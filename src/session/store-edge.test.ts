@@ -10,6 +10,40 @@ const agent = {
 }
 
 describe("SessionStore edge cases", () => {
+  test("records a readable runner startup failure without fabricating a turn", async () => {
+    const { createSessionStore } = await import("./store.js")
+    const store = createSessionStore()
+    store.create({ agent, id: "session-1", role: "implementer", runDirectory, workspace: "/tmp/project" })
+
+    store.applyEvent({
+      event: { data: { reason: "runner did not become ready" }, eventId: "failure-1", type: "runner.failure" },
+      sessionId: "session-1",
+    })
+
+    expect(store.get("session-1")).toMatchObject({
+      lastError: "runner did not become ready",
+      runnerStatus: "failed",
+      status: "failed",
+      turns: [],
+    })
+  })
+
+  test("fails the active turn when runner status changes to failed", async () => {
+    const { createSessionStore } = await import(storeModulePath)
+    const store = createSessionStore({ createId: () => "turn-runner-crash" })
+    store.create({ agent, id: "session-crash", role: "implementer", runDirectory, workspace: "/tmp/project" })
+    const { turnId } = store.submitMessage({ content: "long task", eventId: "event-crash", sessionId: "session-crash" })
+
+    store.applyEvent({
+      event: { data: { status: "failed" }, source: "runner", type: "runner.status" },
+      sessionId: "session-crash",
+    })
+
+    expect(store.get("session-crash")).toMatchObject({ lastError: "Runner failed", status: "failed" })
+    expect(store.getTurn("session-crash", turnId)).toMatchObject({ error: "Runner failed", status: "failed" })
+    expect(() => store.submitMessage({ content: "after crash", eventId: "event-after-crash", sessionId: "session-crash" })).toThrow(/not accepting/)
+  })
+
   test("moves a session directly to stopped on a stop control event", async () => {
     const { createSessionStore } = await import(storeModulePath) as typeof import("./store.js")
     const store = createSessionStore()
@@ -19,6 +53,10 @@ describe("SessionStore edge cases", () => {
     const ack = store.applyEvent({ event: { eventId: "stop-1", type: "stop" }, sessionId: "session-1" })
 
     expect(ack).toEqual({ eventId: "stop-1", queued: false })
+    expect(store.get("session-1")).toMatchObject({ runnerStatus: "stopping", status: "stopping" })
+    expect(() => store.submitMessage({ content: "late prompt", eventId: "late-1", sessionId: "session-1" })).toThrow(/not accepting/)
+
+    store.applyEvent({ event: { data: { status: "stopped" }, source: "runner", type: "runner.status" }, sessionId: "session-1" })
     expect(store.get("session-1")).toMatchObject({ runnerStatus: "stopped", status: "stopped" })
   })
 

@@ -1,10 +1,6 @@
 import { resolveNeedsCheckDecision } from "../review/needs-check.js"
 import type { IssueConfig } from "../types.js"
 import {
-  agentWaitOptions,
-  sendTaskAndWait,
-} from "../agent/index.js"
-import {
   extractImplementResult,
   extractReviewResult,
   extractStatusLines,
@@ -14,9 +10,19 @@ import {
   render,
   stripStatusLines,
 } from "../lib/utils.js"
-import { handleImplementAskIfNeeded } from "./implement-ask.js"
+import { handleSessionImplementAskIfNeeded } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
 import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
+
+const requireImplementer = (runtime: WorkflowRuntime) => {
+  if (runtime.implementerSession) return runtime.implementerSession
+  throw new Error("[Workflow] Implementer session is not started")
+}
+
+const requireReviewer = (runtime: WorkflowRuntime) => {
+  if (runtime.reviewerSession) return runtime.reviewerSession
+  throw new Error("[Workflow] Reviewer session is not started")
+}
 
 export const sendControllerRevise = async (
   runtime: WorkflowRuntime,
@@ -24,20 +30,17 @@ export const sendControllerRevise = async (
   controllerNotes: string,
   reviewOutput: string,
 ) => {
-  const output = await sendTaskAndWait(
-    runtime.implementerPane,
-    render(runtime.prompts.controllerImplementer, {
+  const implementer = requireImplementer(runtime)
+  const output = await implementer.sendTaskAndWait(render(runtime.prompts.controllerImplementer, {
       controllerNotes,
       reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
-    }),
-    agentWaitOptions(runtime.config.implementer),
-  )
+    }))
 
-  const resolvedOutput = await handleImplementAskIfNeeded(
-    runtime.implementerPane,
+  const resolvedOutput = await handleSessionImplementAskIfNeeded(
     output,
     `controller revise round ${round}`,
+    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
   )
   const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {
@@ -79,11 +82,7 @@ const conductReview = async (
           specPath,
         })
 
-  const reviewOutput = await sendTaskAndWait(
-    runtime.reviewerPane,
-    prompt,
-    agentWaitOptions(runtime.config.reviewer),
-  )
+  const reviewOutput = await requireReviewer(runtime).sendTaskAndWait(prompt)
   const reviewResult = extractReviewResult(reviewOutput)
   printSection(`Review Round ${round}`, extractStatusLines(reviewResult) || "(no STATUS)")
 
@@ -143,19 +142,16 @@ const sendPostReviewCheck = async (
 ) => {
   console.log(`[PostCheck] Review ${reviewStatus} — sending implementer to verify TypeScript and lint checks.`)
 
-  const output = await sendTaskAndWait(
-    runtime.implementerPane,
-    render(runtime.prompts.postReviewCheck, {
+  const implementer = requireImplementer(runtime)
+  const output = await implementer.sendTaskAndWait(render(runtime.prompts.postReviewCheck, {
       reviewStatus,
       round: String(round),
-    }),
-    agentWaitOptions(runtime.config.implementer),
-  )
+    }))
 
-  const resolvedOutput = await handleImplementAskIfNeeded(
-    runtime.implementerPane,
+  const resolvedOutput = await handleSessionImplementAskIfNeeded(
     output,
     `post-review check round ${round}`,
+    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
   )
   const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {
@@ -172,19 +168,16 @@ const sendReviseAfterFail = async (
 ) => {
   console.log("[Revise] Review failed — sending back to implementer.")
 
-  const output = await sendTaskAndWait(
-    runtime.implementerPane,
-    render(runtime.prompts.revise, {
+  const implementer = requireImplementer(runtime)
+  const output = await implementer.sendTaskAndWait(render(runtime.prompts.revise, {
       reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
       round: String(round),
-    }),
-    agentWaitOptions(runtime.config.implementer),
-  )
+    }))
 
-  const resolvedOutput = await handleImplementAskIfNeeded(
-    runtime.implementerPane,
+  const resolvedOutput = await handleSessionImplementAskIfNeeded(
     output,
     `revise round ${round}`,
+    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
   )
   const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
   if (implementStatus === "unknown") {

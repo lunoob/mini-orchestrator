@@ -1,9 +1,9 @@
 import type { AgentConfig } from "../types.js"
 
-export type SessionStatus = "starting" | "ready" | "running" | "waiting" | "idle" | "failed" | "stopped"
+export type SessionStatus = "starting" | "ready" | "running" | "waiting" | "idle" | "stopping" | "failed" | "stopped"
 export type SessionRole = "implementer" | "reviewer"
 export type SessionAgent = AgentConfig
-export type RunnerStatus = "starting" | "ready" | "working" | "idle" | "failed" | "stopped"
+export type RunnerStatus = "starting" | "ready" | "working" | "idle" | "stopping" | "failed" | "stopped"
 export type TurnStatus = "queued" | "running" | "completed" | "failed" | "interrupted"
 
 export type Turn = {
@@ -82,6 +82,7 @@ export type SessionInputEvent =
   | { data?: { turnId?: string }; eventId?: string; type: "stop" }
   | { source?: "runner"; type: "ready" | "runner.ready" }
   | { data: { status: RunnerStatus }; source?: "runner"; type: "runner.status" | "status" }
+  | { data: { reason: string }; eventId?: string; type: "runner.failure" }
   | { data: { delta: string } & TurnEventData; source?: "runner"; type: "output_text.delta" | "runner.output_text.delta" }
   | { data: { content: string } & TurnEventData; source?: "runner"; type: "output_item.done" | "runner.output_item.done" }
   | { data: TurnEventData & { content?: string }; source?: "runner"; type: "turn.completed" }

@@ -66,7 +66,7 @@ const bearerToken = (request: IncomingMessage) => {
 }
 
 const isRunnerEvent = (event: SessionInputEvent) =>
-  event.type === "ready" || event.type === "status" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.")
+  event.type === "ready" || event.type === "status" || (event.type.startsWith("runner.") && event.type !== "runner.failure") || event.type.startsWith("output_") || event.type.startsWith("turn.")
 
 const createRequestHandler = (
   store: SessionStore,

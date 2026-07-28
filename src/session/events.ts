@@ -39,6 +39,19 @@ export const applySessionEvent = (
   if (event.type === "message") {
     return { ...deps.submitMessage({ content: event.data.content, eventId: event.eventId, sessionId }), eventId: event.eventId }
   }
+  if (event.type === "runner.failure") {
+    const active = deps.activeTurn(sessionId)
+    if (active) deps.finishTurn(sessionId, active.id, "failed", undefined, event.data.reason)
+    const updated = deps.updateSession({
+      ...deps.requireSession(sessionId),
+      lastError: event.data.reason,
+      runnerStatus: "failed",
+      status: "failed",
+    })
+    deps.publish(sessionId, { data: { reason: event.data.reason, status: "failed" }, type: "runner.status" })
+    deps.publish(sessionId, { status: updated.status, type: "session.status" })
+    return { eventId: event.eventId, queued: false }
+  }
   if (event.type === "runner.ready" || event.type === "ready") {
     const session = deps.requireSession(sessionId)
     const updated = deps.updateSession({ ...session, runnerReady: true, runnerStatus: "ready" })
@@ -48,10 +61,21 @@ export const applySessionEvent = (
   }
   if (event.type === "runner.status" || event.type === "status") {
     const session = deps.requireSession(sessionId)
+    if (event.data.status === "failed") {
+      const active = deps.activeTurn(sessionId)
+      if (active) deps.finishTurn(sessionId, active.id, "failed", undefined, "Runner failed")
+    } else if (event.data.status === "stopped") {
+      const active = deps.activeTurn(sessionId)
+      if (active) deps.finishTurn(sessionId, active.id, "interrupted", undefined, "Runner stopped")
+    }
+    const current = deps.requireSession(sessionId)
     const updated = deps.updateSession({
-      ...session,
+      ...current,
       runnerReady: event.data.status === "ready" || event.data.status === "idle",
       runnerStatus: event.data.status,
+      status: event.data.status === "failed"
+        ? "failed"
+        : event.data.status === "stopped" ? "stopped" : current.status,
     })
     deps.publish(sessionId, { data: { status: event.data.status }, type: "runner.status" })
     deps.publish(sessionId, { status: updated.status, type: "session.status" })
@@ -110,8 +134,8 @@ export const applySessionEvent = (
 
   if (event.type === "stop") {
     const session = deps.requireSession(sessionId)
-    // Stop closes the session control plane without fabricating a turn terminal event.
-    const updated = deps.updateSession({ ...session, runnerStatus: "stopped", status: "stopped" })
+    // Stopping first blocks new messages; the runner publishes stopped only after interrupt/exit.
+    const updated = deps.updateSession({ ...session, runnerStatus: "stopping", status: "stopping" })
     const active = deps.activeTurn(sessionId)
     deps.publish(sessionId, { data: active ? { turnId: active.id } : undefined, type: "session.stop" })
     deps.publish(sessionId, { status: updated.status, type: "session.status" })

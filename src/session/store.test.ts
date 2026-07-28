@@ -242,13 +242,22 @@ describe("SessionStore", () => {
       event: { data: { reason: "runner crashed", turnId: failed.turnId }, type: "turn.failed" },
     })
     expect(store.get("session-1")).toMatchObject({ lastError: "runner crashed", status: "failed" })
-    const interrupted = store.submitMessage({
-      content: "interrupt",
+    expect(() => store.submitMessage({
+      content: "blocked",
       eventId: "event-2",
       sessionId: "session-1",
+    })).toThrow("Session is not accepting messages: failed")
+
+    store.create({
+      agent,
+      id: "session-2",
+      role: "implementer",
+      runDirectory,
+      workspace: "/tmp/project",
     })
+    const interrupted = store.submitMessage({ content: "interrupt", eventId: "event-3", sessionId: "session-2" })
     store.applyEvent({
-      sessionId: "session-1",
+      sessionId: "session-2",
       event: { data: { turnId: interrupted.turnId }, type: "turn.interrupted" },
     })
 
@@ -256,7 +265,7 @@ describe("SessionStore", () => {
       error: "runner crashed",
       status: "failed",
     })
-    expect(store.getTurn("session-1", interrupted.turnId)).toMatchObject({ status: "interrupted" })
+    expect(store.getTurn("session-2", interrupted.turnId)).toMatchObject({ status: "interrupted" })
   })
 
 })

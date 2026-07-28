@@ -1,16 +1,22 @@
 import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "../types.js"
 import type { NeedsCheckMode } from "../review/needs-check.js"
+import type { SessionClient } from "../session/client.js"
+import type { WorkflowAgent } from "../session/workflow-agent.js"
 
 export type WorkflowRuntime = {
   args: ParsedArgs
   baseSha: string | undefined
   config: WorkflowConfig
+  sessionClient: SessionClient
+  sessionBaseUrl: string
   hasGit: boolean
   implementerPane: string
   issueIndex: number
   needsCheckMode: NeedsCheckMode
   prompts: LoadedPrompts
   reviewerPane: string
+  implementerSession?: WorkflowAgent
+  reviewerSession?: WorkflowAgent
 }
 
 export type ReviewLoopOptions = {

@@ -79,3 +79,24 @@ export const handleImplementAskIfNeeded = async (
 
   return current
 }
+
+export const handleSessionImplementAskIfNeeded = async (
+  output: string,
+  context: string,
+  continueTask: () => Promise<string>,
+  deps: Pick<ImplementAskDeps, "log" | "promptContinue"> = defaultImplementAskDeps(),
+) => {
+  let current = output
+
+  while (parseImplementStatus(extractImplementResult(current)) === "needs_input") {
+    deps.log(
+      `[ImplementAsk] implementer 有问题需要确认（${context}）。` +
+        "可在 implementer 侧继续交互，完成后选择是否继续。",
+    )
+    notifyImplementAsk()
+    if (!await deps.promptContinue()) throw new ImplementAskAbortError(context)
+    current = await continueTask()
+  }
+
+  return current
+}

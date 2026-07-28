@@ -12,6 +12,7 @@ export type SessionClient = {
   create: (input: Omit<CreateSessionInput, "id">) => Promise<SessionRecord>
   get: (sessionId: string) => Promise<SessionRecord>
   getItems: (sessionId: string) => Promise<SessionItem[]>
+  getRunnerToken: (sessionId: string) => string | undefined
   postEvent: (sessionId: string, event: SessionInputEvent) => Promise<unknown>
   sendMessage: (
     sessionId: string,
@@ -70,7 +71,7 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
   const runnerTokens = new Map<string, string>()
 
   const isRunnerEvent = (event: SessionInputEvent) =>
-    event.type === "ready" || event.type === "status" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.")
+    event.type === "ready" || event.type === "status" || (event.type.startsWith("runner.") && event.type !== "runner.failure") || event.type.startsWith("output_") || event.type.startsWith("turn.")
 
   const request = async (path: string, init: RequestInit = {}) => {
     const response = await fetch(`${options.baseUrl}${path}`, {
@@ -130,7 +131,7 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
   }
 
   const waitForTurn = async (sessionId: string, turnId: string): Promise<SessionItem> => {
-    const waited = await waitForTurnResult({ create, get, getItems, postEvent, sendMessage, stream, waitForTurn }, sessionId, turnId)
+    const waited = await waitForTurnResult({ create, get, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }, sessionId, turnId)
     if (waited.turn.status !== "completed") {
       throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
     }
@@ -138,5 +139,5 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
     throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
   }
 
-  return { create, get, getItems, postEvent, sendMessage, stream, waitForTurn }
+  return { create, get, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }
 }
