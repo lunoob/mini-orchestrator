@@ -77,17 +77,21 @@ const createRequestHandler = (
 ) => async (request: IncomingMessage, response: ServerResponse) => {
   responses.add(response)
   response.once("close", () => responses.delete(response))
+  const url = new URL(request.url ?? "/", "http://127.0.0.1")
+  const sessionId = pathSessionId(url.pathname)
+  const itemsSessionId = pathSessionId(url.pathname, "/items")
+  const streamSessionId = pathSessionId(url.pathname, "/stream")
+  const eventSessionId = pathSessionId(url.pathname, "/events")
+  const resourceSessionId = sessionId ?? itemsSessionId ?? streamSessionId ?? eventSessionId
   const providedToken = bearerToken(request)
-  const eventSessionId = pathSessionId(new URL(request.url ?? "/", "http://127.0.0.1").pathname, "/events")
   const isParent = providedToken === token
-  const isRunner = eventSessionId !== undefined && providedToken === store.getRunnerToken(eventSessionId)
+  const isRunner = resourceSessionId !== undefined && providedToken === store.getRunnerToken(resourceSessionId)
   if (!isParent && !isRunner) {
     sendJson(response, 401, { error: "Unauthorized" })
     return
   }
 
   try {
-    const url = new URL(request.url ?? "/", "http://127.0.0.1")
     const { method } = request
     if (method === "POST" && url.pathname === "/v1/sessions") {
       const body = await readJson(request)
@@ -104,10 +108,7 @@ const createRequestHandler = (
       return
     }
 
-    const sessionId = pathSessionId(url.pathname)
-    const itemsSessionId = pathSessionId(url.pathname, "/items")
-    const streamSessionId = pathSessionId(url.pathname, "/stream")
-    const eventsSessionId = pathSessionId(url.pathname, "/events")
+    const eventsSessionId = eventSessionId
 
     if (method === "GET" && sessionId) {
       const session = store.get(sessionId)
@@ -221,8 +222,15 @@ export const createSessionApiServer = (options: ServerOptions): SessionApiServer
     }
     const snapshot = options.store ? undefined : await readSessionSnapshot(options.runDirectory)
     const store = options.store ?? createSessionStore({ snapshot })
-    const persist = async () => {
-      await writeSessionSnapshot(options.runDirectory, store.snapshot())
+    let persistQueue = Promise.resolve()
+    const persist = () => {
+      const snapshot = store.snapshot()
+      const next = persistQueue.then(async () => {
+        await writeSessionSnapshot(options.runDirectory, snapshot)
+      })
+      // Keep later events writable after one failed request, while preserving that request's error.
+      persistQueue = next.catch(() => undefined)
+      return next
     }
     server = createServer(createRequestHandler(store, token, options.runDirectory, persist, responses))
     const port = await listen(server)

@@ -247,6 +247,40 @@ describe("Session API server", () => {
     }
   })
 
+  test("allows a runner token to read its session, items and stream", async () => {
+    const { createSessionApiServer } = await import(serverModulePath) as typeof import("./server.js")
+    const server = createSessionApiServer({ runDirectory, token: "parent-token" })
+    const { baseUrl } = await server.start()
+
+    try {
+      const createResponse = await postJson(`${baseUrl}/v1/sessions`, "parent-token", {
+        agent,
+        role: "implementer",
+        workspace: "/tmp/project",
+      })
+      const created = await createResponse.json() as { runnerToken: string; session: { id: string } }
+
+      const sessionResponse = await fetch(`${baseUrl}/v1/sessions/${created.session.id}`, {
+        headers: { authorization: `Bearer ${created.runnerToken}` },
+      })
+      const itemsResponse = await fetch(`${baseUrl}/v1/sessions/${created.session.id}/items`, {
+        headers: { authorization: `Bearer ${created.runnerToken}` },
+      })
+      const streamResponse = await fetch(`${baseUrl}/v1/sessions/${created.session.id}/stream`, {
+        headers: { authorization: `Bearer ${created.runnerToken}` },
+      })
+      const reader = streamResponse.body?.getReader()
+      await reader?.read()
+      await reader?.cancel()
+
+      expect(sessionResponse.status).toBe(200)
+      expect(itemsResponse.status).toBe(200)
+      expect(streamResponse.status).toBe(200)
+    } finally {
+      await server.stop()
+    }
+  })
+
   test("requires the runner token for every runner-specific event type", async () => {
     const { createSessionApiServer } = await import(serverModulePath) as typeof import("./server.js")
     const server = createSessionApiServer({ runDirectory, token: "parent-token" })

@@ -161,6 +161,33 @@ describe("SessionClient", () => {
     }
   })
 
+  test("does not return partial output as success when the turn fails", async () => {
+    const { createSessionClient } = await import(clientModulePath) as typeof import("./client.js")
+    const server = createSessionApiServer({ runDirectory, token: "test-token" })
+    const { baseUrl } = await server.start()
+    const client = createSessionClient({ baseUrl, token: "test-token" })
+
+    try {
+      const session = await client.create({ agent, role: "implementer", workspace: "/tmp/project", runDirectory })
+      const { turnId } = await client.sendMessage(session.id, { content: "prompt", eventId: "event-partial-failure" })
+      const waiting = client.waitForTurn(session.id, turnId)
+      const failed = expect(waiting).rejects.toThrow("runner crashed")
+
+      await client.postEvent(session.id, {
+        data: { content: "partial output", turnId },
+        type: "runner.output_item.done",
+      })
+      await client.postEvent(session.id, {
+        data: { reason: "runner crashed", turnId },
+        type: "turn.failed",
+      })
+
+      await failed
+    } finally {
+      await server.stop()
+    }
+  })
+
   test("reconciles a disconnected SSE window from snapshot and items without duplicating output", async () => {
     const { createSessionClient } = await import(clientModulePath) as typeof import("./client.js")
     const server = createSessionApiServer({ runDirectory, token: "test-token" })

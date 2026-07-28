@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -14,7 +15,7 @@ export const writeSessionSnapshot = async (
 ) => {
   await mkdir(runDirectory, { recursive: true })
   const filePath = getSessionSnapshotPath(runDirectory)
-  const temporaryPath = `${filePath}.tmp`
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`
 
   // Replace atomically so a process crash cannot leave resume with partial JSON.
   await writeFile(temporaryPath, JSON.stringify(snapshot, null, 2), "utf8")

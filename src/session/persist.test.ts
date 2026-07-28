@@ -40,4 +40,26 @@ describe("session persistence", () => {
       await rm(directory, { force: true, recursive: true })
     }
   })
+
+  test("serializes concurrent snapshot writes without losing the final snapshot", async () => {
+    const { writeSessionSnapshot, readSessionSnapshot } =
+      await import(persistModulePath) as typeof import("./persist.js")
+    const directory = await mkdtemp(path.join(os.tmpdir(), "mini-orch-session-concurrent-"))
+
+    try {
+      await expect(Promise.all(Array.from({ length: 24 }, (_, sequence) =>
+        writeSessionSnapshot(directory, {
+          items: {},
+          sequence,
+          sessions: [],
+          submittedEvents: [],
+        }),
+      ))).resolves.toHaveLength(24)
+
+      const snapshot = await readSessionSnapshot(directory)
+      expect(snapshot?.sequence).toEqual(expect.any(Number))
+    } finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
 })

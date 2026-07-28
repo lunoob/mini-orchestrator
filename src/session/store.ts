@@ -146,6 +146,7 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
   }
 
   const getItems = (sessionId: string) => [...(items.get(sessionId) ?? [])]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const getRunnerToken = (sessionId: string) => runnerTokens.get(sessionId)
   const getTurn = (sessionId: string, turnId: string) =>
     getTurns(sessionId).find(turn => turn.id === turnId)
@@ -215,7 +216,7 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
 
     const completedAt = now().toISOString()
     const finished: Turn = { ...current, completedAt, error, status }
-    if (content) finished.outputText = content
+    if (content !== undefined) finished.outputText = content
     const nextTurns = currentTurns.map(turn => turn.id === turnId ? finished : turn)
     const updated = updateSession(
       status === "failed"
@@ -223,7 +224,7 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
         : session,
       nextTurns,
     )
-    if (content && !getItems(sessionId).some(item => item.role === "assistant" && item.turnId === turnId)) {
+    if (content !== undefined && !getItems(sessionId).some(item => item.role === "assistant" && item.turnId === turnId)) {
       addItem(sessionId, {
         content,
         createdAt: completedAt,

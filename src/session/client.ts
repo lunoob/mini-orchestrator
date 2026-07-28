@@ -131,6 +131,9 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
 
   const waitForTurn = async (sessionId: string, turnId: string): Promise<SessionItem> => {
     const waited = await waitForTurnResult({ create, get, getItems, postEvent, sendMessage, stream, waitForTurn }, sessionId, turnId)
+    if (waited.turn.status !== "completed") {
+      throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
+    }
     if (waited.output) return waited.output
     throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
   }

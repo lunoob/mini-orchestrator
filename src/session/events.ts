@@ -103,12 +103,20 @@ export const applySessionEvent = (
   }
   if (event.type === "interrupt") {
     const turn = event.data?.turnId ? deps.getTurn(sessionId, event.data.turnId) : deps.activeTurn(sessionId)
-    if (turn) deps.finishTurn(sessionId, turn.id, "interrupted")
+    // Interrupt is a runner instruction; only the matching terminal event may finish the turn.
+    deps.publish(sessionId, { data: turn ? { turnId: turn.id } : undefined, type: "session.interrupt" })
     return { eventId: event.eventId, queued: false, turnId: turn?.id }
   }
 
-  const session = deps.requireSession(sessionId)
-  const updated = deps.updateSession({ ...session, runnerStatus: "stopped", status: "stopped" })
-  deps.publish(sessionId, { status: updated.status, type: "session.status" })
-  return { eventId: "eventId" in event ? event.eventId : undefined, queued: false }
+  if (event.type === "stop") {
+    const session = deps.requireSession(sessionId)
+    // Stop closes the session control plane without fabricating a turn terminal event.
+    const updated = deps.updateSession({ ...session, runnerStatus: "stopped", status: "stopped" })
+    const active = deps.activeTurn(sessionId)
+    deps.publish(sessionId, { data: active ? { turnId: active.id } : undefined, type: "session.stop" })
+    deps.publish(sessionId, { status: updated.status, type: "session.status" })
+    return { eventId: event.eventId, queued: false }
+  }
+
+  throw new Error("[Session] Unsupported session event")
 }

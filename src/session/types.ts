@@ -110,6 +110,8 @@ export type SessionStreamEvent = {
     | "session.status"
     | "runner.ready"
     | "runner.status"
+    | "session.interrupt"
+    | "session.stop"
     | "turn.completed"
     | "turn.failed"
     | "turn.interrupted"
