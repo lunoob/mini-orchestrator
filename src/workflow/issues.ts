@@ -9,7 +9,7 @@ import {
   stopAgent,
   waitForAgentReady,
 } from "../agent/index.js"
-import { createSession } from "../agent/session.js"
+import { createWorkflowRunContext } from "./run-context.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { extractImplementResult, parseImplementStatus, render } from "../lib/utils.js"
@@ -41,11 +41,11 @@ const runSingleSpecCycle = async (
 
   const specContent = await readFile(specPath, "utf8")
   const configContent = await readFile(configPath, "utf8")
-  const { sessionDir: specSessionDir } = await createSession(
+  const { runDirectory: workflowRunDirectory } = await createWorkflowRunContext(
     runtime.config.projectDir, configPath, configContent, specPath, specContent, runtime.args,
   )
 
-  console.log(`[Session] Session: ${specSessionDir}`)
+  console.log(`[Workflow] Run directory: ${workflowRunDirectory}`)
 
   if (shouldSkipImplement(issue)) {
     console.log(`[Implement] Skipping (state=review): ${issue.title}`)
@@ -74,7 +74,7 @@ const runSingleSpecCycle = async (
   }
 
   await markIssueInReview(configPath, issueIndex, issues)
-  await runReviewLoop(runtime, configPath, round, false, specSessionDir, specPath, issueIndex, issues)
+  await runReviewLoop(runtime, configPath, round, false, workflowRunDirectory, specPath, issueIndex, issues)
 }
 
 export const runIssueQueueFromIndex = async (

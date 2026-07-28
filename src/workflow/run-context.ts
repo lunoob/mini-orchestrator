@@ -6,13 +6,13 @@ import type { ParsedArgs } from "../types.js"
 
 const RESUME_ARGS = new Set(["resume-from", "needs-check-action", "needs-check-notes", "help"])
 
-export type SessionInfo = {
-  sessionId: string
-  sessionDir: string
+export type WorkflowRunContext = {
+  runId: string
+  runDirectory: string
 }
 
-export type RunMetadata = {
-  sessionId: string
+export type WorkflowRunMetadata = {
+  runId: string
   createdAt: string
   configPath: string
   specPath: string
@@ -26,18 +26,17 @@ const getIdentityArgs = (args: ParsedArgs): Record<string, string> => {
   return Object.fromEntries(entries)
 }
 
-export const createSession = async (
+export const createWorkflowRunContext = async (
   projectDir: string,
   configPath: string,
   configContent: string,
   specPath: string,
   specContent: string,
   args: ParsedArgs,
-): Promise<SessionInfo> => {
+): Promise<WorkflowRunContext> => {
   const resolvedConfigPath = path.resolve(configPath)
   const resolvedSpecPath = path.resolve(specPath)
   const identityArgs = getIdentityArgs(args)
-
   const canonicalInput = JSON.stringify({
     configPath: resolvedConfigPath,
     configContent,
@@ -45,24 +44,19 @@ export const createSession = async (
     specContent,
     cliArgs: identityArgs,
   })
-
-  const fullHash = createHash("sha256").update(canonicalInput).digest("hex")
-  const shortHash = fullHash.slice(0, 8)
+  const shortHash = createHash("sha256").update(canonicalInput).digest("hex").slice(0, 8)
   const specName = path.basename(resolvedSpecPath, path.extname(resolvedSpecPath))
-  const sessionId = `${specName}-${shortHash}`
-  const sessionDir = path.join(projectDir, ".orchestrator", sessionId)
+  const runId = `${specName}-${shortHash}`
+  const runDirectory = path.join(projectDir, ".orchestrator", runId)
 
-  await mkdir(sessionDir, { recursive: true })
-
-  const runMeta: RunMetadata = {
-    sessionId,
-    createdAt: new Date().toISOString(),
-    configPath: resolvedConfigPath,
-    specPath: resolvedSpecPath,
+  await mkdir(runDirectory, { recursive: true })
+  const metadata: WorkflowRunMetadata = {
     cliArgs: identityArgs,
+    configPath: resolvedConfigPath,
+    createdAt: new Date().toISOString(),
+    runId,
+    specPath: resolvedSpecPath,
   }
-
-  await writeFile(path.join(sessionDir, "run.json"), JSON.stringify(runMeta, null, 2), "utf8")
-
-  return { sessionId, sessionDir }
+  await writeFile(path.join(runDirectory, "run.json"), JSON.stringify(metadata, null, 2), "utf8")
+  return { runDirectory, runId }
 }
