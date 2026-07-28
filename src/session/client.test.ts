@@ -11,7 +11,6 @@ const runDirectory = "/tmp/mini-orch-session-client-tests"
 const agent = {
   agent: "codex",
   command: "codex",
-  integrationAgent: "codex",
   name: "codex",
 }
 

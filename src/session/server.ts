@@ -49,8 +49,8 @@ const requiredRole = (value: unknown): SessionRole => {
 
 const requiredAgent = (value: unknown): SessionAgent => {
   if (!isRecord(value)) throw new Error("[Session] agent must be a parsed AgentConfig")
-  if (typeof value.agent !== "string" || typeof value.name !== "string" || typeof value.command !== "string" || typeof value.integrationAgent !== "string") {
-    throw new Error("[Session] agent must include agent, name, command and integrationAgent")
+  if (typeof value.agent !== "string" || typeof value.name !== "string" || typeof value.command !== "string") {
+    throw new Error("[Session] agent must include agent, name and command")
   }
   return value as unknown as AgentConfig
 }
@@ -66,7 +66,7 @@ const bearerToken = (request: IncomingMessage) => {
 }
 
 const isRunnerEvent = (event: SessionInputEvent) =>
-  event.type === "ready" || event.type === "status" || (event.type.startsWith("runner.") && event.type !== "runner.failure") || event.type.startsWith("output_") || event.type.startsWith("turn.")
+  event.type === "ready" || event.type === "status" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.")
 
 const createRequestHandler = (
   store: SessionStore,

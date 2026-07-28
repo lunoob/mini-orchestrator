@@ -10,7 +10,6 @@ const persistModulePath = "./persist.js"
 const agent = {
   agent: "codex",
   command: "codex",
-  integrationAgent: "codex",
   name: "codex",
 }
 

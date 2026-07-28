@@ -9,7 +9,7 @@ import { createSessionClient } from "./client.js"
 import { createRunnerSupervisor } from "./runner-supervisor.js"
 import type { PaneBridge } from "./pane-bridge.js"
 
-const agent = { agent: "codex", command: "codex", integrationAgent: "codex", name: "codex" }
+const agent = { agent: "codex", command: "codex", name: "codex" }
 
 describe("RunnerSupervisor", () => {
   test("waits for runner.ready and returns the session/pane mapping", async () => {
@@ -17,12 +17,10 @@ describe("RunnerSupervisor", () => {
     const server = createSessionApiServer({ runDirectory, token: "parent-token" })
     const { baseUrl } = await server.start()
     const parent = createSessionClient({ baseUrl, token: "parent-token" })
-    const createResponse = await fetch(`${baseUrl}/v1/sessions`, {
-      body: JSON.stringify({ agent, role: "implementer", workspace: "/tmp/project" }),
-      headers: { authorization: "Bearer parent-token", "content-type": "application/json" },
-      method: "POST",
-    })
-    const created = await createResponse.json() as { runnerToken: string; session: { id: string } }
+    // 通过 client.create 创建 session，确保 runner token 存入内部映射
+    // 使得 reportFailure 上报 runner.failure 时可自动使用 runner token
+    const session = await parent.create({ agent, role: "implementer", runDirectory, workspace: "/tmp/project" })
+    const runnerToken = parent.getRunnerToken(session.id) ?? "parent-token"
     let paneClosed: ((error: Error) => void) | undefined
     const paneBridge: PaneBridge = {
       bootstrap: vi.fn(async (_paneId, command) => {
@@ -45,14 +43,14 @@ describe("RunnerSupervisor", () => {
         paneBridge,
         projectDir: "/tmp/project",
         runDirectory,
-        runnerToken: created.runnerToken,
-        sessionId: created.session.id,
+        runnerToken,
+        sessionId: session.id,
         sessionClient: parent,
       })
-      await expect(supervisor.start()).resolves.toMatchObject({ paneId: "pane-1", sessionId: created.session.id })
+      await expect(supervisor.start()).resolves.toMatchObject({ paneId: "pane-1", sessionId: session.id })
       expect(paneBridge.bootstrap).toHaveBeenCalledTimes(1)
       paneClosed?.(new Error("pane closed by user"))
-      await expect.poll(async () => (await parent.get(created.session.id)).status, { timeout: 500 }).toBe("failed")
+      await expect.poll(async () => (await parent.get(session.id)).status, { timeout: 500 }).toBe("failed")
       await supervisor.stop()
     } finally {
       await server.stop()

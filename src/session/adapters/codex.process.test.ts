@@ -26,7 +26,6 @@ describe.skipIf(process.env.MINI_ORCH_PROCESS_TEST !== "1")("Codex app-server pr
       agent: {
         agent: "codex",
         command: `"${process.execPath}" "${scriptPath}"`,
-        integrationAgent: "codex",
         name: "codex",
       },
       cwd: process.cwd(),

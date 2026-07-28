@@ -71,7 +71,7 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
   const runnerTokens = new Map<string, string>()
 
   const isRunnerEvent = (event: SessionInputEvent) =>
-    event.type === "ready" || event.type === "status" || (event.type.startsWith("runner.") && event.type !== "runner.failure") || event.type.startsWith("output_") || event.type.startsWith("turn.")
+    event.type === "ready" || event.type === "status" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.")
 
   const request = async (path: string, init: RequestInit = {}) => {
     const response = await fetch(`${options.baseUrl}${path}`, {

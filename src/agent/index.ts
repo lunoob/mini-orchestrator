@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 
-import type { AgentConfig, AgentListResult, AgentStartResult, PaneSplitResult } from "../types.js"
+import type { AgentConfig, AgentListResult, AgentStartResult, HerdrAgentConfig, PaneSplitResult } from "../types.js"
+import { AGENT_DEFINITIONS } from "../config/agents.js"
 import { splitCommand } from "../lib/utils.js"
 import { waitForCompletionWithFallback } from "./completion-wait.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
@@ -60,7 +61,7 @@ const createAgentPane = async (projectDir: string) => {
   return parsed.result.pane.pane_id
 }
 
-const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: string) => {
+const startAgentWithName = async (projectDir: string, agent: HerdrAgentConfig, name: string) => {
   const paneId = await createAgentPane(projectDir)
   const agentArgs = splitCommand(agent.command).slice(1)
   const startArgs = [
@@ -80,7 +81,7 @@ const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: 
 
 export const startAgent = async (
   projectDir: string,
-  agent: AgentConfig,
+  agent: HerdrAgentConfig,
   options: StartAgentOptions = {},
 ) => {
   let name = agent.name
@@ -192,7 +193,7 @@ export const sendTaskAndWait = async (
   return fallbackOutput ?? readAgentOutput(paneId, 280)
 }
 
-export const agentWaitOptions = (agent: AgentConfig): AgentWaitOptions => ({
+export const agentWaitOptions = (agent: HerdrAgentConfig): AgentWaitOptions => ({
   agentReadyPattern: agent.agentReadyPattern,
 })
 
@@ -200,11 +201,14 @@ export const runAgentUpdate = async (
   projectDir: string,
   agent: AgentConfig,
 ): Promise<boolean> => {
-  if (!agent.updateCommand) return true
+  const definition = AGENT_DEFINITIONS[agent.agent]
+  if (!definition?.supportsUpdate) return true
 
-  console.log(`[Agent] Running update for "${agent.name}": ${agent.updateCommand}`)
+  const cli = definition.cli ?? agent.agent
+  const updateCommand = `${cli} update`
+  console.log(`[Agent] Running update for "${agent.name}": ${updateCommand}`)
 
-  const [cmd, ...args] = splitCommand(agent.updateCommand)
+  const [cmd, ...args] = splitCommand(updateCommand)
   const { code } = await new Promise<{ code: number | null }>((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: projectDir,
@@ -222,7 +226,7 @@ export const runAgentUpdate = async (
   return true
 }
 
-export const runAgentIntegration = async (agent: AgentConfig): Promise<boolean> => {
+export const runAgentIntegration = async (agent: HerdrAgentConfig): Promise<boolean> => {
   console.log(
     `[Agent] Running herdr integration for "${agent.name}": herdr integration ${agent.integrationAgent}`,
   )

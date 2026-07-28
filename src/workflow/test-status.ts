@@ -11,7 +11,7 @@ import {
   stopAgent,
   waitForAgentReady,
 } from "../agent/index.js"
-import { resolveAgentConfig } from "../config/agents.js"
+import { resolveHerdrAgentConfig } from "../config/agents.js"
 import {
   IMPLEMENT_RESULT_END,
   IMPLEMENT_RESULT_START,
@@ -51,7 +51,7 @@ export const buildTestStatusPrompt = (outputFormat: string) =>
 
 export const runTestStatus = async (args: ParsedArgs) => {
   const projectDir = args.projectDir ?? process.cwd()
-  const agent = resolveAgentConfig({
+  const agent = resolveHerdrAgentConfig({
     agent: "claude",
     model: "default",
     name: "test-claude",

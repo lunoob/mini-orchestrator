@@ -1,10 +1,11 @@
-import type { AgentConfig, AgentInputConfig } from "../types.js"
+import type { AgentConfig, AgentInputConfig, HerdrAgentConfig } from "../types.js"
 
 export type AgentDefinition = {
+  /** @deprecated 不再通过 pane 文本匹配判定就绪状态；Session adapter 使用结构化 runner.ready 事件 */
   agentReadyPattern: string
   /** 实际 CLI 可执行名，省略时与配置中的 agent 同名 */
   cli?: string
-  /** herdr integration 子命令参数，省略时与配置中的 agent 同名 */
+  /** @deprecated herdr integration 不再作为 agent 生命周期路径；私有 runner 直接管理进程 */
   integrationAgent?: string
   supportsUpdate?: boolean
 }
@@ -68,13 +69,32 @@ export const resolveAgentConfig = (input: AgentInputConfig): AgentConfig => {
   if (input.effort) validateEffort(input.agent, input.effort, input.name)
 
   const cli = definition.cli ?? input.agent
-  const integrationAgent = definition.integrationAgent ?? input.agent
+
+  return {
+    ...input,
+    command: buildCommand(cli, input.agent, input.model, input.effort),
+  }
+}
+
+/** 解析 Herdr pane-based agent 配置（旧 workflow 路径专用），在 AgentConfig 基础上补充 Herdr 字段 */
+export const resolveHerdrAgentConfig = (input: AgentInputConfig): HerdrAgentConfig => {
+  const definition = AGENT_DEFINITIONS[input.agent]
+  if (!definition) {
+    throw new Error(
+      `[Config] Unknown agent "${input.agent}" for "${input.name}". ` +
+        `Supported: ${Object.keys(AGENT_DEFINITIONS).join(", ")}`,
+    )
+  }
+
+  if (input.effort) validateEffort(input.agent, input.effort, input.name)
+
+  const cli = definition.cli ?? input.agent
 
   return {
     ...input,
     agentReadyPattern: definition.agentReadyPattern,
     command: buildCommand(cli, input.agent, input.model, input.effort),
-    integrationAgent,
+    integrationAgent: definition.integrationAgent ?? input.agent,
     updateCommand: definition.supportsUpdate ? `${cli} update` : undefined,
   }
 }

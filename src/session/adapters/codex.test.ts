@@ -22,7 +22,7 @@ describe("CodexAdapter", () => {
     const { notifications, request, transport } = makeTransport()
     const emit = vi.fn()
     const adapter = createCodexAdapter({
-      agent: { agent: "codex", command: "codex --model gpt-5", integrationAgent: "codex", name: "codex" },
+      agent: { agent: "codex", command: "codex --model gpt-5", name: "codex" },
       cwd: "/tmp/project",
       emit,
       transport,
@@ -54,7 +54,7 @@ describe("CodexAdapter", () => {
     const { request, transport } = makeTransport()
     const emit = vi.fn()
     const adapter = createCodexAdapter({
-      agent: { agent: "codex", command: "codex", integrationAgent: "codex", name: "codex" },
+      agent: { agent: "codex", command: "codex", name: "codex" },
       cwd: "/tmp/project",
       emit,
       transport,
@@ -71,7 +71,7 @@ describe("CodexAdapter", () => {
     const failing = makeTransport()
     failing.transport.start = vi.fn(async () => { throw new Error("codex unavailable") })
     const failingAdapter = createCodexAdapter({
-      agent: { agent: "codex", command: "codex", integrationAgent: "codex", name: "codex" },
+      agent: { agent: "codex", command: "codex", name: "codex" },
       cwd: "/tmp/project",
       emit,
       transport: failing.transport,
@@ -91,7 +91,7 @@ describe("CodexAdapter", () => {
       finished.push(event.type)
     })
     const adapter = createCodexAdapter({
-      agent: { agent: "codex", command: "codex", integrationAgent: "codex", name: "codex" },
+      agent: { agent: "codex", command: "codex", name: "codex" },
       cwd: "/tmp/project",
       emit,
       transport,

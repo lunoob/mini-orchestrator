@@ -2,8 +2,8 @@ import { readFile, unlink } from "node:fs/promises"
 
 import type { AgentConfig } from "../types.js"
 import { createSessionClient } from "./client.js"
-import { createDefaultCodexAdapter } from "./adapters/codex.js"
-import type { CodexEvent, CodexNotification } from "./adapters/codex.js"
+import { createSessionAdapter } from "./adapters/factory.js"
+import type { AdapterEvent, AdapterNotification } from "./adapters/types.js"
 import { createRunnerClient } from "./runner-client.js"
 import type { SessionInputEvent } from "./types.js"
 
@@ -18,7 +18,7 @@ export type InternalRunnerConfig = {
   workspace: string
 }
 
-export const renderRunnerEvent = (event: CodexEvent) => {
+export const renderRunnerEvent = (event: AdapterEvent) => {
   const turnId = event.data.turnId
   if (event.type === "output_text.delta") {
     process.stdout.write(event.data.delta)
@@ -28,9 +28,9 @@ export const renderRunnerEvent = (event: CodexEvent) => {
   process.stdout.write(`\n[Session] turn ${turnId} ${status}\n`)
 }
 
-export const renderCodexNotification = (notification: CodexNotification) => {
+export const renderAdapterNotification = (notification: AdapterNotification) => {
   if (notification.method === "item/agentMessage/delta") return
-  process.stdout.write(`\n[Codex] ${notification.method}\n`)
+  process.stdout.write(`\n[Session] ${notification.method}\n`)
 }
 
 const readConfigPath = () => {
@@ -52,25 +52,28 @@ export const runInternalRunner = async (config: InternalRunnerConfig) => {
   const client = createSessionClient({ baseUrl: config.baseUrl, token: config.runnerToken })
   const post = (event: SessionInputEvent) => client.postEvent(config.sessionId, event)
   let runner: ReturnType<typeof createRunnerClient> | undefined
-  const adapter = createDefaultCodexAdapter({
+  const adapter = createSessionAdapter({
     agent: config.agent,
     cwd: config.workspace,
-    emit: async event => {
+    onEvent: async event => {
       renderRunnerEvent(event)
       await post({ ...event, source: "runner" } as SessionInputEvent)
     },
     onFailure: async error => {
-      await post({ data: { status: "failed" }, source: "runner", type: "runner.status" })
+      // 上报 runner.failure 携带具体错误原因，供 Session 状态机持久化
+      await post({ data: { reason: error.message }, type: "runner.failure" })
       runner?.stop()
+      // 停止 adapter 以终止底层 CLI 子进程，防止进程残留
+      await adapter.stop()
       process.exitCode = 1
-      console.error(`[Session] Codex process failed: ${error.message}`)
+      console.error(`[Session] Agent process failed: ${error.message}`)
     },
-    onNotification: renderCodexNotification,
+    onNotification: renderAdapterNotification,
   })
   runner = createRunnerClient({
     client,
     onInterrupt: turnId => adapter.interrupt(turnId),
-    onMessage: message => adapter.sendMessage(message),
+    onMessage: message => adapter.deliverMessage(message),
     onReady: () => process.stdout.write("[Session] runner ready\n"),
     onStop: () => adapter.stop(),
     sessionId: config.sessionId,

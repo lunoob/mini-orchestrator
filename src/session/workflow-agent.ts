@@ -20,7 +20,8 @@ type WorkflowAgentOptions = {
 }
 
 export const startWorkflowAgent = async (options: WorkflowAgentOptions): Promise<WorkflowAgent> => {
-  if (options.agent.agent !== "codex") throw new Error(`[Session] Unsupported runner agent: ${options.agent.agent}`)
+  const supported = new Set(["claude", "codex", "cursor"])
+  if (!supported.has(options.agent.agent)) throw new Error(`[Session] Unsupported runner agent: ${options.agent.agent}`)
   const session = await options.client.create({
     agent: options.agent,
     role: options.role,

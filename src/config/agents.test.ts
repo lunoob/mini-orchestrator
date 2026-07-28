@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveAgentConfig } from "./agents.js"
+import { resolveAgentConfig, resolveHerdrAgentConfig } from "./agents.js"
 
 describe("resolveAgentConfig", () => {
   it("resolves codex with model", () => {
@@ -11,9 +11,10 @@ describe("resolveAgentConfig", () => {
     })
 
     expect(config.command).toBe("codex --model gpt-5.6-terra")
-    expect(config.agentReadyPattern).toBe("Codex")
-    expect(config.integrationAgent).toBe("codex")
-    expect(config.updateCommand).toBe("codex update")
+    // Session path 不应包含 Herdr 字段
+    expect("agentReadyPattern" in config).toBe(false)
+    expect("integrationAgent" in config).toBe(false)
+    expect("updateCommand" in config).toBe(false)
   })
 
   it("resolves codex with effort", () => {
@@ -38,19 +39,6 @@ describe("resolveAgentConfig", () => {
     })
 
     expect(config.command).toBe("cursor-agent --model composer")
-    expect(config.agentReadyPattern).toBe("Cursor Agent")
-    expect(config.integrationAgent).toBe("cursor")
-    expect(config.updateCommand).toBe("cursor-agent update")
-  })
-
-  it("resolves cursor with effort in model suffix", () => {
-    const config = resolveAgentConfig({
-      agent: "cursor",
-      model: "composer-2.5-high",
-      name: "implementer",
-    })
-
-    expect(config.command).toBe("cursor-agent --model composer-2.5-high")
   })
 
   it("throws when cursor has effort field", () => {
@@ -62,18 +50,6 @@ describe("resolveAgentConfig", () => {
         name: "implementer",
       }),
     ).toThrow(/effort is not supported for cursor/)
-  })
-
-  it("resolves claude with updateCommand", () => {
-    const config = resolveAgentConfig({
-      agent: "claude",
-      model: "haiku",
-      name: "implementer",
-    })
-
-    expect(config.command).toBe("claude --model haiku")
-    expect(config.agentReadyPattern).toBe("Claude")
-    expect(config.updateCommand).toBe("claude update")
   })
 
   it("resolves claude with effort", () => {
@@ -103,5 +79,46 @@ describe("resolveAgentConfig", () => {
     expect(() =>
       resolveAgentConfig({ agent: "unknown", model: "x", name: "impl" }),
     ).toThrow(/Unknown agent "unknown"/)
+  })
+})
+
+describe("resolveHerdrAgentConfig", () => {
+  it("resolves codex with Herdr-specific fields", () => {
+    const config = resolveHerdrAgentConfig({
+      agent: "codex",
+      model: "gpt-5.6-terra",
+      name: "reviewer",
+    })
+
+    expect(config.command).toBe("codex --model gpt-5.6-terra")
+    expect(config.agentReadyPattern).toBe("Codex")
+    expect(config.integrationAgent).toBe("codex")
+    expect(config.updateCommand).toBe("codex update")
+  })
+
+  it("resolves claude with Herdr-specific fields", () => {
+    const config = resolveHerdrAgentConfig({
+      agent: "claude",
+      model: "haiku",
+      name: "implementer",
+    })
+
+    expect(config.command).toBe("claude --model haiku")
+    expect(config.agentReadyPattern).toBe("Claude")
+    expect(config.integrationAgent).toBe("claude")
+    expect(config.updateCommand).toBe("claude update")
+  })
+
+  it("resolves cursor with Herdr-specific fields", () => {
+    const config = resolveHerdrAgentConfig({
+      agent: "cursor",
+      model: "composer",
+      name: "implementer",
+    })
+
+    expect(config.command).toBe("cursor-agent --model composer")
+    expect(config.agentReadyPattern).toBe("Cursor Agent")
+    expect(config.integrationAgent).toBe("cursor")
+    expect(config.updateCommand).toBe("cursor-agent update")
   })
 })

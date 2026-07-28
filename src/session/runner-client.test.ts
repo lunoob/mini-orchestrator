@@ -5,7 +5,7 @@ import type { SessionClient } from "./client.js"
 import type { SessionItem, SessionRecord } from "./types.js"
 
 const session: SessionRecord = {
-  agent: { agent: "codex", command: "codex", integrationAgent: "codex", name: "codex" },
+  agent: { agent: "codex", command: "codex", name: "codex" },
   createdAt: new Date().toISOString(),
   id: "session-1",
   role: "implementer",

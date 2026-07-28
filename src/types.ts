@@ -9,14 +9,14 @@ export type AgentInputConfig = {
 
 /** 由 agent + model 解析后的运行时 agent 配置 */
 export type AgentConfig = AgentInputConfig & {
-  /** herdr pane wait-output --match：等待启动输出中出现该文本后再发送首条 prompt */
-  agentReadyPattern?: string
   command: string
-  /** 启动 agent 前先执行的 update 命令（如 "codex update"），
-   *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */
-  updateCommand?: string
-  /** herdr integration 子命令参数，如 cursor → `herdr integration cursor` */
+}
+
+/** Herdr pane-based agent 配置（旧 workflow 路径专用），在 AgentConfig 基础上补充 Herdr 特有字段 */
+export type HerdrAgentConfig = AgentConfig & {
+  agentReadyPattern: string
   integrationAgent: string
+  updateCommand?: string
 }
 
 export type PromptConfig = {
