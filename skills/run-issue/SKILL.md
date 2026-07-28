@@ -82,27 +82,27 @@ disable-model-invocation: true
 
 llm 模式命令为:
 ```bash
-zsh -ic 'start-orchestrator \
+zsh -ic 'mini-orch \
   --config "'"$CONFIG_PATH"'" \
   --needs-check-mode llm'
 ```
 
 终端模式命令为:
 ```bash
-start-orchestrator --config "'"$CONFIG_PATH"'"
+mini-orch --config "'"$CONFIG_PATH"'"
 ```
 
 ### 4. 询问是否启动编排器
 
-用户要启动的话就使用 `start-orchestrator` 启动编排器，传入已保存的配置文件：
+用户要启动的话就使用 `mini-orch` 启动编排器，传入已保存的配置文件：
 
-> `start-orchestrator` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
+> `mini-orch` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
 
 等待期间**不要**向用户反复发送状态旁白，**不要**去读项目文件探查进度；仅以 exit code 为准。若用户主动询问，简短说明即可。
 
 #### 退出码处理
 
-`start-orchestrator` 退出后，根据 exit code 在 chat 中向用户报告结果：
+`mini-orch` 退出后，根据 exit code 在 chat 中向用户报告结果：
 
 | exit code | 含义 | 报告方式 |
 |-----------|------|----------|
@@ -110,7 +110,7 @@ start-orchestrator --config "'"$CONFIG_PATH"'"
 | 1 | 编排失败 | 显示编排器的错误消息 |
 | 2 | needs_check 暂停 | 告诉用户需要人工 Review，以及 `CHECKPOINT:` 路径 |
 
-> exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `start-orchestrator --resume-from <path> --needs-check-action <action>` 恢复。
+> exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `mini-orch --resume-from <path> --needs-check-action <action>` 恢复。
 
 ## 示例
 
