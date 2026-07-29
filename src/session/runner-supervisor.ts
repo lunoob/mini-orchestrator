@@ -41,7 +41,7 @@ const event = (input: SessionInputEvent) => input
 const resolveTsxCli = () => {
   try {
     const require = createRequire(import.meta.url)
-    return require.resolve("tsx/dist/cli.mjs")
+    return require.resolve("tsx/cli")
   } catch {
     return undefined
   }
