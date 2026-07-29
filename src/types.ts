@@ -12,13 +12,6 @@ export type AgentConfig = AgentInputConfig & {
   command: string
 }
 
-/** Herdr pane-based agent 配置（旧 workflow 路径专用），在 AgentConfig 基础上补充 Herdr 特有字段 */
-export type HerdrAgentConfig = AgentConfig & {
-  agentReadyPattern: string
-  integrationAgent: string
-  updateCommand?: string
-}
-
 export type PromptConfig = {
   controllerImplementer?: string
   controllerReReview?: string
@@ -52,45 +45,11 @@ export type WorkflowConfig = {
   issues: IssueConfig[]
 }
 
-export type HerdrPaneInfo = {
-  agent_status: string
-  cwd: string
-  focused: boolean
-  foreground_cwd: string
-  pane_id: string
-  revision: number
-  tab_id: string
-  terminal_id: string
-  workspace_id: string
-}
-
-export type AgentListEntry = HerdrPaneInfo & {
-  agent: string
-  name?: string
-}
-
-export type AgentListResult = {
-  id: string
-  result: {
-    agents: AgentListEntry[]
-    type: "agent_list"
-  }
-}
-
 export type PaneSplitResult = {
   id: string
   result: {
     pane: { pane_id: string }
     type: string
-  }
-}
-
-export type AgentStartResult = {
-  id: string
-  result: {
-    agent: HerdrPaneInfo & { name: string }
-    argv: string[]
-    type: "agent_started"
   }
 }
 

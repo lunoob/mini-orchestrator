@@ -38,11 +38,9 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     baseSha: checkpoint.baseSha,
     config,
     hasGit: checkpoint.hasGit,
-    implementerPane: checkpoint.implementerPane,
     issueIndex: currentIndex,
     needsCheckMode: parseNeedsCheckMode(args),
     prompts,
-    reviewerPane: checkpoint.reviewerPane,
     sessionBaseUrl: baseUrl,
     sessionClient: createSessionClient({ baseUrl, token }),
   }
@@ -62,7 +60,10 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
   }
 
   try {
-    await startRuntimeAgents(runtime, sessionDir)
+    await startRuntimeAgents(runtime, sessionDir, {
+      implementerSessionId: checkpoint.implementerSessionId,
+      reviewerSessionId: checkpoint.reviewerSessionId,
+    })
     switch (action) {
     case "approve":
       console.log(`[Issue] Issue approved: ${currentIssue.title}`)

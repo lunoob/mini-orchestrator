@@ -1,7 +1,6 @@
 import path from "node:path"
 import { readFile } from "node:fs/promises"
 
-import { runAgentUpdate } from "../agent/index.js"
 import { createWorkflowRunContext } from "./run-context.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
@@ -107,12 +106,5 @@ export const runIssueQueueFromIndex = async (
 }
 
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
-  const { implementer, reviewer, projectDir } = runtime.config
-
-  await Promise.all([
-    runAgentUpdate(projectDir, implementer),
-    runAgentUpdate(projectDir, reviewer),
-  ])
-
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

@@ -47,7 +47,7 @@ describe("RunnerSupervisor", () => {
         sessionId: session.id,
         sessionClient: parent,
       })
-      await expect(supervisor.start()).resolves.toMatchObject({ paneId: "pane-1", sessionId: session.id })
+      await expect(supervisor.start()).resolves.toMatchObject({ sessionId: session.id })
       expect(paneBridge.bootstrap).toHaveBeenCalledTimes(1)
       paneClosed?.(new Error("pane closed by user"))
       await expect.poll(async () => (await parent.get(session.id)).status, { timeout: 500 }).toBe("failed")

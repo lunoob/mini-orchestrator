@@ -10,11 +10,9 @@ export type WorkflowRuntime = {
   sessionClient: SessionClient
   sessionBaseUrl: string
   hasGit: boolean
-  implementerPane: string
   issueIndex: number
   needsCheckMode: NeedsCheckMode
   prompts: LoadedPrompts
-  reviewerPane: string
   implementerSession?: WorkflowAgent
   reviewerSession?: WorkflowAgent
 }
@@ -44,21 +42,27 @@ export const buildCheckpointInput = (
   reviewOutput: string,
   verdict: import("../lib/utils.js").ReviewVerdict,
   reuseCurrentPane: boolean,
-  specPath: string,
+  _specPath: string,
   issueIndex: number,
   issues: IssueConfig[],
-) => ({
-  baseSha: runtime.baseSha,
-  cannotVerifySummary: verdict.cannotVerifySummary,
-  configPath,
-  hasGit: runtime.hasGit,
-  implementerPane: runtime.implementerPane,
-  maxReviewRounds: runtime.config.maxReviewRounds,
-  projectDir: runtime.config.projectDir,
-  reviewOutput,
-  reviewerPane: runtime.reviewerPane,
-  reuseCurrentPane,
-  round,
-  currentIssueIndex: issueIndex,
-  issues,
-})
+) => {
+  if (!runtime.implementerSession?.sessionId || !runtime.reviewerSession?.sessionId) {
+    throw new Error("[Workflow] Cannot create checkpoint: session IDs are not available")
+  }
+  return {
+    baseSha: runtime.baseSha,
+    cannotVerifySummary: verdict.cannotVerifySummary,
+    configPath,
+    hasGit: runtime.hasGit,
+    implementerSessionId: runtime.implementerSession.sessionId,
+    maxReviewRounds: runtime.config.maxReviewRounds,
+    projectDir: runtime.config.projectDir,
+    reviewOutput,
+    reviewerSessionId: runtime.reviewerSession.sessionId,
+    reuseCurrentPane,
+    round,
+    sessionBaseUrl: runtime.sessionBaseUrl,
+    currentIssueIndex: issueIndex,
+    issues,
+  }
+}

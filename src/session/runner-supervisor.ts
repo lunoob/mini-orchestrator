@@ -11,7 +11,6 @@ import type { SessionInputEvent } from "./types.js"
 import type { SessionStreamEvent } from "./types.js"
 
 export type RunnerHandle = {
-  paneId: string
   sessionId: string
   stop: () => Promise<void>
 }
@@ -190,7 +189,7 @@ export const createRunnerSupervisor = (options: SupervisorOptions): RunnerSuperv
         : `${quote(process.execPath)} ${quote(resolved.entry)} --config ${quote(configPath)}`
       await paneBridge.bootstrap(paneId, runnerCommand)
       await ready
-      started = { paneId, sessionId: options.sessionId, stop }
+      started = { sessionId: options.sessionId, stop }
       return started
     } catch (error) {
       // Stop the pending SSE/timer wait when bootstrap itself fails.

@@ -42,11 +42,9 @@ export const runWorkflow = async (args: ParsedArgs) => {
     baseSha,
     config,
     hasGit,
-    implementerPane: "",
     issueIndex: 0,
     needsCheckMode,
     prompts,
-    reviewerPane: "",
     sessionBaseUrl: baseUrl,
     sessionClient: createSessionClient({ baseUrl, token }),
   }

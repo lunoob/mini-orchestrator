@@ -1,5 +1,43 @@
+import { spawn } from "node:child_process"
+
 import type { PaneSplitResult } from "../types.js"
-import { runHerdr, tryRunHerdr } from "../agent/subprocess.js"
+
+const DELAY_MS = 800
+
+const runHerdrCommand = async (command: string, args: string[]) => {
+  await new Promise(resolve => setTimeout(resolve, DELAY_MS))
+  return new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    let stdout = ""
+    let stderr = ""
+
+    child.stdout.on("data", (chunk: Buffer | string) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on("data", (chunk: Buffer | string) => {
+      stderr += chunk.toString()
+    })
+
+    child.on("error", reject)
+    child.on("close", (code) => resolve({ code, stdout, stderr }))
+  })
+}
+
+const runHerdr = async (args: string[]) => {
+  const { code, stderr, stdout } = await runHerdrCommand("herdr", args)
+  if (code === 0) return stdout.trim()
+
+  throw new Error(`[Session] ${stderr.trim() || `herdr ${args.join(" ")} failed with code ${code}`}`)
+}
+
+const tryRunHerdr = async (args: string[]) => {
+  const { code, stderr, stdout } = await runHerdrCommand("herdr", args)
+  return { code, stderr: stderr.trim(), stdout: stdout.trim() }
+}
 
 export type PaneBridge = {
   bootstrap: (paneId: string, command: string) => Promise<void>
