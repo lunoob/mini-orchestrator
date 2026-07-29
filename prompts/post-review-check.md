@@ -28,7 +28,36 @@
 ## 工作约束
 
 - 需要做修复并校验
-- 若不清楚应使用哪条命令，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题
-- 全部检查通过（或确认项目无对应检查）后，输出 `STATUS: IMPLEMENT_DONE`
 
-{{outputFormat}}
+## 输出要求
+
+完成检查后，你必须输出一个**纯 JSON 对象**作为最终回复，不得包含任何说明文字、Markdown code fence 或 STATUS 标记。
+
+### 检查通过或需要用户输入
+```json
+{
+  "outcome": "completed",
+  "summary": "静态检查通过"
+}
+```
+
+### 需要用户输入（如不清楚使用哪条命令）
+```json
+{
+  "outcome": "needs_input",
+  "summary": "需要确认",
+  "request": {
+    "question": "要问用户的问题",
+    "allowFreeform": true
+  }
+}
+```
+
+### 失败
+```json
+{
+  "outcome": "failed",
+  "summary": "检查失败",
+  "failure": { "message": "错误详情" }
+}
+```

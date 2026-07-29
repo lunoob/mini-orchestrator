@@ -12,6 +12,7 @@ import { runIssueQueueFromIndex } from "./issues.js"
 import { markIssueFinished } from "../config/persist.js"
 import type { WorkflowRuntime } from "./types.js"
 import { startRuntimeAgents, stopRuntimeAgents } from "./agent-runtime.js"
+import { createInteractiveUserDecisionBroker } from "./agent-outcome.js"
 
 export const runWorkflowResume = async (args: ParsedArgs) => {
   const checkpointPath = path.resolve(args["resume-from"])
@@ -43,6 +44,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     prompts,
     sessionBaseUrl: baseUrl,
     sessionClient: createSessionClient({ baseUrl, token }),
+    userDecisionBroker: createInteractiveUserDecisionBroker(),
   }
 
   delete runtime.args["resume-from"]

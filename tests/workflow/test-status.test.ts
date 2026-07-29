@@ -1,46 +1,56 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-} from "@src/lib/prompt-delimiters"
-import { extractImplementResult, parseImplementStatus, stripStatusLines } from "@src/lib/utils"
-import { buildTestStatusPrompt } from "@src/workflow/test-status"
+import { parseAgentOutcome, formatAgentOutcome } from "@src/workflow/agent-outcome"
 
-describe("testStatus prompt and output parsing", () => {
-  it("builds prompt with implement-output format and delimiters", () => {
-    const outputFormat = [
-      "## 输出",
-      "必须严格遵循以下步骤:",
-      `1. 先输出起始前缀: ${IMPLEMENT_RESULT_START}`,
-      "2. 再输出其他内容（含 STATUS 标记）",
-      `3. 最后输出结束后缀: ${IMPLEMENT_RESULT_END}`,
-    ].join("\n")
-    const prompt = buildTestStatusPrompt(outputFormat)
+describe("testStatus outcome parsing", () => {
+  it("parses completed outcome from agent output", () => {
+    const outcome = formatAgentOutcome({
+      outcome: "completed",
+      summary: "佛山今天多云，气温 28°C",
+    })
 
-    expect(prompt).toContain("查询今天佛山天气")
-    expect(prompt).toContain(IMPLEMENT_RESULT_START)
-    expect(prompt).toContain(IMPLEMENT_RESULT_END)
+    const parsed = parseAgentOutcome(outcome, "implementer")
+    expect(parsed.outcome).toBe("completed")
+    expect(parsed.summary).toContain("佛山")
   })
 
-  it("strips delimiters and parses implement status like workflow", () => {
-    const raw = [
-      "some agent chatter",
-      IMPLEMENT_RESULT_START,
-      "佛山今天多云，气温 28°C。",
-      "STATUS: IMPLEMENT_DONE",
-      IMPLEMENT_RESULT_END,
-    ].join("\n")
+  it("parses needs_input outcome", () => {
+    const outcome = formatAgentOutcome({
+      outcome: "needs_input",
+      summary: "需要确认城市",
+      request: {
+        question: "查询哪个城市的天气？",
+        allowFreeform: true,
+      },
+    })
 
-    const resultBody = extractImplementResult(raw)
-    const status = parseImplementStatus(resultBody)
-    const printable = stripStatusLines(resultBody)
+    const parsed = parseAgentOutcome(outcome, "implementer")
+    expect(parsed.outcome).toBe("needs_input")
+    expect(parsed.request?.question).toContain("城市")
+  })
 
-    expect(resultBody).toContain("佛山今天多云")
-    expect(resultBody).not.toContain(IMPLEMENT_RESULT_START)
-    expect(resultBody).not.toContain(IMPLEMENT_RESULT_END)
-    expect(status).toBe("done")
-    expect(printable).toContain("佛山今天多云")
-    expect(printable).not.toMatch(/STATUS:/)
+  it("parses failed outcome", () => {
+    const outcome = formatAgentOutcome({
+      outcome: "failed",
+      summary: "无法获取天气数据",
+      failure: { message: "API 请求超时" },
+    })
+
+    const parsed = parseAgentOutcome(outcome, "implementer")
+    expect(parsed.outcome).toBe("failed")
+    expect(parsed.failure?.message).toContain("超时")
+  })
+
+  it("rejects invalid JSON format", () => {
+    expect(() => parseAgentOutcome("这不是 JSON", "implementer")).toThrow(/JSON/i)
+  })
+
+  it("rejects output with STATUS markers", () => {
+    // 旧格式应该被拒绝
+    const oldFormat = `---IMPLEMENT_RESULT_START---
+STATUS: IMPLEMENT_DONE
+完成
+---IMPLEMENT_RESULT_END---`
+    expect(() => parseAgentOutcome(oldFormat, "implementer")).toThrow()
   })
 })

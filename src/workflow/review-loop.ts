@@ -1,18 +1,10 @@
 import { resolveNeedsCheckDecision } from "../review/needs-check.js"
 import type { IssueConfig } from "../types.js"
-import {
-  extractImplementResult,
-  extractReviewResult,
-  extractStatusLines,
-  parseImplementStatus,
-  parseReviewVerdict,
-  printSection,
-  render,
-  stripStatusLines,
-} from "../lib/utils.js"
-import { handleSessionImplementAskIfNeeded } from "./implement-ask.js"
+import { render } from "../lib/utils.js"
+import { handleSessionImplementOutcome } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
 import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
+import { parseAgentOutcome, type ReviewerOutcome, OutcomeParseError } from "./agent-outcome.js"
 
 const requireImplementer = (runtime: WorkflowRuntime) => {
   if (runtime.implementerSession) return runtime.implementerSession
@@ -24,6 +16,24 @@ const requireReviewer = (runtime: WorkflowRuntime) => {
   throw new Error("[Workflow] Reviewer session is not started")
 }
 
+/** 从 reviewer 输出中解析 outcome，格式错误时发送修正消息 */
+const parseReviewerOutcome = async (
+  output: string,
+  reviewer: { sendTaskAndWait: (prompt: string) => Promise<string> },
+): Promise<ReviewerOutcome> => {
+  try {
+    return parseAgentOutcome(output, "reviewer") as ReviewerOutcome
+  } catch (e) {
+    if (!(e instanceof OutcomeParseError)) throw e
+
+    // 格式错误：发送修正消息
+    const retryOutput = await reviewer.sendTaskAndWait(
+      "你的上一轮输出不符合 JSON outcome 规范。请严格按照 schema 输出纯 JSON 对象，不要包含任何说明文字或 Markdown code fence。"
+    )
+    return parseAgentOutcome(retryOutput, "reviewer") as ReviewerOutcome
+  }
+}
+
 export const sendControllerRevise = async (
   runtime: WorkflowRuntime,
   round: number,
@@ -33,21 +43,16 @@ export const sendControllerRevise = async (
   const implementer = requireImplementer(runtime)
   const output = await implementer.sendTaskAndWait(render(runtime.prompts.controllerImplementer, {
       controllerNotes,
-      reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
+      reviewOutput,
       round: String(round),
     }))
 
-  const resolvedOutput = await handleSessionImplementAskIfNeeded(
+  await handleSessionImplementOutcome(
     output,
     `controller revise round ${round}`,
-    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
+    implementer,
+    runtime.userDecisionBroker,
   )
-  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
-  if (implementStatus === "unknown") {
-    console.warn(
-      `[Controller] Warning: implementer did not output STATUS: IMPLEMENT_DONE after controller revise round ${round}.`,
-    )
-  }
 }
 
 const conductReview = async (
@@ -70,7 +75,7 @@ const conductReview = async (
           controllerNotes: options.controllerReviewNotes,
           diffFileSection,
           headSha: reviewContext.headSha,
-          reviewOutput: stripStatusLines(options.lastReviewOutput),
+          reviewOutput: options.lastReviewOutput,
           round: String(round),
           specPath,
         })
@@ -82,11 +87,46 @@ const conductReview = async (
           specPath,
         })
 
-  const reviewOutput = await requireReviewer(runtime).sendTaskAndWait(prompt)
-  const reviewResult = extractReviewResult(reviewOutput)
-  printSection(`Review Round ${round}`, extractStatusLines(reviewResult) || "(no STATUS)")
+  let reviewOutput = await requireReviewer(runtime).sendTaskAndWait(prompt)
+  let outcome = await parseReviewerOutcome(reviewOutput, requireReviewer(runtime))
 
-  return { reviewOutput, verdict: parseReviewVerdict(reviewResult) }
+  console.log(`[Review] Round ${round}: ${outcome.summary}`)
+
+  // 循环处理 reviewer 的 needs_input，直到 completed 或 failed
+  while (outcome.outcome === "needs_input") {
+    const reviewer = requireReviewer(runtime)
+    const broker = runtime.userDecisionBroker
+    if (!broker) {
+      throw new Error("[Review] reviewer 返回 needs_input 但未配置 userDecisionBroker")
+    }
+
+    console.log(`[Review] reviewer 需要用户输入: ${outcome.request!.question}`)
+    const decision = await broker.requestDecision(reviewer.sessionId, "reviewer", outcome.request!)
+    if (!decision) {
+      throw new Error("[Review] 用户取消了 reviewer 的输入请求")
+    }
+
+    const userMessage = JSON.stringify({
+      type: "user_decision",
+      optionId: decision.optionId,
+      text: decision.text,
+    })
+    // 将用户回答发回 reviewer session，继续循环
+    reviewOutput = await reviewer.sendTaskAndWait(userMessage)
+    outcome = await parseReviewerOutcome(reviewOutput, reviewer)
+    console.log(`[Review] Round ${round} (retry): ${outcome.summary}`)
+  }
+
+  if (outcome.outcome === "failed") {
+    throw new Error(`[Review] reviewer 报告失败: ${outcome.failure?.message ?? outcome.summary}`)
+  }
+
+  // outcome.outcome === "completed"
+  return {
+    reviewOutput,
+    outcome,
+    verdict: outcome.review?.verdict ?? "fail",
+  }
 }
 
 const handleNeedsCheck = async (
@@ -94,7 +134,7 @@ const handleNeedsCheck = async (
   configPath: string,
   round: number,
   reviewOutput: string,
-  verdict: ReturnType<typeof parseReviewVerdict>,
+  verdict: { cannotVerifySummary: string | null; kind: "pass" | "fail" | "needs_check"; hasCannotVerify: boolean; passed: boolean },
   reuseCurrentPane: boolean,
   sessionDir: string,
   specPath: string,
@@ -148,17 +188,12 @@ const sendPostReviewCheck = async (
       round: String(round),
     }))
 
-  const resolvedOutput = await handleSessionImplementAskIfNeeded(
+  await handleSessionImplementOutcome(
     output,
     `post-review check round ${round}`,
-    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
+    implementer,
+    runtime.userDecisionBroker,
   )
-  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
-  if (implementStatus === "unknown") {
-    console.warn(
-      `[PostCheck] Warning: implementer did not output STATUS: IMPLEMENT_DONE after post-review check round ${round}.`,
-    )
-  }
 }
 
 const sendReviseAfterFail = async (
@@ -170,21 +205,16 @@ const sendReviseAfterFail = async (
 
   const implementer = requireImplementer(runtime)
   const output = await implementer.sendTaskAndWait(render(runtime.prompts.revise, {
-      reviewOutput: stripStatusLines(extractReviewResult(reviewOutput)),
+      reviewOutput,
       round: String(round),
     }))
 
-  const resolvedOutput = await handleSessionImplementAskIfNeeded(
+  await handleSessionImplementOutcome(
     output,
     `revise round ${round}`,
-    () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
+    implementer,
+    runtime.userDecisionBroker,
   )
-  const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
-  if (implementStatus === "unknown") {
-    console.warn(
-      `[Revise] Warning: implementer did not output STATUS: IMPLEMENT_DONE after revise round ${round}.`,
-    )
-  }
 }
 
 export const runReviewLoop = async (
@@ -205,23 +235,29 @@ export const runReviewLoop = async (
     while (retrySameRound) {
       retrySameRound = false
 
-      const { reviewOutput, verdict } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
+      const { reviewOutput, outcome, verdict } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
       activeLoopOptions = undefined
 
-      if (verdict.kind === "pass") {
+      if (verdict === "pass") {
         await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
         console.log(`\n[Review] Workflow finished: review passed in round ${round}.`)
         return
       }
 
-      if (verdict.kind === "needs_check") {
+      if (verdict === "needs_check") {
         await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK")
-        const outcome = await handleNeedsCheck(
+        const cannotVerifySummary = outcome.review?.cannotVerifySummary ?? null
+        const needsCheckOutcome = await handleNeedsCheck(
           runtime,
           configPath,
           round,
           reviewOutput,
-          verdict,
+          {
+            cannotVerifySummary,
+            hasCannotVerify: cannotVerifySummary !== null,
+            kind: "needs_check",
+            passed: false,
+          },
           reuseCurrentPane,
           sessionDir,
           specPath,
@@ -229,13 +265,13 @@ export const runReviewLoop = async (
           issues,
         )
 
-        if (outcome.type === "approved") return
+        if (needsCheckOutcome.type === "approved") return
 
-        if (outcome.type === "continue_round") break
+        if (needsCheckOutcome.type === "continue_round") break
 
         activeLoopOptions = {
-          controllerReviewNotes: outcome.controllerNotes,
-          lastReviewOutput: outcome.lastReviewOutput,
+          controllerReviewNotes: needsCheckOutcome.controllerNotes,
+          lastReviewOutput: needsCheckOutcome.lastReviewOutput,
         }
         retrySameRound = true
         continue

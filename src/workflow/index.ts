@@ -9,6 +9,7 @@ import { runWorkflowResume } from "./resume.js"
 import type { WorkflowRuntime } from "./types.js"
 import { createSessionApiServer } from "../session/server.js"
 import { createSessionClient } from "../session/client.js"
+import { createInteractiveUserDecisionBroker } from "./agent-outcome.js"
 
 export const runWorkflow = async (args: ParsedArgs) => {
   if (args["resume-from"]) {
@@ -47,6 +48,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
     prompts,
     sessionBaseUrl: baseUrl,
     sessionClient: createSessionClient({ baseUrl, token }),
+    userDecisionBroker: createInteractiveUserDecisionBroker(),
   }
 
   try {

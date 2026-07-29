@@ -11,6 +11,7 @@ import type {
 import type { WorkflowAgent } from "@src/session/workflow-agent"
 import type { WorkflowRuntime } from "@src/workflow/types"
 import { startRuntimeAgents, stopRuntimeAgents } from "@src/workflow/agent-runtime"
+import { formatAgentOutcome } from "@src/workflow/agent-outcome"
 
 // ---- Fake Session Client ----
 
@@ -130,20 +131,26 @@ const makeFakeSessionClient = (): SessionClient & FakeClientResult => {
 
 // ---- Helpers ----
 
-const IMPLEMENT_DONE = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_DONE
-实现完成
----IMPLEMENT_RESULT_END---`
+const IMPLEMENT_DONE = formatAgentOutcome({
+  outcome: "completed",
+  summary: "实现完成",
+})
 
-const REVIEW_PASS = `---REVIEW_RESULT_START---
-STATUS: REVIEW_PASS
-审查通过
----REVIEW_RESULT_END---`
+const REVIEW_PASS = formatAgentOutcome({
+  outcome: "completed",
+  summary: "审查通过",
+  review: { verdict: "pass" },
+})
 
-const IMPLEMENT_ASK = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_ASK
-需要确认
----IMPLEMENT_RESULT_END---`
+const IMPLEMENT_ASK = formatAgentOutcome({
+  outcome: "needs_input",
+  summary: "需要确认",
+  request: {
+    question: "请确认实现方案",
+    options: [{ id: "yes", label: "是" }, { id: "no", label: "否" }],
+    allowFreeform: false,
+  },
+})
 
 const makeRuntime = (
   client: SessionClient & FakeClientResult,
@@ -255,17 +262,22 @@ describe("workflow session integration", () => {
     })
   })
 
-  describe("IMPLEMENT_ASK session flow", () => {
-    it("re-prompts same session on ASK then returns DONE on continue", async () => {
+  describe("needs_input session flow", () => {
+    it("re-prompts same session on needs_input then returns completed on continue", async () => {
       const client = makeFakeSessionClient()
 
       const agent = makeFakeAgent(client, "impl-session", [IMPLEMENT_ASK, IMPLEMENT_DONE])
 
       const firstOutput = await agent.sendTaskAndWait("Implement feature")
-      expect(firstOutput).toBe(IMPLEMENT_ASK)
+      const firstOutcome = JSON.parse(firstOutput)
+      expect(firstOutcome.outcome).toBe("needs_input")
 
-      const continueOutput = await agent.sendTaskAndWait("Please continue")
-      expect(continueOutput).toBe(IMPLEMENT_DONE)
+      const continueOutput = await agent.sendTaskAndWait(JSON.stringify({
+        type: "user_decision",
+        optionId: "yes",
+      }))
+      const continueOutcome = JSON.parse(continueOutput)
+      expect(continueOutcome.outcome).toBe("completed")
 
       // 两条消息都在同一个 sessionId
       const sessionMessages = client._log.filter(m => m.sessionId === "impl-session")

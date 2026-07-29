@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 import type { SessionClient } from "@src/session/client"
 import type { SessionItem, SessionRecord } from "@src/session/types"
 import type { WorkflowRuntime } from "@src/workflow/types"
+import { formatAgentOutcome } from "@src/workflow/agent-outcome"
 
 // ---- Fake Session Client ----
 
@@ -90,27 +91,29 @@ const makeFakeClient = (): SessionClient & FakeExtras => {
   }
 }
 
-// ---- Shared test outputs ----
+// ---- Shared test outputs (JSON outcome 格式) ----
 
-const IMPLEMENT_DONE = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_DONE
-实现完成
----IMPLEMENT_RESULT_END---`
+const IMPLEMENT_DONE = formatAgentOutcome({
+  outcome: "completed",
+  summary: "实现完成",
+})
 
-const REVIEW_PASS = `---REVIEW_RESULT_START---
-STATUS: REVIEW_PASS
-审查通过
----REVIEW_RESULT_END---`
+const REVIEW_PASS = formatAgentOutcome({
+  outcome: "completed",
+  summary: "审查通过",
+  review: { verdict: "pass" },
+})
 
-const REVIEW_FAIL = `---REVIEW_RESULT_START---
-STATUS: REVIEW_FAIL
-需修改
----REVIEW_RESULT_END---`
+const REVIEW_FAIL = formatAgentOutcome({
+  outcome: "completed",
+  summary: "需修改",
+  review: { verdict: "fail" },
+})
 
-const REVISE_OUTPUT = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_DONE
-修复完成
----IMPLEMENT_RESULT_END---`
+const REVISE_OUTPUT = formatAgentOutcome({
+  outcome: "completed",
+  summary: "修复完成",
+})
 
 // ---- Mock all filesystem & git dependencies ----
 
@@ -142,9 +145,16 @@ vi.mock("@src/review/needs-check", () => ({
 }))
 
 vi.mock("@src/workflow/implement-ask", () => ({
-  handleSessionImplementAskIfNeeded: vi.fn(async (output: string) => output),
+  handleSessionImplementOutcome: vi.fn(async (output: string) => {
+    // 解析 JSON outcome 并返回
+    const outcome = JSON.parse(output)
+    if (outcome.outcome === "failed") {
+      throw new Error(`[Implement] agent 报告失败: ${outcome.failure?.message ?? outcome.summary}`)
+    }
+    return outcome
+  }),
   ImplementAskAbortError: class extends Error {},
-  defaultImplementAskDeps: vi.fn(() => ({ log: vi.fn(), promptContinue: async () => true })),
+  defaultImplementAskDeps: vi.fn(() => ({ log: vi.fn() })),
 }))
 
 vi.mock("@src/workflow/run-context", () => ({

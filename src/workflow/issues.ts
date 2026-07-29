@@ -4,13 +4,14 @@ import { readFile } from "node:fs/promises"
 import { createWorkflowRunContext } from "./run-context.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
-import { extractImplementResult, parseImplementStatus, render } from "../lib/utils.js"
+import { render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
-import { handleSessionImplementAskIfNeeded } from "./implement-ask.js"
+import { handleSessionImplementOutcome } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
 import { startRuntimeAgents, stopRuntimeAgents } from "./agent-runtime.js"
+import { parseAgentOutcome } from "./agent-outcome.js"
 
 /** finish 状态的 issue 已完成开发，队列中应跳过；缺省按 ready 处理 */
 export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
@@ -52,18 +53,13 @@ const runSingleSpecCycle = async (
       }),
     )
 
-    const resolvedOutput = await handleSessionImplementAskIfNeeded(
+    // 解析 outcome 并处理 needs_input
+    await handleSessionImplementOutcome(
       implementOutput,
       "implement",
-      () => implementer.sendTaskAndWait("Please continue the task and report the final implementation status."),
+      implementer,
+      runtime.userDecisionBroker,
     )
-    const implementStatus = parseImplementStatus(extractImplementResult(resolvedOutput))
-    if (implementStatus === "unknown") {
-      console.warn(
-        "[Implement] Warning: implementer did not output STATUS: IMPLEMENT_DONE. " +
-          "The implementation may be incomplete. Proceeding to review anyway.",
-      )
-    }
   }
 
   await markIssueInReview(configPath, issueIndex, issues)

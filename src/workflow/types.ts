@@ -2,6 +2,7 @@ import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "../
 import type { NeedsCheckMode } from "../review/needs-check.js"
 import type { SessionClient } from "../session/client.js"
 import type { WorkflowAgent } from "../session/workflow-agent.js"
+import type { UserDecisionBroker } from "./agent-outcome.js"
 
 export type WorkflowRuntime = {
   args: ParsedArgs
@@ -15,6 +16,7 @@ export type WorkflowRuntime = {
   prompts: LoadedPrompts
   implementerSession?: WorkflowAgent
   reviewerSession?: WorkflowAgent
+  userDecisionBroker?: UserDecisionBroker
 }
 
 export type ReviewLoopOptions = {
@@ -40,7 +42,7 @@ export const buildCheckpointInput = (
   configPath: string,
   round: number,
   reviewOutput: string,
-  verdict: import("../lib/utils.js").ReviewVerdict,
+  verdict: { cannotVerifySummary: string | null; hasCannotVerify: boolean; kind: "pass" | "fail" | "needs_check"; passed: boolean },
   reuseCurrentPane: boolean,
   _specPath: string,
   issueIndex: number,

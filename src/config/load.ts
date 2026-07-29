@@ -2,12 +2,6 @@ import { access as fsAccess, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "../lib/prompt-delimiters.js"
 import type {
   AgentInputConfig,
   IssueConfig,
@@ -29,8 +23,6 @@ const DEFAULT_REVISE_PROMPT = path.join(PROJECT_ROOT, "prompts/revise.md")
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-implementer.md")
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-re-review.md")
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-review-check.md")
-const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
-const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
 
 const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
 
@@ -83,6 +75,15 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     }
   }
 
+  // 弃用警告：outputFormatImplement/outputFormatReview 已移除
+  const rawPrompts = fileConfig.prompts as Record<string, unknown> | undefined
+  if (rawPrompts?.outputFormatImplement !== undefined || rawPrompts?.outputFormatReview !== undefined) {
+    console.warn(
+      "[Config] ⚠️ prompts.outputFormatImplement 和 prompts.outputFormatReview 已弃用，将被忽略。" +
+      "输出格式现在由 JSON outcome 契约统一管理，无需自定义 partial。",
+    )
+  }
+
   const prompts: PromptConfig = {
     implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
     reReview: fileConfig.prompts?.reReview ?? DEFAULT_RE_REVIEW_PROMPT,
@@ -94,10 +95,6 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
       fileConfig.prompts?.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
     postReviewCheck:
       fileConfig.prompts?.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
-    outputFormatImplement:
-      fileConfig.prompts?.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
-    outputFormatReview:
-      fileConfig.prompts?.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
   }
 
   if (!fileConfig.implementer) throw new Error("[Config] workflow config is missing implementer")
@@ -123,35 +120,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
 const readPrompt = async (configDir: string, file: string) =>
   readFile(path.resolve(configDir, file), "utf8")
 
-const injectOutputFormat = (template: string, outputFormat: string) =>
-  render(template, { outputFormat })
-
-const loadOutputFormat = async (
-  configDir: string,
-  partialPath: string,
-  delimiterStart: string,
-  delimiterEnd: string,
-) => {
-  const template = await readPrompt(configDir, partialPath)
-  return render(template, { delimiterEnd, delimiterStart })
-}
-
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
-  const [implementOutput, reviewOutput] = await Promise.all([
-    loadOutputFormat(
-      configDir,
-      config.prompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
-      IMPLEMENT_RESULT_START,
-      IMPLEMENT_RESULT_END,
-    ),
-    loadOutputFormat(
-      configDir,
-      config.prompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
-      REVIEW_RESULT_START,
-      REVIEW_RESULT_END,
-    ),
-  ])
-
   const [
     implement,
     reReview,
@@ -171,12 +140,12 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
   ])
 
   return {
-    controllerImplementer: injectOutputFormat(controllerImplementer, implementOutput),
-    controllerReReview: injectOutputFormat(controllerReReview, reviewOutput),
-    implement: injectOutputFormat(implement, implementOutput),
-    postReviewCheck: injectOutputFormat(postReviewCheck, implementOutput),
-    reReview: injectOutputFormat(reReview, reviewOutput),
-    review: injectOutputFormat(review, reviewOutput),
-    revise: injectOutputFormat(revise, implementOutput),
+    controllerImplementer,
+    controllerReReview,
+    implement,
+    postReviewCheck,
+    reReview,
+    review,
+    revise,
   }
 }

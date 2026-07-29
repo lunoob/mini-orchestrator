@@ -4,16 +4,7 @@ import { resolveAgentConfig } from "../config/agents.js"
 import { createSessionApiServer } from "../session/server.js"
 import { createSessionClient } from "../session/client.js"
 import { startWorkflowAgent } from "../session/workflow-agent.js"
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-} from "../lib/prompt-delimiters.js"
-import {
-  extractImplementResult,
-  parseImplementStatus,
-  printSection,
-  stripStatusLines,
-} from "../lib/utils.js"
+import { parseAgentOutcome, type AgentOutcome } from "./agent-outcome.js"
 import type { ParsedArgs } from "../types.js"
 
 const TEST_PROMPT = `#任务
@@ -21,13 +12,40 @@ const TEST_PROMPT = `#任务
 
 ## 工作约束
 
-- 若 spec 或需求不清楚，先提问并输出 \`STATUS: IMPLEMENT_ASK\`，不要猜测
-- 完成全部实现且通过提交前自审后，输出 \`STATUS: IMPLEMENT_DONE\`
-- 若 review 驳回，根据反馈修改后再次输出 \`STATUS: IMPLEMENT_DONE\`
-- 禁止自动执行 git commit 完成代码提交`
+- 完成任务后输出纯 JSON 对象
 
-export const buildTestStatusPrompt = (outputFormat: string) =>
-  `${TEST_PROMPT}\n\n${outputFormat}`
+## 输出要求
+
+完成任务后，你必须输出一个**纯 JSON 对象**作为最终回复，不得包含任何说明文字、Markdown code fence 或 STATUS 标记。
+
+JSON 格式：
+\`\`\`json
+{
+  "outcome": "completed",
+  "summary": "简述完成的工作"
+}
+\`\`\`
+
+或需要用户输入时：
+\`\`\`json
+{
+  "outcome": "needs_input",
+  "summary": "需要确认",
+  "request": {
+    "question": "要问的问题",
+    "allowFreeform": true
+  }
+}
+\`\`\`
+
+或失败时：
+\`\`\`json
+{
+  "outcome": "failed",
+  "summary": "失败原因",
+  "failure": { "message": "详细错误" }
+}
+\`\`\``
 
 export const runTestStatus = async (args: ParsedArgs) => {
   const projectDir = args.projectDir ?? process.cwd()
@@ -59,22 +77,30 @@ export const runTestStatus = async (args: ParsedArgs) => {
       runDirectory,
     })
 
-    const outputFormat = [
-      "## 输出",
-      "必须严格遵循以下步骤:",
-      `1. 先输出起始前缀: ${IMPLEMENT_RESULT_START}`,
-      "2. 再输出其他内容（含 STATUS 标记）",
-      `3. 最后输出结束后缀: ${IMPLEMENT_RESULT_END}`,
-    ].join("\n")
-    const prompt = buildTestStatusPrompt(outputFormat)
+    const prompt = TEST_PROMPT
     console.log(`[TestStatus] Sending prompt:\n${prompt}`)
 
     const rawOutput = await agent_.sendTaskAndWait(prompt)
-    const resultBody = extractImplementResult(rawOutput)
-    const status = parseImplementStatus(resultBody)
+    let outcome: AgentOutcome
 
-    console.log(`[TestStatus] Status: ${status}`)
-    printSection("TestStatus Output", stripStatusLines(resultBody))
+    try {
+      outcome = parseAgentOutcome(rawOutput, "implementer")
+    } catch (parseError) {
+      console.log(`[TestStatus] First parse failed, asking agent to retry...`)
+      const retryOutput = await agent_.sendTaskAndWait(
+        "你的输出不符合 JSON outcome 规范。请严格按照 schema 输出纯 JSON 对象。"
+      )
+      outcome = parseAgentOutcome(retryOutput, "implementer")
+    }
+
+    console.log(`[TestStatus] Outcome: ${outcome.outcome}`)
+    console.log(`[TestStatus] Summary: ${outcome.summary}`)
+    if (outcome.request) {
+      console.log(`[TestStatus] Request: ${outcome.request.question}`)
+    }
+    if (outcome.failure) {
+      console.log(`[TestStatus] Failure: ${outcome.failure.message}`)
+    }
     console.log("[TestStatus] Agent completed via Session API successfully")
   } finally {
     if (agent_) await agent_.stop()

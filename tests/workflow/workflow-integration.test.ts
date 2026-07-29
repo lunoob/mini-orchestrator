@@ -4,6 +4,7 @@ import type { SessionClient } from "@src/session/client"
 import type { SessionItem, SessionRecord, Turn } from "@src/session/types"
 import type { WorkflowAgent } from "@src/session/workflow-agent"
 import type { WorkflowRuntime } from "@src/workflow/types"
+import { formatAgentOutcome, type ImplementerOutcome, type ReviewerOutcome } from "@src/workflow/agent-outcome"
 
 // ---- Fake Session Client with tracking ----
 
@@ -100,25 +101,28 @@ const makeFakeClient = (): SessionClient & FakeClientExtras => {
   }
 }
 
-const REVISE_OUTPUT = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_DONE
-修复完成
----IMPLEMENT_RESULT_END---`
+// 使用 JSON outcome 格式的常量
+const REVISE_OUTPUT = formatAgentOutcome({
+  outcome: "completed",
+  summary: "修复完成",
+})
 
-const REVIEW_PASS = `---REVIEW_RESULT_START---
-STATUS: REVIEW_PASS
-审查通过
----REVIEW_RESULT_END---`
+const REVIEW_PASS = formatAgentOutcome({
+  outcome: "completed",
+  summary: "审查通过",
+  review: { verdict: "pass" },
+})
 
-const REVIEW_FAIL = `---REVIEW_RESULT_START---
-STATUS: REVIEW_FAIL
-需要修改
----REVIEW_RESULT_END---`
+const REVIEW_FAIL = formatAgentOutcome({
+  outcome: "completed",
+  summary: "需要修改",
+  review: { verdict: "fail" },
+})
 
-const IMPLEMENT_DONE = `---IMPLEMENT_RESULT_START---
-STATUS: IMPLEMENT_DONE
-实现完成
----IMPLEMENT_RESULT_END---`
+const IMPLEMENT_DONE = formatAgentOutcome({
+  outcome: "completed",
+  summary: "实现完成",
+})
 
 const makeBaseRuntime = (client: SessionClient): WorkflowRuntime =>
   ({
@@ -180,9 +184,16 @@ describe("workflow review-loop Session integration", () => {
     }))
 
     vi.doMock("@src/workflow/implement-ask", () => ({
-      handleSessionImplementAskIfNeeded: async (output: string) => output,
+      handleSessionImplementOutcome: async (output: string) => {
+        // 解析 JSON outcome 并返回
+        const outcome = JSON.parse(output)
+        if (outcome.outcome === "failed") {
+          throw new Error(`[Implement] agent 报告失败: ${outcome.failure?.message ?? outcome.summary}`)
+        }
+        return outcome
+      },
       ImplementAskAbortError: class extends Error {},
-      defaultImplementAskDeps: () => ({ log: vi.fn(), promptContinue: async () => true }),
+      defaultImplementAskDeps: () => ({ log: vi.fn() }),
     }))
 
     const { runReviewLoop } = await import("@src/workflow/review-loop")
@@ -238,9 +249,16 @@ describe("workflow review-loop Session integration", () => {
       printNeedsCheckSummary: () => undefined,
     }))
     vi.doMock("@src/workflow/implement-ask", () => ({
-      handleSessionImplementAskIfNeeded: async (output: string) => output,
+      handleSessionImplementOutcome: async (output: string) => {
+        // 解析 JSON outcome 并返回
+        const outcome = JSON.parse(output)
+        if (outcome.outcome === "failed") {
+          throw new Error(`[Implement] agent 报告失败: ${outcome.failure?.message ?? outcome.summary}`)
+        }
+        return outcome
+      },
       ImplementAskAbortError: class extends Error {},
-      defaultImplementAskDeps: () => ({ log: vi.fn(), promptContinue: async () => true }),
+      defaultImplementAskDeps: () => ({ log: vi.fn() }),
     }))
 
     const { runReviewLoop } = await import("@src/workflow/review-loop")
@@ -303,9 +321,16 @@ describe("workflow review-loop Session integration", () => {
       printNeedsCheckSummary: () => undefined,
     }))
     vi.doMock("@src/workflow/implement-ask", () => ({
-      handleSessionImplementAskIfNeeded: async (output: string) => output,
+      handleSessionImplementOutcome: async (output: string) => {
+        // 解析 JSON outcome 并返回
+        const outcome = JSON.parse(output)
+        if (outcome.outcome === "failed") {
+          throw new Error(`[Implement] agent 报告失败: ${outcome.failure?.message ?? outcome.summary}`)
+        }
+        return outcome
+      },
       ImplementAskAbortError: class extends Error {},
-      defaultImplementAskDeps: () => ({ log: vi.fn(), promptContinue: async () => true }),
+      defaultImplementAskDeps: () => ({ log: vi.fn() }),
     }))
 
     const { runReviewLoop } = await import("@src/workflow/review-loop")
@@ -354,6 +379,165 @@ describe("workflow review-loop Session integration", () => {
     if (revTurns.length > 0 && implTurns.length > 0) {
       expect(revTurns[0].turnId).not.toBe(implTurns[0].turnId)
     }
+  })
+
+  it("handles reviewer needs_input via broker then continues review", async () => {
+    vi.doMock("@src/workflow/review-context", () => ({
+      prepareReviewContext: async () => ({ baseSha: "N/A", diffFile: undefined, headSha: "N/A" }),
+      buildDiffFileSection: () => "",
+      advanceBaseline: async () => undefined,
+      formatBaselineLabel: () => "N/A",
+    }))
+    vi.doMock("@src/review/needs-check", () => ({
+      resolveNeedsCheckDecision: async () => ({ action: "approve", notes: "" }),
+      parseNeedsCheckMode: () => "interactive" as const,
+      parseNeedsCheckAction: () => "approve" as const,
+      NeedsCheckPauseError: class extends Error {},
+      buildNeedsCheckMessage: () => "",
+      printNeedsCheckSummary: () => undefined,
+    }))
+    vi.doMock("@src/workflow/implement-ask", () => ({
+      handleSessionImplementAskIfNeeded: async (output: string) => output,
+      handleSessionImplementOutcome: async (output: string) => JSON.parse(output),
+      ImplementAskAbortError: class extends Error {},
+      defaultImplementAskDeps: () => ({ log: vi.fn() }),
+    }))
+
+    const REVIEWER_NEEDS_INPUT = formatAgentOutcome({
+      outcome: "needs_input",
+      summary: "需要确认",
+      request: {
+        question: "请确认是否检查安全相关代码？",
+        options: [
+          { id: "yes", label: "是" },
+          { id: "no", label: "否" },
+        ],
+        allowFreeform: false,
+      },
+    })
+
+    const REVIEWER_PASS_AFTER_INPUT = formatAgentOutcome({
+      outcome: "completed",
+      summary: "审查通过",
+      review: { verdict: "pass" },
+    })
+
+    const { runReviewLoop } = await import("@src/workflow/review-loop")
+    const client = makeFakeClient()
+    const runtime = makeBaseRuntime(client)
+
+    const reviewer: WorkflowAgent = {
+      sessionId: "rev-session",
+      sendTaskAndWait: vi.fn()
+        .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT)  // 第一次 review → needs_input
+        .mockResolvedValueOnce(REVIEWER_PASS_AFTER_INPUT),  // 用户回答后 → pass
+      stop: vi.fn(),
+    }
+    const implementer: WorkflowAgent = {
+      sessionId: "impl-session",
+      sendTaskAndWait: vi.fn(async () => IMPLEMENT_DONE),
+      stop: vi.fn(),
+    }
+    runtime.implementerSession = implementer
+    runtime.reviewerSession = reviewer
+
+    // 注入 fake broker
+    const { createFakeUserDecisionBroker } = await import("@src/workflow/agent-outcome")
+    const broker = createFakeUserDecisionBroker([{ optionId: "yes" }])
+    runtime.userDecisionBroker = broker
+
+    await runReviewLoop(runtime, "/tmp/config.json", 1, false, "/tmp/session", "/tmp/spec.md", 0, [
+      { title: "Test", specPath: "/tmp/spec.md" },
+    ])
+
+    // broker 被调用
+    expect(broker.callLog).toHaveLength(1)
+    expect(broker.callLog[0].role).toBe("reviewer")
+    expect(broker.callLog[0].request.question).toContain("安全")
+
+    // reviewer 收到用户回答
+    expect(reviewer.sendTaskAndWait).toHaveBeenCalledTimes(2)
+    const retryCall = vi.mocked(reviewer.sendTaskAndWait).mock.calls[1][0]
+    expect(retryCall).toContain("user_decision")
+
+    // implementer 收到 post-check
+    expect(implementer.sendTaskAndWait).toHaveBeenCalledTimes(1)
+  })
+
+  it("handles multiple consecutive reviewer needs_input via broker loop", async () => {
+    vi.doMock("@src/workflow/review-context", () => ({
+      prepareReviewContext: async () => ({ baseSha: "N/A", diffFile: undefined, headSha: "N/A" }),
+      buildDiffFileSection: () => "",
+      advanceBaseline: async () => undefined,
+      formatBaselineLabel: () => "N/A",
+    }))
+    vi.doMock("@src/review/needs-check", () => ({
+      resolveNeedsCheckDecision: async () => ({ action: "approve", notes: "" }),
+      parseNeedsCheckMode: () => "interactive" as const,
+      parseNeedsCheckAction: () => "approve" as const,
+      NeedsCheckPauseError: class extends Error {},
+      buildNeedsCheckMessage: () => "",
+      printNeedsCheckSummary: () => undefined,
+    }))
+    vi.doMock("@src/workflow/implement-ask", () => ({
+      handleSessionImplementOutcome: async (output: string) => JSON.parse(output),
+      ImplementAskAbortError: class extends Error {},
+      defaultImplementAskDeps: () => ({ log: vi.fn() }),
+    }))
+
+    const REVIEWER_NEEDS_INPUT_1 = formatAgentOutcome({
+      outcome: "needs_input",
+      summary: "第一个问题",
+      request: { question: "问题1？", options: [{ id: "a", label: "A" }], allowFreeform: false },
+    })
+    const REVIEWER_NEEDS_INPUT_2 = formatAgentOutcome({
+      outcome: "needs_input",
+      summary: "第二个问题",
+      request: { question: "问题2？", options: [{ id: "b", label: "B" }], allowFreeform: false },
+    })
+    const REVIEWER_PASS = formatAgentOutcome({
+      outcome: "completed",
+      summary: "审查通过",
+      review: { verdict: "pass" },
+    })
+
+    const { runReviewLoop } = await import("@src/workflow/review-loop")
+    const client = makeFakeClient()
+    const runtime = makeBaseRuntime(client)
+
+    const reviewer: WorkflowAgent = {
+      sessionId: "rev-session",
+      sendTaskAndWait: vi.fn()
+        .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT_1)
+        .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT_2)
+        .mockResolvedValueOnce(REVIEWER_PASS),
+      stop: vi.fn(),
+    }
+    const implementer: WorkflowAgent = {
+      sessionId: "impl-session",
+      sendTaskAndWait: vi.fn(async () => IMPLEMENT_DONE),
+      stop: vi.fn(),
+    }
+    runtime.implementerSession = implementer
+    runtime.reviewerSession = reviewer
+
+    const { createFakeUserDecisionBroker } = await import("@src/workflow/agent-outcome")
+    const broker = createFakeUserDecisionBroker([{ optionId: "a" }, { optionId: "b" }])
+    runtime.userDecisionBroker = broker
+
+    await runReviewLoop(runtime, "/tmp/config.json", 1, false, "/tmp/session", "/tmp/spec.md", 0, [
+      { title: "Test", specPath: "/tmp/spec.md" },
+    ])
+
+    // broker 被调用两次
+    expect(broker.callLog).toHaveLength(2)
+    expect(broker.callLog[0].request.question).toContain("问题1")
+    expect(broker.callLog[1].request.question).toContain("问题2")
+
+    // reviewer 收到两次用户回答
+    expect(reviewer.sendTaskAndWait).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(reviewer.sendTaskAndWait).mock.calls[1][0]).toContain('"optionId":"a"')
+    expect(vi.mocked(reviewer.sendTaskAndWait).mock.calls[2][0]).toContain('"optionId":"b"')
   })
 })
 

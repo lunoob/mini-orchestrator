@@ -4,7 +4,15 @@ import { stdin as input, stdout as output } from "node:process"
 import type { NeedsCheckCheckpointInput } from "./checkpoint.js"
 import { writeNeedsCheckCheckpoint } from "./checkpoint.js"
 import type { ParsedArgs } from "../types.js"
-import type { ReviewVerdict } from "../lib/utils.js"
+import type { ReviewResult } from "../workflow/agent-outcome.js"
+
+// 保持向后兼容的类型别名
+type ReviewVerdict = {
+  cannotVerifySummary: string | null
+  hasCannotVerify: boolean
+  kind: "pass" | "fail" | "needs_check"
+  passed: boolean
+}
 
 export type NeedsCheckAction = "approve" | "revise" | "retry-review" | "abort"
 
@@ -132,8 +140,12 @@ export const pauseForLlmNeedsCheck = async (
 
   printNeedsCheckSummary(round, verdict, reviewOutput)
 
-  console.log("STATUS: ORCHESTRATOR_NEEDS_CHECK")
-  console.log(`CHECKPOINT: ${checkpointPath}`)
+  // 使用 JSON 格式输出编排器状态信号
+  console.log(JSON.stringify({
+    type: "orchestrator_needs_check",
+    checkpointPath,
+    round,
+  }))
   console.log("")
   console.log("[NeedsCheck] （LLM 模式：脚本已暂停。请外层 agent 询问用户后，使用 --resume-from 继续。）")
 

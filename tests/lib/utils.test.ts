@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  extractImplementResult,
-  extractReviewResult,
-  extractStatusLines,
-  parseImplementStatus,
-  parseReviewVerdict,
   render,
-  stripStatusLines,
+  getErrorMessage,
+  splitCommand,
 } from "@src/lib/utils"
 
 describe("render", () => {
@@ -24,68 +20,32 @@ describe("render", () => {
   })
 })
 
-describe("parseImplementStatus", () => {
-  it("detects IMPLEMENT_DONE", () => {
-    const output = "---IMPLEMENT_RESULT_START---\nSTATUS: IMPLEMENT_DONE\n---IMPLEMENT_RESULT_END---"
-    expect(parseImplementStatus(extractImplementResult(output))).toBe("done")
+describe("getErrorMessage", () => {
+  it("extracts message from Error instances", () => {
+    expect(getErrorMessage(new Error("test error"))).toBe("test error")
   })
 
-  it("detects IMPLEMENT_ASK", () => {
-    const output = "---IMPLEMENT_RESULT_START---\nSTATUS: IMPLEMENT_ASK\n---IMPLEMENT_RESULT_END---"
-    expect(parseImplementStatus(extractImplementResult(output))).toBe("needs_input")
-  })
-
-  it("returns unknown when STATUS is missing", () => {
-    expect(parseImplementStatus(extractImplementResult("no status here"))).toBe("unknown")
+  it("converts non-Error values to string", () => {
+    expect(getErrorMessage("string error")).toBe("string error")
+    expect(getErrorMessage(42)).toBe("42")
+    expect(getErrorMessage(null)).toBe("null")
   })
 })
 
-describe("parseReviewVerdict", () => {
-  it("parses review status from delimited output", () => {
-    const output = [
-      "---REVIEW_RESULT_START---",
-      "STATUS: REVIEW_PASS",
-      "---REVIEW_RESULT_END---",
-    ].join("\n")
-
-    expect(parseReviewVerdict(extractReviewResult(output)).kind).toBe("pass")
-  })
-})
-
-describe("stripStatusLines", () => {
-  it("removes indented STATUS lines", () => {
-    const output = "天气晴\n  STATUS: IMPLEMENT_DONE\n"
-    expect(stripStatusLines(output)).toBe("天气晴")
-    expect(stripStatusLines(output)).not.toMatch(/STATUS:/)
+describe("splitCommand", () => {
+  it("splits simple command", () => {
+    expect(splitCommand("codex --model gpt-5.5")).toEqual(["codex", "--model", "gpt-5.5"])
   })
 
-  it("removes STATUS after literal \\n escapes", () => {
-    const output = "天气晴\\n\\n  STATUS: IMPLEMENT_DONE\\n\\n"
-    const result = stripStatusLines(output)
-    expect(result).toContain("天气晴")
-    expect(result).not.toMatch(/STATUS:/)
-    expect(result).not.toContain("\\n")
-  })
-})
-
-describe("extractStatusLines", () => {
-  it("keeps only STATUS markers from review output", () => {
-    const output = [
-      "### Summary",
-      "Looks good overall.",
-      "STATUS: REVIEW_PASS",
-      "extra trailing notes",
-    ].join("\n")
-
-    expect(extractStatusLines(output)).toBe("STATUS: REVIEW_PASS")
+  it("handles quoted arguments", () => {
+    expect(splitCommand('codex --prompt "hello world"')).toEqual(["codex", "--prompt", "hello world"])
   })
 
-  it("keeps indented STATUS lines and trims them", () => {
-    const output = "body\n  STATUS: REVIEW_NEEDS_CHECK\n"
-    expect(extractStatusLines(output)).toBe("STATUS: REVIEW_NEEDS_CHECK")
+  it("handles single quotes", () => {
+    expect(splitCommand("codex --prompt 'hello world'")).toEqual(["codex", "--prompt", "hello world"])
   })
 
-  it("returns empty string when STATUS is missing", () => {
-    expect(extractStatusLines("no status here")).toBe("")
+  it("handles empty input", () => {
+    expect(splitCommand("")).toEqual([])
   })
 })
