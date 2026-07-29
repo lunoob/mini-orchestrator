@@ -15,6 +15,7 @@ const makeAgent = (overrides: Partial<WorkflowAgent> = {}): WorkflowAgent =>
   ({
     sessionId: overrides.sessionId ?? "session-test",
     sendTaskAndWait: overrides.sendTaskAndWait ?? vi.fn(),
+    lastTurnId: () => undefined,
     stop: overrides.stop ?? vi.fn(),
   }) as WorkflowAgent
 
@@ -103,6 +104,7 @@ describe("startRuntimeAgents sequential startup", () => {
     const implAgent: WorkflowAgent = {
       sessionId: "impl-ok",
       sendTaskAndWait: vi.fn(),
+      lastTurnId: () => undefined,
       stop: implStop,
     }
 

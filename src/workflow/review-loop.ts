@@ -101,7 +101,7 @@ const conductReview = async (
     }
 
     console.log(`[Review] reviewer 需要用户输入: ${outcome.request!.question}`)
-    const decision = await broker.requestDecision(reviewer.sessionId, "reviewer", outcome.request!)
+    const decision = await broker.requestDecision(reviewer.sessionId, "reviewer", outcome.request!, reviewer.lastTurnId())
     if (!decision) {
       throw new Error("[Review] 用户取消了 reviewer 的输入请求")
     }

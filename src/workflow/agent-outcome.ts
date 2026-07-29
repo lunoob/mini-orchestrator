@@ -437,12 +437,13 @@ export type UserDecision = {
 export type UserDecisionBroker = {
   /**
    * 当 agent 返回 needs_input 时调用。
-   * 传递 sessionId、角色和原始请求，返回用户决策。
+   * 传递 sessionId、角色、原始请求和发起 turn 的 ID，返回用户决策。
    */
   requestDecision: (
     sessionId: string,
     role: AgentRole,
     request: InputRequest,
+    turnId?: string,
   ) => Promise<UserDecision | null> // null 表示用户取消
 }
 
@@ -474,59 +475,3 @@ export const createFakeUserDecisionBroker = (
   }
 }
 
-/**
- * 创建交互式 broker，通过 stdin/stdout 与用户交互。
- * 用于正式运行时。
- */
-export const createInteractiveUserDecisionBroker = (): UserDecisionBroker => ({
-  requestDecision: async (_sessionId, _role, request) => {
-    const { createInterface } = await import("node:readline/promises")
-    const { stdin, stdout } = await import("node:process")
-    const rl = createInterface({ input: stdin, output: stdout })
-
-    try {
-      console.log(`\n[Agent] ${request.question}`)
-
-      const validOptionIds = new Set<string>()
-      if (request.options && request.options.length > 0) {
-        for (const opt of request.options) {
-          const desc = opt.description ? ` — ${opt.description}` : ""
-          console.log(`  ${opt.id}: ${opt.label}${desc}`)
-          validOptionIds.add(opt.id)
-        }
-        if (request.inputHint) {
-          console.log(`\n${request.inputHint}`)
-        }
-      }
-
-      if (request.allowFreeform) {
-        console.log("（可自由输入文字回答）")
-      }
-
-      // 循环直到有效输入或取消
-      while (true) {
-        const answer = (await rl.question("请选择/输入: ")).trim()
-
-        if (!answer) {
-          console.log("[Agent] 空输入，视为取消")
-          return null
-        }
-
-        // 检查是否匹配某个选项 ID
-        if (validOptionIds.has(answer)) {
-          return { optionId: answer }
-        }
-
-        // allowFreeform 时接受任意文本
-        if (request.allowFreeform) {
-          return { text: answer }
-        }
-
-        // 不允许自由输入且不匹配选项，重新询问
-        console.log(`[Agent] 无效输入，请选择以下选项之一: ${Array.from(validOptionIds).join(", ")}`)
-      }
-    } finally {
-      rl.close()
-    }
-  },
-})

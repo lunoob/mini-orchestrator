@@ -56,6 +56,8 @@ const makeFakeClient = (): SessionClient & FakeExtras => {
       return { ...s }
     },
 
+    getInteractions: async () => [],
+
     getItems: async (sessionId) => [...(sessionItems.get(sessionId) ?? [])],
 
     getRunnerToken: () => "fake-runner-token",
@@ -233,6 +235,7 @@ describe("end-to-end implement → review → pass", () => {
           await client.sendMessage("impl-sess", { content: prompt, eventId: "evt" })
           return IMPLEMENT_DONE
         },
+        lastTurnId: () => undefined,
         stop: vi.fn(),
       })
       .mockResolvedValueOnce({
@@ -241,6 +244,7 @@ describe("end-to-end implement → review → pass", () => {
           await client.sendMessage("rev-sess", { content: prompt, eventId: "evt" })
           return REVIEW_PASS
         },
+        lastTurnId: () => undefined,
         stop: vi.fn(),
       })
 
@@ -303,6 +307,7 @@ describe("end-to-end implement → review → pass", () => {
           implementerCalls += 1
           return implementerCalls <= 1 ? IMPLEMENT_DONE : REVISE_OUTPUT
         },
+        lastTurnId: () => undefined,
         stop: vi.fn(),
       })
       .mockResolvedValueOnce({
@@ -312,6 +317,7 @@ describe("end-to-end implement → review → pass", () => {
           reviewerCalls += 1
           return reviewerCalls <= 1 ? REVIEW_FAIL : REVIEW_PASS
         },
+        lastTurnId: () => undefined,
         stop: vi.fn(),
       })
 

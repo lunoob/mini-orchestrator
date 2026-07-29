@@ -60,6 +60,8 @@ const makeFakeSessionClient = (): SessionClient & FakeClientResult => {
       return { ...s }
     },
 
+    getInteractions: async () => [],
+
     getItems: async (sessionId: string) => [...(sessionItems.get(sessionId) ?? [])],
 
     getRunnerToken: () => "fake-runner-token",
@@ -200,6 +202,7 @@ const makeFakeAgent = (
       idx += 1
       return res
     },
+    lastTurnId: () => undefined,
     stop: vi.fn(async () => undefined),
   }
 }
@@ -337,11 +340,13 @@ describe("workflow session integration", () => {
       runtime.implementerSession = {
         sessionId: "s1",
         sendTaskAndWait: vi.fn(),
+        lastTurnId: () => undefined,
         stop: vi.fn().mockRejectedValue(new Error("impl broken")),
       }
       runtime.reviewerSession = {
         sessionId: "s2",
         sendTaskAndWait: vi.fn(),
+        lastTurnId: () => undefined,
         stop: vi.fn().mockRejectedValue(new Error("rev broken")),
       }
 
@@ -364,10 +369,12 @@ describe("workflow session integration", () => {
 
       runtime.implementerSession = {
         sessionId: "s1",
+        lastTurnId: () => undefined,
         sendTaskAndWait: vi.fn(), stop: implStop,
       }
       runtime.reviewerSession = {
         sessionId: "s2",
+        lastTurnId: () => undefined,
         sendTaskAndWait: vi.fn(), stop: revStop,
       }
 

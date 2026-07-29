@@ -98,6 +98,17 @@ export const notifyImplementAsk = () => {
   )
 }
 
+export const notifyNeedsInput = (question: string) => {
+  const shortQuestion = question.length > 100
+    ? `${question.slice(0, 97)}...`
+    : question
+  notify(
+    "编排器",
+    `需要用户输入: ${shortQuestion}`,
+    "warning",
+  )
+}
+
 export const notifyError = (errorMessage: string) => {
   const shortMsg = errorMessage.length > 200
     ? `${errorMessage.slice(0, 197)}...`

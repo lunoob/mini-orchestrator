@@ -57,7 +57,7 @@ export const handleSessionImplementOutcome = async (
     }
 
     deps.log(`[Implement] ${context}: agent 需要用户输入`)
-    const decision = await broker.requestDecision(agent.sessionId, "implementer", outcome.request!)
+    const decision = await broker.requestDecision(agent.sessionId, "implementer", outcome.request!, agent.lastTurnId())
 
     if (!decision) {
       throw new ImplementAskAbortError(context)

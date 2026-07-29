@@ -1,5 +1,6 @@
 import type {
   CreateSessionInput,
+  InteractionRecord,
   SessionInputEvent,
   SessionItem,
   SessionRecord,
@@ -11,6 +12,7 @@ import { waitForTurn as waitForTurnResult } from "./turn-wait.js"
 export type SessionClient = {
   create: (input: Omit<CreateSessionInput, "id">) => Promise<SessionRecord>
   get: (sessionId: string) => Promise<SessionRecord>
+  getInteractions: (sessionId: string) => Promise<InteractionRecord[]>
   getItems: (sessionId: string) => Promise<SessionItem[]>
   getRunnerToken: (sessionId: string) => string | undefined
   postEvent: (sessionId: string, event: SessionInputEvent) => Promise<unknown>
@@ -100,6 +102,11 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
     return body.items
   }
 
+  const getInteractions = async (sessionId: string) => {
+    const body = await request(`/v1/sessions/${sessionId}/interactions`) as { interactions: InteractionRecord[] }
+    return body.interactions
+  }
+
   const postEvent = (sessionId: string, event: SessionInputEvent) => {
     const runnerToken = options.runnerToken ?? runnerTokens.get(sessionId)
     const eventHeaders = isRunnerEvent(event) && runnerToken
@@ -131,7 +138,7 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
   }
 
   const waitForTurn = async (sessionId: string, turnId: string): Promise<SessionItem> => {
-    const waited = await waitForTurnResult({ create, get, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }, sessionId, turnId)
+    const waited = await waitForTurnResult({ create, get, getInteractions, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }, sessionId, turnId)
     if (waited.turn.status !== "completed") {
       throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
     }
@@ -139,5 +146,5 @@ export const createSessionClient = (options: ClientOptions): SessionClient => {
     throw new Error(`[Session] Turn ${turnId} ended with status ${waited.turn.status}${waited.turn.error ? `: ${waited.turn.error}` : ""}`)
   }
 
-  return { create, get, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }
+  return { create, get, getInteractions, getItems, getRunnerToken: sessionId => runnerTokens.get(sessionId), postEvent, sendMessage, stream, waitForTurn }
 }

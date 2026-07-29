@@ -17,6 +17,7 @@ const createMockAgent = (outputs: string[]): WorkflowAgent => {
       if (callIndex >= outputs.length) throw new Error("No more outputs")
       return outputs[callIndex++]
     }),
+    lastTurnId: () => undefined,
     stop: vi.fn(),
   }
 }
@@ -97,6 +98,7 @@ describe("handleSessionImplementOutcome", () => {
       "test-session",
       "implementer",
       expect.objectContaining({ question: "选择方案" }),
+      undefined, // lastTurnId from mock agent
     )
     // 验证用户决策被发送回 agent
     expect(agent.sendTaskAndWait).toHaveBeenCalledWith(

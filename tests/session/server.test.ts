@@ -75,6 +75,7 @@ describe("Session API server", () => {
         { type: "runner.ready" },
       )
       expect(readyResponse.status).toBe(202)
+      const { controllerId } = await readyResponse.json() as { controllerId: string }
 
       const message = {
         data: { content: "Implement the feature" },
@@ -98,6 +99,7 @@ describe("Session API server", () => {
         `${baseUrl}/v1/sessions/${session.id}/events`,
         runnerToken,
         {
+          controllerId,
           data: { content: "Feature implemented", turnId: firstMessage.turnId },
           type: "runner.turn.completed",
         },
@@ -369,6 +371,125 @@ describe("Session API server", () => {
           expect.objectContaining({ content: "hello world", role: "assistant", turnId }),
         ],
       })
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("rejects a second runner registering on the same session", async () => {
+    const { createSessionApiServer } = await import(serverModulePath) as typeof import("@src/session/server")
+    const server = createSessionApiServer({ runDirectory, token: "parent-token" })
+    const { baseUrl } = await server.start()
+
+    try {
+      const createResponse = await postJson(`${baseUrl}/v1/sessions`, "parent-token", {
+        agent,
+        role: "implementer",
+        workspace: "/tmp/project",
+      })
+      const { runnerToken, session } = await createResponse.json() as { runnerToken: string; session: { id: string } }
+
+      // First runner registers
+      const firstReady = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      expect(firstReady.status).toBe(202)
+
+      // Second runner.ready from the same token — each call generates a new controllerId server-side,
+      // so the second call should be rejected because a controller is already active
+      const secondReady = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      expect(secondReady.status).toBe(409)
+      const body = await secondReady.json() as { error: string }
+      expect(body.error).toContain("active controller")
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("second runner's failed status does not release first runner's lease", async () => {
+    const { createSessionApiServer } = await import(serverModulePath) as typeof import("@src/session/server")
+    const server = createSessionApiServer({ runDirectory, token: "parent-token" })
+    const { baseUrl } = await server.start()
+
+    try {
+      const createResponse = await postJson(`${baseUrl}/v1/sessions`, "parent-token", {
+        agent,
+        role: "implementer",
+        workspace: "/tmp/project",
+      })
+      const { runnerToken, session } = await createResponse.json() as { runnerToken: string; session: { id: string } }
+
+      // First runner registers
+      const readyResponse = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      const { controllerId } = await readyResponse.json() as { controllerId: string }
+
+      // Second runner tries to register — gets 409
+      const conflict = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      expect(conflict.status).toBe(409)
+
+      // Second runner sends failed status WITHOUT controllerId (it never got one)
+      await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        data: { status: "failed" },
+        source: "runner",
+        type: "runner.status",
+      })
+
+      // First runner should still be protected — new registration should fail
+      const thirdReady = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      expect(thirdReady.status).toBe(409)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("releases controller lease on runner stopped, allowing new runner to register", async () => {
+    const { createSessionApiServer } = await import(serverModulePath) as typeof import("@src/session/server")
+    const server = createSessionApiServer({ runDirectory, token: "parent-token" })
+    const { baseUrl } = await server.start()
+
+    try {
+      const createResponse = await postJson(`${baseUrl}/v1/sessions`, "parent-token", {
+        agent,
+        role: "implementer",
+        workspace: "/tmp/project",
+      })
+      const { runnerToken, session } = await createResponse.json() as { runnerToken: string; session: { id: string } }
+
+      // First runner registers — server returns controllerId
+      const readyResponse = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      const { controllerId } = await readyResponse.json() as { controllerId: string }
+      expect(controllerId).toBeDefined()
+
+      // First runner reports stopped WITH its controllerId
+      await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        controllerId,
+        data: { status: "stopped" },
+        source: "runner",
+        type: "runner.status",
+      })
+
+      // Now a new runner can register (same token, new controllerId generated server-side)
+      const newReady = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        source: "runner",
+        type: "runner.ready",
+      })
+      expect(newReady.status).toBe(202)
     } finally {
       await server.stop()
     }

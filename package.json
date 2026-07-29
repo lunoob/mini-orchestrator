@@ -46,5 +46,8 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0"
   }
 }

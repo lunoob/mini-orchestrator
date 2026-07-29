@@ -1,4 +1,5 @@
 import type {
+  InteractionRecord,
   SessionEventAck,
   SessionInputEvent,
   SessionItem,
@@ -11,6 +12,8 @@ import type {
 type EventDeps = {
   addItem: (sessionId: string, item: SessionItem) => boolean
   activeTurn: (sessionId: string) => Turn | undefined
+  cancelInteraction: (sessionId: string, interactionId: string) => void
+  createInteraction: (input: { interactionId: string; sessionId: string; turnId?: string; role: InteractionRecord["role"]; request: InteractionRecord["request"] }) => InteractionRecord
   finishTurn: (
     sessionId: string,
     turnId: string,
@@ -19,10 +22,12 @@ type EventDeps = {
     error?: string,
     outputEventType?: "output_item.done" | "response.output_item.done",
   ) => Turn
+  getPendingInteraction: (sessionId: string) => InteractionRecord | undefined
   getTurn: (sessionId: string, turnId: string) => Turn | undefined
   getTurns: (sessionId: string) => Turn[]
   publish: (sessionId: string, event: Omit<SessionStreamEvent, "sequence" | "sessionId">) => void
   requireSession: (sessionId: string) => SessionRecord
+  respondInteraction: (sessionId: string, interactionId: string, response: { optionId?: string; text?: string }) => { optionId?: string; text?: string }
   submitMessage: (input: { content: string; eventId: string; sessionId: string }) => SubmitMessageResult
   now: () => Date
   updateSession: (session: SessionRecord, nextTurns?: Turn[]) => SessionRecord
@@ -140,6 +145,30 @@ export const applySessionEvent = (
     deps.publish(sessionId, { data: active ? { turnId: active.id } : undefined, type: "session.stop" })
     deps.publish(sessionId, { status: updated.status, type: "session.status" })
     return { eventId: event.eventId, queued: false }
+  }
+
+  if (event.type === "interaction.request") {
+    deps.createInteraction({
+      interactionId: event.data.interactionId,
+      sessionId,
+      turnId: event.data.turnId,
+      role: event.data.role,
+      request: event.data.request,
+    })
+    return { queued: false }
+  }
+
+  if (event.type === "interaction.response") {
+    deps.respondInteraction(sessionId, event.data.interactionId, {
+      optionId: event.data.optionId,
+      text: event.data.text,
+    })
+    return { queued: false }
+  }
+
+  if (event.type === "interaction.cancel") {
+    deps.cancelInteraction(sessionId, event.data.interactionId)
+    return { queued: false }
   }
 
   throw new Error("[Session] Unsupported session event")

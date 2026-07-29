@@ -8,6 +8,8 @@ import { waitForTurn } from "./turn-wait.js"
 
 export type WorkflowAgent = RunnerHandle & {
   sendTaskAndWait: (prompt: string) => Promise<string>
+  /** The turnId of the most recent sendTaskAndWait call */
+  lastTurnId: () => string | undefined
 }
 
 type WorkflowAgentOptions = {
@@ -41,8 +43,11 @@ export const startWorkflowAgent = async (options: WorkflowAgentOptions): Promise
   })
   const handle = await supervisor.start()
 
+  let lastTurnId: string | undefined
+
   const sendTaskAndWait = async (prompt: string) => {
     const { turnId } = await options.client.sendMessage(session.id, { content: prompt, eventId: randomUUID() })
+    lastTurnId = turnId
     const result = await waitForTurn(options.client, session.id, turnId)
     if (result.turn.status !== "completed") {
       throw new Error(`[Session] Turn ${turnId} ended with status ${result.turn.status}${result.turn.error ? `: ${result.turn.error}` : ""}`)
@@ -50,5 +55,5 @@ export const startWorkflowAgent = async (options: WorkflowAgentOptions): Promise
     return result.output?.content ?? result.turn.outputText ?? ""
   }
 
-  return { ...handle, sendTaskAndWait }
+  return { ...handle, lastTurnId: () => lastTurnId, sendTaskAndWait }
 }

@@ -9,7 +9,7 @@ import { runWorkflowResume } from "./resume.js"
 import type { WorkflowRuntime } from "./types.js"
 import { createSessionApiServer } from "../session/server.js"
 import { createSessionClient } from "../session/client.js"
-import { createInteractiveUserDecisionBroker } from "./agent-outcome.js"
+import { createSessionUserDecisionBroker } from "./session-broker.js"
 
 export const runWorkflow = async (args: ParsedArgs) => {
   if (args["resume-from"]) {
@@ -38,6 +38,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
 
   const sessionServer = createSessionApiServer({ runDirectory: path.join(config.projectDir, ".orchestrator") })
   const { baseUrl, token } = await sessionServer.start()
+  const sessionClient = createSessionClient({ baseUrl, token })
   const runtime: WorkflowRuntime = {
     args,
     baseSha,
@@ -47,8 +48,8 @@ export const runWorkflow = async (args: ParsedArgs) => {
     needsCheckMode,
     prompts,
     sessionBaseUrl: baseUrl,
-    sessionClient: createSessionClient({ baseUrl, token }),
-    userDecisionBroker: createInteractiveUserDecisionBroker(),
+    sessionClient,
+    userDecisionBroker: createSessionUserDecisionBroker({ client: sessionClient }),
   }
 
   try {

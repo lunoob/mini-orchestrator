@@ -63,14 +63,19 @@ const waitForReady = async (
   timeoutMs: number,
   signal?: AbortSignal,
   onSubscribed?: () => void,
-) => {
+): Promise<{ controllerId?: string }> => {
   let iterator: AsyncIterator<Awaited<ReturnType<typeof client.stream>> extends AsyncIterable<infer T> ? T : never> | undefined
+  let controllerId: string | undefined
   const wait = async () => {
     iterator = client.stream(sessionId)[Symbol.asyncIterator]()
     while (true) {
       const next = await iterator.next()
       if (next.done) throw new Error("[Session] Runner stream closed before ready")
       onSubscribed?.()
+      // Capture controllerId from the dedicated SSE event
+      if (next.value.type === "runner.controller" && next.value.controllerId) {
+        controllerId = next.value.controllerId
+      }
       if (next.value.type === "runner.ready") return
     }
   }
@@ -90,6 +95,7 @@ const waitForReady = async (
       }),
       ...(cancelled ? [cancelled] : []),
     ])
+    return { controllerId }
   } finally {
     if (timer) clearTimeout(timer)
     if (abort && signal) signal.removeEventListener("abort", abort)
@@ -128,23 +134,36 @@ export const createRunnerSupervisor = (options: SupervisorOptions): RunnerSuperv
   let stopping: Promise<void> | undefined
   let stopWatching: (() => void) | undefined
   let readyController: AbortController | undefined
-  let ready: Promise<void> | undefined
+  let ready: Promise<{ controllerId?: string }> | undefined
   let failure: Promise<void> | undefined
 
   const cleanupConfig = async () => {
     await unlink(configPath).catch(() => undefined)
   }
 
+  let activeControllerId: string | undefined
+
   const reportFailure = (error: Error) => {
     if (failure) return failure
     failure = (async () => {
       readyController?.abort()
       stopWatching?.()
+      // Send runner.failure with controllerId so the server accepts it
       await options.sessionClient.postEvent(options.sessionId, event({
+        controllerId: activeControllerId,
         data: { reason: error.message },
         eventId: `runner-failure-${options.sessionId}`,
         type: "runner.failure",
       })).catch(() => undefined)
+      // Also send terminal runner.status to release the lease
+      if (activeControllerId) {
+        await options.sessionClient.postEvent(options.sessionId, event({
+          controllerId: activeControllerId,
+          data: { status: "failed" as const },
+          source: "runner",
+          type: "runner.status",
+        })).catch(() => undefined)
+      }
       if (paneId) await paneBridge.close(paneId).catch(() => undefined)
       await cleanupConfig()
       paneId = undefined
@@ -188,7 +207,8 @@ export const createRunnerSupervisor = (options: SupervisorOptions): RunnerSuperv
         ? `${quote(process.execPath)} ${quote(resolved.tsxPath)} ${quote(resolved.entry)} --config ${quote(configPath)}`
         : `${quote(process.execPath)} ${quote(resolved.entry)} --config ${quote(configPath)}`
       await paneBridge.bootstrap(paneId, runnerCommand)
-      await ready
+      const readyResult = await ready!
+      activeControllerId = readyResult?.controllerId
       started = { sessionId: options.sessionId, stop }
       return started
     } catch (error) {
@@ -223,10 +243,20 @@ export const createRunnerSupervisor = (options: SupervisorOptions): RunnerSuperv
         const exited = await runnerExit
         if (!exited) {
           await options.sessionClient.postEvent(options.sessionId, event({
+            controllerId: activeControllerId,
             data: { reason: "Runner did not exit during stop" },
             eventId: `runner-stop-timeout-${options.sessionId}`,
             type: "runner.failure",
           })).catch(() => undefined)
+          // Also send terminal status to release the lease
+          if (activeControllerId) {
+            await options.sessionClient.postEvent(options.sessionId, event({
+              controllerId: activeControllerId,
+              data: { status: "failed" as const },
+              source: "runner",
+              type: "runner.status",
+            })).catch(() => undefined)
+          }
         }
       } finally {
         stopWatching?.()

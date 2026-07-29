@@ -1,10 +1,12 @@
 import type { AgentConfig } from "../types.js"
+import type { InputRequest } from "../workflow/agent-outcome.js"
 
 export type SessionStatus = "starting" | "ready" | "running" | "waiting" | "idle" | "stopping" | "failed" | "stopped"
 export type SessionRole = "implementer" | "reviewer"
 export type SessionAgent = AgentConfig
 export type RunnerStatus = "starting" | "ready" | "working" | "idle" | "stopping" | "failed" | "stopped"
 export type TurnStatus = "queued" | "running" | "completed" | "failed" | "interrupted"
+export type InteractionStatus = "pending" | "answered" | "cancelled"
 
 export type Turn = {
   createdAt: string
@@ -16,11 +18,24 @@ export type Turn = {
   completedAt?: string
 }
 
+export type InteractionRecord = {
+  createdAt: string
+  interactionId: string
+  request: InputRequest
+  respondedAt?: string
+  response?: { optionId?: string; text?: string }
+  role: SessionRole
+  sessionId: string
+  status: InteractionStatus
+  turnId?: string
+}
+
 export type SessionRecord = {
   activeTurnId?: string
   agent: SessionAgent
   createdAt: string
   id: string
+  interactions?: InteractionRecord[]
   lastError?: string
   role: SessionRole
   runnerReady: boolean
@@ -76,19 +91,24 @@ export type SubmitMessageResult = {
 
 type TurnEventData = { turnId: string }
 
+type WithControllerId = { controllerId?: string }
+
 export type SessionInputEvent =
   | { data: { content: string }; eventId: string; type: "message" }
-  | { data?: { turnId?: string }; eventId?: string; type: "interrupt" }
-  | { data?: { turnId?: string }; eventId?: string; type: "stop" }
-  | { source?: "runner"; type: "ready" | "runner.ready" }
-  | { data: { status: RunnerStatus }; source?: "runner"; type: "runner.status" | "status" }
-  | { data: { reason: string }; eventId?: string; type: "runner.failure" }
-  | { data: { delta: string } & TurnEventData; source?: "runner"; type: "output_text.delta" | "runner.output_text.delta" }
-  | { data: { content: string } & TurnEventData; source?: "runner"; type: "output_item.done" | "runner.output_item.done" }
-  | { data: TurnEventData & { content?: string }; source?: "runner"; type: "turn.completed" }
-  | { data: TurnEventData & { reason?: string }; source?: "runner"; type: "turn.failed" }
-  | { data: TurnEventData; source?: "runner"; type: "turn.interrupted" }
-  | { data: { content?: string } & TurnEventData; source?: "runner"; type: "runner.turn.completed" }
+  | WithControllerId & { data?: { turnId?: string }; eventId?: string; type: "interrupt" }
+  | WithControllerId & { data?: { turnId?: string }; eventId?: string; type: "stop" }
+  | WithControllerId & { source?: "runner"; type: "ready" | "runner.ready" }
+  | WithControllerId & { data: { status: RunnerStatus }; source?: "runner"; type: "runner.status" | "status" }
+  | WithControllerId & { data: { reason: string }; eventId?: string; type: "runner.failure" }
+  | WithControllerId & { data: { delta: string } & TurnEventData; source?: "runner"; type: "output_text.delta" | "runner.output_text.delta" }
+  | WithControllerId & { data: { content: string } & TurnEventData; source?: "runner"; type: "output_item.done" | "runner.output_item.done" }
+  | WithControllerId & { data: TurnEventData & { content?: string }; source?: "runner"; type: "turn.completed" }
+  | WithControllerId & { data: TurnEventData & { reason?: string }; source?: "runner"; type: "turn.failed" }
+  | WithControllerId & { data: TurnEventData; source?: "runner"; type: "turn.interrupted" }
+  | WithControllerId & { data: { content?: string } & TurnEventData; source?: "runner"; type: "runner.turn.completed" }
+  | { data: { interactionId: string; request: InputRequest; role: SessionRole; turnId?: string }; type: "interaction.request" }
+  | { data: { interactionId: string; optionId?: string; text?: string }; type: "interaction.response" }
+  | { data: { interactionId: string }; type: "interaction.cancel" }
 
 export type SessionEventAck = {
   eventId?: string
@@ -97,6 +117,7 @@ export type SessionEventAck = {
 }
 
 export type SessionStreamEvent = {
+  controllerId?: string
   data?: Record<string, unknown>
   eventId?: string
   sequence: number
@@ -117,6 +138,10 @@ export type SessionStreamEvent = {
     | "turn.failed"
     | "turn.interrupted"
     | "turn.started"
+    | "interaction.request"
+    | "interaction.response"
+    | "interaction.cancel"
+    | "runner.controller"
 }
 
 export type CompleteTurnInput = {

@@ -53,6 +53,8 @@ const makeFakeClient = (): SessionClient & FakeClientExtras => {
       return { ...s }
     },
 
+    getInteractions: async () => [],
+
     getItems: async (sessionId) => [...(sessionItems.get(sessionId) ?? [])],
 
     getRunnerToken: () => "fake-runner-token",
@@ -204,11 +206,13 @@ describe("workflow review-loop Session integration", () => {
     const implementer: WorkflowAgent = {
       sessionId: "impl-session",
       sendTaskAndWait: vi.fn(async () => IMPLEMENT_DONE),
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     const reviewer: WorkflowAgent = {
       sessionId: "rev-session",
       sendTaskAndWait: vi.fn(async () => REVIEW_PASS),
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     runtime.implementerSession = implementer
@@ -270,6 +274,7 @@ describe("workflow review-loop Session integration", () => {
       sendTaskAndWait: vi.fn()
         .mockResolvedValueOnce(REVISE_OUTPUT)   // revise round
         .mockResolvedValueOnce(IMPLEMENT_DONE), // post-review check
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     const reviewer: WorkflowAgent = {
@@ -277,6 +282,7 @@ describe("workflow review-loop Session integration", () => {
       sendTaskAndWait: vi.fn()
         .mockResolvedValueOnce(REVIEW_FAIL)     // first review → fail
         .mockResolvedValueOnce(REVIEW_PASS),    // re-review → pass
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     runtime.implementerSession = implementer
@@ -344,6 +350,7 @@ describe("workflow review-loop Session integration", () => {
         await client.sendMessage("impl-session", { content: prompt, eventId: "evt-impl" })
         return REVISE_OUTPUT
       },
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     const reviewer: WorkflowAgent = {
@@ -352,6 +359,7 @@ describe("workflow review-loop Session integration", () => {
         await client.sendMessage("rev-session", { content: prompt, eventId: "evt-rev" })
         return REVIEW_FAIL
       },
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     runtime.implementerSession = implementer
@@ -431,11 +439,13 @@ describe("workflow review-loop Session integration", () => {
       sendTaskAndWait: vi.fn()
         .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT)  // 第一次 review → needs_input
         .mockResolvedValueOnce(REVIEWER_PASS_AFTER_INPUT),  // 用户回答后 → pass
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     const implementer: WorkflowAgent = {
       sessionId: "impl-session",
       sendTaskAndWait: vi.fn(async () => IMPLEMENT_DONE),
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     runtime.implementerSession = implementer
@@ -511,11 +521,13 @@ describe("workflow review-loop Session integration", () => {
         .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT_1)
         .mockResolvedValueOnce(REVIEWER_NEEDS_INPUT_2)
         .mockResolvedValueOnce(REVIEWER_PASS),
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     const implementer: WorkflowAgent = {
       sessionId: "impl-session",
       sendTaskAndWait: vi.fn(async () => IMPLEMENT_DONE),
+      lastTurnId: () => undefined,
       stop: vi.fn(),
     }
     runtime.implementerSession = implementer
@@ -546,6 +558,7 @@ vi.mock("@src/session/workflow-agent", () => ({
   startWorkflowAgent: vi.fn(async (opts: { role: string }) => ({
     sessionId: `new-${opts.role}-session`,
     sendTaskAndWait: vi.fn(),
+    lastTurnId: () => undefined,
     stop: vi.fn(),
   })),
 }))

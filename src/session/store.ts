@@ -4,6 +4,7 @@ import { applySessionEvent } from "./events.js"
 import type {
   CompleteTurnInput,
   CreateSessionInput,
+  InteractionRecord,
   SessionEventAck,
   SessionInputEvent,
   SessionItem,
@@ -16,19 +17,34 @@ import type {
 
 export type SessionStore = {
   applyEvent: (input: { event: SessionInputEvent; sessionId: string }) => SessionEventAck
+  cancelInteraction: (sessionId: string, interactionId: string) => void
   completeTurn: (input: CompleteTurnInput) => void
   create: (input: CreateSessionInput) => SessionRecord
+  createInteraction: (input: { interactionId: string; sessionId: string; turnId?: string; role: InteractionRecord["role"]; request: InteractionRecord["request"] }) => InteractionRecord
   get: (sessionId: string) => SessionRecord | undefined
+  getInteractions: (sessionId: string) => InteractionRecord[]
+  getInteraction: (sessionId: string, interactionId: string) => InteractionRecord | undefined
   getItems: (sessionId: string) => SessionItem[]
+  getPendingInteraction: (sessionId: string) => InteractionRecord | undefined
   getRunnerToken: (sessionId: string) => string | undefined
   getTurn: (sessionId: string, turnId: string) => Turn | undefined
   markReady: (sessionId: string) => void
+  /** Register a runner as the active controller. Throws if another controller is already active. */
+  registerController: (sessionId: string, controllerId: string) => void
+  /** Release the controller lease for a session. */
+  releaseController: (sessionId: string, controllerId: string) => void
+  /** Publish controllerId to session subscribers (runner picks it up via SSE). */
+  publishControllerId: (sessionId: string, controllerId: string) => void
+  /** Refresh the controller lease TTL. */
+  refreshController: (sessionId: string, controllerId: string) => void
+  respondInteraction: (sessionId: string, interactionId: string, response: { optionId?: string; text?: string }) => { optionId?: string; text?: string }
   snapshot: () => SessionStoreSnapshot
   submitMessage: (input: SubmitMessageInput) => SubmitMessageResult
   subscribe: (sessionId: string, listener: (event: SessionStreamEvent) => void) => () => void
 }
 
 export type SessionStoreSnapshot = {
+  interactions?: Record<string, InteractionRecord[]>
   items: Record<string, SessionItem[]>
   runnerTokens?: Record<string, string>
   sequence: number
@@ -57,10 +73,16 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
   const turns = new Map(
     Object.entries(options.snapshot?.turns ?? {}).map(([id, savedTurns]) => [id, [...savedTurns]]),
   )
+  const interactions = new Map(
+    Object.entries(options.snapshot?.interactions ?? {}).map(([id, saved]) => [id, [...saved]]),
+  )
   const submittedEvents = new Map(
     (options.snapshot?.submittedEvents ?? []).map(({ key, result }) => [key, { ...result }]),
   )
   const runnerTokens = new Map(Object.entries(options.snapshot?.runnerTokens ?? {}))
+  // Controller lease: sessionId → { controllerId, expiry }
+  const activeControllers = new Map<string, { controllerId: string; expiry: number }>()
+  const CONTROLLER_LEASE_TTL_MS = 60_000 // 60 seconds
   const subscribers = new Map<string, Set<(event: SessionStreamEvent) => void>>()
   let sequence = options.snapshot?.sequence ?? 0
 
@@ -103,6 +125,8 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
     if (session.runnerStatus === "stopped" || session.status === "stopped") return "stopped"
     if (session.runnerStatus === "failed" || session.status === "failed") return "failed"
     if (session.runnerStatus === "stopping" || session.status === "stopping") return "stopping"
+    // Preserve waiting status when a pending interaction exists
+    if (getPendingInteraction(session.id)) return "waiting"
     if (nextTurns.some(turn => !terminalStatuses.has(turn.status))) return "running"
     if (session.runnerReady) return "ready"
     return "starting"
@@ -152,6 +176,126 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
   const getTurn = (sessionId: string, turnId: string) =>
     getTurns(sessionId).find(turn => turn.id === turnId)
 
+  const getInteractions = (sessionId: string) => [...(interactions.get(sessionId) ?? [])]
+
+  const getInteraction = (sessionId: string, interactionId: string) =>
+    getInteractions(sessionId).find(i => i.interactionId === interactionId)
+
+  const getPendingInteraction = (sessionId: string) =>
+    getInteractions(sessionId).find(i => i.status === "pending")
+
+  const createInteraction = (input: {
+    interactionId: string
+    sessionId: string
+    turnId?: string
+    role: InteractionRecord["role"]
+    request: InteractionRecord["request"]
+  }): InteractionRecord => {
+    const session = requireSession(input.sessionId)
+    // Reject duplicate interactionId
+    if (getInteraction(input.sessionId, input.interactionId)) {
+      throw new Error(`[Session] Duplicate interactionId: ${input.interactionId}`)
+    }
+    const record: InteractionRecord = {
+      createdAt: now().toISOString(),
+      interactionId: input.interactionId,
+      request: input.request,
+      role: input.role,
+      sessionId: input.sessionId,
+      status: "pending",
+      turnId: input.turnId,
+    }
+    const current = getInteractions(input.sessionId)
+    interactions.set(input.sessionId, [...current, record])
+    // Override session status to waiting
+    const updated = updateSession({ ...session, status: "waiting" })
+    publish(input.sessionId, {
+      data: {
+        interactionId: record.interactionId,
+        request: record.request,
+        role: record.role,
+        turnId: record.turnId,
+      },
+      type: "interaction.request",
+    })
+    publishStatus(updated)
+    return record
+  }
+
+  const respondInteraction = (
+    sessionId: string,
+    interactionId: string,
+    response: { optionId?: string; text?: string },
+  ): { optionId?: string; text?: string } => {
+    const existing = getInteraction(sessionId, interactionId)
+    if (!existing) throw new Error(`[Session] Unknown interaction: ${interactionId}`)
+    // Idempotent: return first response for answered
+    if (existing.status === "answered") return existing.response!
+    // Explicit failure for cancelled
+    if (existing.status === "cancelled") throw new Error(`[Session] Interaction already cancelled: ${interactionId}`)
+
+    // Validate response against request
+    const { request } = existing
+    if (response.optionId !== undefined) {
+      if (!request.options || !request.options.some(o => o.id === response.optionId)) {
+        throw new Error(`[Session] Invalid optionId: ${response.optionId}`)
+      }
+    }
+    if (response.text !== undefined) {
+      if (!response.text.trim()) {
+        throw new Error(`[Session] Response requires non-empty text`)
+      }
+      // Text is only allowed when allowFreeform is true
+      if (!request.allowFreeform) {
+        throw new Error(`[Session] Text response not allowed when allowFreeform is false`)
+      }
+    }
+    // If neither optionId nor text provided, that's invalid
+    if (response.optionId === undefined && response.text === undefined) {
+      throw new Error(`[Session] Response must include optionId or text`)
+    }
+
+    const respondedAt = now().toISOString()
+    const updatedRecord: InteractionRecord = {
+      ...existing,
+      respondedAt,
+      response,
+      status: "answered",
+    }
+    const current = getInteractions(sessionId)
+    interactions.set(sessionId, current.map(i => i.interactionId === interactionId ? updatedRecord : i))
+    // Restore session status
+    const session = requireSession(sessionId)
+    updateSession(session)
+    publish(sessionId, {
+      data: { interactionId, ...response },
+      type: "interaction.response",
+    })
+    publishStatus(requireSession(sessionId))
+    return response
+  }
+
+  const cancelInteraction = (sessionId: string, interactionId: string): void => {
+    const existing = getInteraction(sessionId, interactionId)
+    if (!existing) throw new Error(`[Session] Unknown interaction: ${interactionId}`)
+    if (existing.status !== "pending") return
+
+    const updatedRecord: InteractionRecord = {
+      ...existing,
+      respondedAt: now().toISOString(),
+      status: "cancelled",
+    }
+    const current = getInteractions(sessionId)
+    interactions.set(sessionId, current.map(i => i.interactionId === interactionId ? updatedRecord : i))
+    const session = requireSession(sessionId)
+    updateSession(session)
+    publish(sessionId, {
+      data: { interactionId },
+      type: "interaction.cancel",
+    })
+    publishStatus(requireSession(sessionId))
+  }
+
   const subscribe = (sessionId: string, listener: (event: SessionStreamEvent) => void) => {
     const sessionSubscribers = subscribers.get(sessionId) ?? new Set()
     sessionSubscribers.add(listener)
@@ -170,10 +314,46 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
     publishStatus(updated)
   }
 
+  const registerController = (sessionId: string, controllerId: string): void => {
+    requireSession(sessionId)
+    const existing = activeControllers.get(sessionId)
+    if (existing) {
+      // Expired lease is stale — allow override
+      if (now().getTime() >= existing.expiry) {
+        activeControllers.delete(sessionId)
+      } else if (existing.controllerId !== controllerId) {
+        throw new Error(`[Session] Session ${sessionId} already has an active controller`)
+      }
+    }
+    activeControllers.set(sessionId, { controllerId, expiry: now().getTime() + CONTROLLER_LEASE_TTL_MS })
+  }
+
+  const releaseController = (sessionId: string, controllerId: string): void => {
+    const existing = activeControllers.get(sessionId)
+    if (existing && existing.controllerId === controllerId) {
+      activeControllers.delete(sessionId)
+    }
+  }
+
+  /** Refresh the controller lease TTL. Called by runner heartbeat/status events. */
+  const refreshController = (sessionId: string, controllerId: string): void => {
+    const existing = activeControllers.get(sessionId)
+    if (existing && existing.controllerId === controllerId) {
+      existing.expiry = now().getTime() + CONTROLLER_LEASE_TTL_MS
+    }
+  }
+
+  const publishControllerId = (sessionId: string, controllerId: string): void => {
+    publish(sessionId, { controllerId, type: "runner.controller" })
+  }
+
   const submitMessage = (input: SubmitMessageInput): SubmitMessageResult => {
     const session = requireSession(input.sessionId)
     if (["failed", "stopping", "stopped"].includes(session.status)) {
       throw new Error(`[Session] Session is not accepting messages: ${session.status}`)
+    }
+    if (getPendingInteraction(input.sessionId)) {
+      throw new Error(`[Session] Session is waiting for user interaction: ${input.sessionId}`)
     }
     const eventKey = `${input.sessionId}:${input.eventId}`
     const previous = submittedEvents.get(eventKey)
@@ -246,11 +426,15 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
   const applyEvent = (input: { event: SessionInputEvent; sessionId: string }) => applySessionEvent({
     activeTurn,
     addItem,
+    cancelInteraction,
+    createInteraction,
     finishTurn,
+    getPendingInteraction,
     getTurn,
     getTurns,
     publish,
     requireSession,
+    respondInteraction,
     submitMessage,
     now,
     updateSession,
@@ -264,6 +448,7 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
   }
 
   const snapshot = (): SessionStoreSnapshot => ({
+    interactions: Object.fromEntries([...interactions.entries()].map(([id, saved]) => [id, [...saved]])),
     items: Object.fromEntries([...items.entries()].map(([id, savedItems]) => [id, [...savedItems]])),
     runnerTokens: Object.fromEntries(runnerTokens),
     sequence,
@@ -274,13 +459,23 @@ export const createSessionStore = (options: StoreOptions = {}): SessionStore => 
 
   return {
     applyEvent,
+    cancelInteraction,
     completeTurn,
     create,
+    createInteraction,
     get,
+    getInteractions,
+    getInteraction,
     getItems,
+    getPendingInteraction,
     getRunnerToken,
     getTurn,
     markReady,
+    publishControllerId,
+    refreshController,
+    registerController,
+    releaseController,
+    respondInteraction,
     snapshot,
     submitMessage,
     subscribe,

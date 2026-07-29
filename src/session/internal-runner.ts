@@ -1,10 +1,17 @@
 import { readFile, unlink } from "node:fs/promises"
 
 import type { AgentConfig } from "../types.js"
+import { notifyNeedsInput } from "../notify/index.js"
 import { createSessionClient } from "./client.js"
 import { createSessionAdapter } from "./adapters/factory.js"
 import type { AdapterEvent, AdapterNotification } from "./adapters/types.js"
-import { createRunnerClient } from "./runner-client.js"
+import { createRunnerClient, type InteractionRequest, type InteractionResult } from "./runner-client.js"
+import {
+  mapRequestToPrompt,
+  executePrompt,
+  createClackPromptPort,
+  type PromptPort,
+} from "./interaction-prompt.js"
 import type { SessionInputEvent } from "./types.js"
 
 export type InternalRunnerConfig = {
@@ -50,8 +57,11 @@ const readConfig = async (configPath: string) => {
 
 export const runInternalRunner = async (config: InternalRunnerConfig) => {
   const client = createSessionClient({ baseUrl: config.baseUrl, token: config.runnerToken })
-  const post = (event: SessionInputEvent) => client.postEvent(config.sessionId, event)
   let runner: ReturnType<typeof createRunnerClient> | undefined
+  // Unified post function: uses runner-client's controllerId-wrapped path when available,
+  // falls back to direct postEvent before runner is initialized (e.g. early failures).
+  const post = (event: SessionInputEvent) =>
+    runner ? runner.postRunnerEvent(event) : client.postEvent(config.sessionId, event)
   const adapter = createSessionAdapter({
     agent: config.agent,
     cwd: config.workspace,
@@ -62,17 +72,31 @@ export const runInternalRunner = async (config: InternalRunnerConfig) => {
     onFailure: async error => {
       // 上报 runner.failure 携带具体错误原因，供 Session 状态机持久化
       await post({ data: { reason: error.message }, type: "runner.failure" })
+      // Report terminal status via runner-client to release lease
+      await runner?.reportTerminalStatus("failed", error.message)
       runner?.stop()
-      // 停止 adapter 以终止底层 CLI 子进程，防止进程残留
       await adapter.stop()
       process.exitCode = 1
       console.error(`[Session] Agent process failed: ${error.message}`)
     },
     onNotification: renderAdapterNotification,
   })
+
+  // Interaction handler: use Clack prompts for user input
+  let promptPort: PromptPort | undefined
+  const onInteraction = async (request: InteractionRequest): Promise<InteractionResult> => {
+    // Send notification before showing prompt (notification failure must not block prompt)
+    try { notifyNeedsInput(request.request.question) } catch { /* ignore */ }
+    if (!promptPort) promptPort = await createClackPromptPort()
+    const prompt = mapRequestToPrompt(request.request)
+    process.stdout.write(`\n[Session] 需要用户输入: ${request.request.question}\n`)
+    return executePrompt(promptPort, prompt)
+  }
+
   runner = createRunnerClient({
     client,
     onInterrupt: turnId => adapter.interrupt(turnId),
+    onInteraction,
     onMessage: message => adapter.deliverMessage(message),
     onReady: () => process.stdout.write("[Session] runner ready\n"),
     onStop: () => adapter.stop(),
@@ -87,8 +111,9 @@ export const runInternalRunner = async (config: InternalRunnerConfig) => {
         for (const turn of session.turns.filter(candidate => !["completed", "failed", "interrupted"].includes(candidate.status))) {
           await post({ data: { reason: "runner process terminated", turnId: turn.id }, source: "runner", type: "turn.failed" }).catch(() => undefined)
         }
-        await post({ data: { status: "failed" }, source: "runner", type: "runner.status" }).catch(() => undefined)
       }
+      // Report terminal status via runner-client to release lease
+      await runner?.reportTerminalStatus("failed", "runner process terminated")
       runner?.stop()
       await adapter.stop()
       process.exitCode = 1

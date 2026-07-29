@@ -60,13 +60,16 @@ const reconnectOrCreateAgent = async (
       if (canReconnect) {
         const reconnected = existing
         console.log(`[Resume] Reconnecting to existing ${role} session: ${sessionId} (status=${reconnected.status})`)
+        let _lastTurnId: string | undefined
         return {
           sessionId: reconnected.id,
+          lastTurnId: () => _lastTurnId,
           sendTaskAndWait: async (prompt: string) => {
             const { turnId } = await runtime.sessionClient.sendMessage(reconnected.id, {
               content: prompt,
               eventId: randomUUID(),
             })
+            _lastTurnId = turnId
             const result = await waitForTurn(runtime.sessionClient, reconnected.id, turnId)
             if (result.turn.status !== "completed") {
               throw new Error(
@@ -76,7 +79,6 @@ const reconnectOrCreateAgent = async (
             return result.output?.content ?? result.turn.outputText ?? ""
           },
           stop: async () => {
-            // 复用 session 关闭：发送 stop 事件，不强制关闭 pane（pane 可能已不存在）
             try {
               await runtime.sessionClient.postEvent(reconnected.id, {
                 eventId: `stop-resume-${reconnected.id}`,
