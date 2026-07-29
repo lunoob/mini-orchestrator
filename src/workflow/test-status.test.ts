@@ -5,18 +5,22 @@ import {
   IMPLEMENT_RESULT_START,
 } from "../lib/prompt-delimiters.js"
 import { extractImplementResult, parseImplementStatus, stripStatusLines } from "../lib/utils.js"
-import { buildTestStatusPrompt, loadImplementOutputFormat } from "./test-status.js"
+import { buildTestStatusPrompt } from "./test-status.js"
 
 describe("testStatus prompt and output parsing", () => {
-  it("appends implement-output format with delimiters to the prompt", async () => {
-    const outputFormat = await loadImplementOutputFormat()
+  it("builds prompt with implement-output format and delimiters", () => {
+    const outputFormat = [
+      "## 输出",
+      "必须严格遵循以下步骤:",
+      `1. 先输出起始前缀: ${IMPLEMENT_RESULT_START}`,
+      "2. 再输出其他内容（含 STATUS 标记）",
+      `3. 最后输出结束后缀: ${IMPLEMENT_RESULT_END}`,
+    ].join("\n")
     const prompt = buildTestStatusPrompt(outputFormat)
 
     expect(prompt).toContain("查询今天佛山天气")
     expect(prompt).toContain(IMPLEMENT_RESULT_START)
     expect(prompt).toContain(IMPLEMENT_RESULT_END)
-    expect(outputFormat).toContain(IMPLEMENT_RESULT_START)
-    expect(outputFormat).toContain(IMPLEMENT_RESULT_END)
   })
 
   it("strips delimiters and parses implement status like workflow", () => {

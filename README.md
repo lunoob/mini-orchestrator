@@ -20,7 +20,7 @@
 - 至少一个 agent CLI：Codex、Claude 或 Cursor
 - 对应 agent 的登录和使用权限
 
-`mini-orch` 需要在 Herdr pane 内运行。
+`mini-orch` 需要在 Herdr pane 内运行。Herdr 仅用于 pane 展示；agent 管理由 mini-orch 内部 Session API 完成。
 
 ## 安装
 

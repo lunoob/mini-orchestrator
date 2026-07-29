@@ -3,13 +3,15 @@ import path from "node:path"
 import { readNeedsCheckCheckpoint } from "../review/checkpoint.js"
 import { loadConfig, loadPrompts } from "../config/load.js"
 import { parseNeedsCheckAction, parseNeedsCheckMode } from "../review/needs-check.js"
-import { stopAgent } from "../agent/index.js"
+import { createSessionApiServer } from "../session/server.js"
+import { createSessionClient } from "../session/client.js"
 import type { ParsedArgs } from "../types.js"
 import { sendControllerRevise, runReviewLoop } from "./review-loop.js"
 import { advanceBaseline } from "./review-context.js"
 import { runIssueQueueFromIndex } from "./issues.js"
 import { markIssueFinished } from "../config/persist.js"
 import type { WorkflowRuntime } from "./types.js"
+import { startRuntimeAgents, stopRuntimeAgents } from "./agent-runtime.js"
 
 export const runWorkflowResume = async (args: ParsedArgs) => {
   const checkpointPath = path.resolve(args["resume-from"])
@@ -26,6 +28,8 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
   const config = await loadConfig(configPath, args)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
+  const sessionServer = createSessionApiServer({ runDirectory: path.join(config.projectDir, ".orchestrator") })
+  const { baseUrl, token } = await sessionServer.start()
 
   const currentIndex = checkpoint.currentIssueIndex
 
@@ -34,11 +38,11 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
     baseSha: checkpoint.baseSha,
     config,
     hasGit: checkpoint.hasGit,
-    implementerPane: checkpoint.implementerPane,
     issueIndex: currentIndex,
     needsCheckMode: parseNeedsCheckMode(args),
     prompts,
-    reviewerPane: checkpoint.reviewerPane,
+    sessionBaseUrl: baseUrl,
+    sessionClient: createSessionClient({ baseUrl, token }),
   }
 
   delete runtime.args["resume-from"]
@@ -51,10 +55,16 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
   const currentIssue = checkpoint.issues[currentIndex]
 
   if (!currentIssue) {
+    await sessionServer.stop()
     throw new Error(`[Resume] Invalid checkpoint: issue index ${currentIndex} out of range`)
   }
 
-  switch (action) {
+  try {
+    await startRuntimeAgents(runtime, sessionDir, {
+      implementerSessionId: checkpoint.implementerSessionId,
+      reviewerSessionId: checkpoint.reviewerSessionId,
+    })
+    switch (action) {
     case "approve":
       console.log(`[Issue] Issue approved: ${currentIssue.title}`)
       await markIssueFinished(configPath, currentIndex, checkpoint.issues)
@@ -63,8 +73,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
         return
       }
-      await stopAgent(runtime.implementerPane)
-      await stopAgent(runtime.reviewerPane)
+      await stopRuntimeAgents(runtime)
       console.log("\n[Issue] Workflow finished: all issues manually approved.")
       return
     case "abort":
@@ -78,8 +87,7 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
         return
       }
-      await stopAgent(runtime.implementerPane)
-      await stopAgent(runtime.reviewerPane)
+      await stopRuntimeAgents(runtime)
       return
     case "retry-review":
       await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, currentIssue.specPath, currentIndex, checkpoint.issues, { controllerReviewNotes: notes, lastReviewOutput: checkpoint.reviewOutput })
@@ -89,12 +97,15 @@ export const runWorkflowResume = async (args: ParsedArgs) => {
         await runIssueQueueFromIndex(runtime, configPath, currentIndex + 1, checkpoint.issues)
         return
       }
-      await stopAgent(runtime.implementerPane)
-      await stopAgent(runtime.reviewerPane)
+      await stopRuntimeAgents(runtime)
       return
     default: {
       const _exhaustive: never = action
       throw new Error(`[Resume] Unknown needs-check action: ${_exhaustive}`)
     }
+    }
+  } finally {
+    await stopRuntimeAgents(runtime)
+    await sessionServer.stop()
   }
 }

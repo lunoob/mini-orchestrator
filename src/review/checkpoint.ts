@@ -3,7 +3,7 @@ import path from "node:path"
 
 import type { IssueConfig } from "../types.js"
 
-export const CHECKPOINT_VERSION = 2
+export const CHECKPOINT_VERSION = 3
 
 export type NeedsCheckCheckpoint = {
   baseSha: string | undefined
@@ -11,13 +11,14 @@ export type NeedsCheckCheckpoint = {
   configPath: string
   createdAt: string
   hasGit: boolean
-  implementerPane: string
+  implementerSessionId: string
   maxReviewRounds: number
   projectDir: string
   reviewOutput: string
-  reviewerPane: string
+  reviewerSessionId: string
   reuseCurrentPane: boolean
   round: number
+  sessionBaseUrl: string
   version: typeof CHECKPOINT_VERSION
   currentIssueIndex: number
   issues: IssueConfig[]
@@ -47,7 +48,17 @@ export const readNeedsCheckCheckpoint = async (filePath: string): Promise<NeedsC
   const checkpoint = JSON.parse(content) as NeedsCheckCheckpoint
 
   if (checkpoint.version !== CHECKPOINT_VERSION) {
-    throw new Error(`[Checkpoint] Unsupported checkpoint version: ${checkpoint.version}`)
+    if (checkpoint.version === 2) {
+      throw new Error(
+        `[Checkpoint] Unsupported checkpoint version 2. ` +
+        `mini-orch v3+ uses session-based agent management; v2 checkpoints store Herdr pane IDs which are no longer valid. ` +
+        `Please re-run the workflow from the start or use an older mini-orch version to complete this checkpoint.`,
+      )
+    }
+    throw new Error(
+      `[Checkpoint] Unsupported checkpoint version: ${checkpoint.version}. ` +
+      `This version of mini-orch only supports version ${CHECKPOINT_VERSION}.`,
+    )
   }
 
   return checkpoint

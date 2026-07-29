@@ -77,7 +77,7 @@ export const notifyIssueComplete = (title: string) => {
 export const notifyTestStatusComplete = () => {
   notify(
     "编排器",
-    "herdr 状态测试完成，请查看 agent 输出。",
+    "Agent 状态测试完成，请查看 agent 输出。",
     "success",
   )
 }

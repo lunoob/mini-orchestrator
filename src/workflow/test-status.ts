@@ -1,17 +1,9 @@
-import { readFile } from "node:fs/promises"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 
-import {
-  agentWaitOptions,
-  runAgentIntegration,
-  runAgentUpdate,
-  sendTaskAndWait,
-  startAgent,
-  stopAgent,
-  waitForAgentReady,
-} from "../agent/index.js"
 import { resolveAgentConfig } from "../config/agents.js"
+import { createSessionApiServer } from "../session/server.js"
+import { createSessionClient } from "../session/client.js"
+import { startWorkflowAgent } from "../session/workflow-agent.js"
 import {
   IMPLEMENT_RESULT_END,
   IMPLEMENT_RESULT_START,
@@ -20,13 +12,9 @@ import {
   extractImplementResult,
   parseImplementStatus,
   printSection,
-  render,
   stripStatusLines,
 } from "../lib/utils.js"
 import type { ParsedArgs } from "../types.js"
-
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
 
 const TEST_PROMPT = `#任务
 查询今天佛山天气
@@ -38,53 +26,58 @@ const TEST_PROMPT = `#任务
 - 若 review 驳回，根据反馈修改后再次输出 \`STATUS: IMPLEMENT_DONE\`
 - 禁止自动执行 git commit 完成代码提交`
 
-export const loadImplementOutputFormat = async () => {
-  const template = await readFile(IMPLEMENT_OUTPUT_PARTIAL, "utf8")
-  return render(template, {
-    delimiterEnd: IMPLEMENT_RESULT_END,
-    delimiterStart: IMPLEMENT_RESULT_START,
-  })
-}
-
 export const buildTestStatusPrompt = (outputFormat: string) =>
   `${TEST_PROMPT}\n\n${outputFormat}`
 
 export const runTestStatus = async (args: ParsedArgs) => {
   const projectDir = args.projectDir ?? process.cwd()
+  const runDirectory = path.join(projectDir, ".orchestrator")
+
   const agent = resolveAgentConfig({
     agent: "claude",
     model: "default",
     name: "test-claude",
   })
 
-  console.log("[TestStatus] Starting herdr status test with claude agent")
+  console.log("[TestStatus] Starting agent status test with claude agent")
   console.log(`[TestStatus] Project dir: ${projectDir}`)
   console.log(`[TestStatus] Command: ${agent.command}`)
 
-  await Promise.all([
-    runAgentUpdate(projectDir, agent),
-    runAgentIntegration(agent),
-  ])
+  const sessionServer = createSessionApiServer({ runDirectory })
+  const { baseUrl, token } = await sessionServer.start()
+  const sessionClient = createSessionClient({ baseUrl, token })
 
-  const paneId = await startAgent(projectDir, agent, { ensureUniqueName: true })
-  let started = false
+  let agent_: Awaited<ReturnType<typeof startWorkflowAgent>> | undefined
 
   try {
-    started = true
-    await waitForAgentReady(paneId, agentWaitOptions(agent))
+    agent_ = await startWorkflowAgent({
+      agent,
+      baseUrl,
+      client: sessionClient,
+      projectDir,
+      role: "implementer",
+      runDirectory,
+    })
 
-    const outputFormat = await loadImplementOutputFormat()
+    const outputFormat = [
+      "## 输出",
+      "必须严格遵循以下步骤:",
+      `1. 先输出起始前缀: ${IMPLEMENT_RESULT_START}`,
+      "2. 再输出其他内容（含 STATUS 标记）",
+      `3. 最后输出结束后缀: ${IMPLEMENT_RESULT_END}`,
+    ].join("\n")
     const prompt = buildTestStatusPrompt(outputFormat)
     console.log(`[TestStatus] Sending prompt:\n${prompt}`)
 
-    const rawOutput = await sendTaskAndWait(paneId, prompt, agentWaitOptions(agent))
+    const rawOutput = await agent_.sendTaskAndWait(prompt)
     const resultBody = extractImplementResult(rawOutput)
     const status = parseImplementStatus(resultBody)
 
     console.log(`[TestStatus] Status: ${status}`)
     printSection("TestStatus Output", stripStatusLines(resultBody))
-    console.log("[TestStatus] Agent completed idle cycle successfully")
+    console.log("[TestStatus] Agent completed via Session API successfully")
   } finally {
-    if (started) await stopAgent(paneId)
+    if (agent_) await agent_.stop()
+    await sessionServer.stop()
   }
 }

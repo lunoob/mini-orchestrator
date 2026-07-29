@@ -7,6 +7,8 @@ import type { ParsedArgs } from "../types.js"
 import { runIssueQueue } from "./issues.js"
 import { runWorkflowResume } from "./resume.js"
 import type { WorkflowRuntime } from "./types.js"
+import { createSessionApiServer } from "../session/server.js"
+import { createSessionClient } from "../session/client.js"
 
 export const runWorkflow = async (args: ParsedArgs) => {
   if (args["resume-from"]) {
@@ -33,17 +35,23 @@ export const runWorkflow = async (args: ParsedArgs) => {
     console.log("[Workflow] Needs-check mode: llm (pause with checkpoint on REVIEW_NEEDS_CHECK)")
   }
 
+  const sessionServer = createSessionApiServer({ runDirectory: path.join(config.projectDir, ".orchestrator") })
+  const { baseUrl, token } = await sessionServer.start()
   const runtime: WorkflowRuntime = {
     args,
     baseSha,
     config,
     hasGit,
-    implementerPane: "",
     issueIndex: 0,
     needsCheckMode,
     prompts,
-    reviewerPane: "",
+    sessionBaseUrl: baseUrl,
+    sessionClient: createSessionClient({ baseUrl, token }),
   }
 
-  await runIssueQueue(runtime, configPath)
+  try {
+    await runIssueQueue(runtime, configPath)
+  } finally {
+    await sessionServer.stop()
+  }
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   ImplementAskAbortError,
-  handleImplementAskIfNeeded,
+  handleSessionImplementAskIfNeeded,
   type ImplementAskDeps,
 } from "./implement-ask.js"
 
@@ -14,34 +14,32 @@ const doneOutput = `---IMPLEMENT_RESULT_START---
 STATUS: IMPLEMENT_DONE
 ---IMPLEMENT_RESULT_END---`
 
-const createDeps = (overrides: Partial<ImplementAskDeps> = {}): ImplementAskDeps => ({
+const createDeps = (overrides: Partial<ImplementAskDeps> = {}): Pick<ImplementAskDeps, "log" | "promptContinue"> => ({
   log: vi.fn(),
   promptContinue: vi.fn(),
-  readOutput: vi.fn(),
-  waitAfterContinue: vi.fn(),
   ...overrides,
 })
 
-describe("handleImplementAskIfNeeded", () => {
+describe("handleSessionImplementAskIfNeeded", () => {
   it("returns original output when status is already done", async () => {
     const deps = createDeps()
-    const result = await handleImplementAskIfNeeded("pane-1", doneOutput, "implement", deps)
+    const continueTask = vi.fn<() => Promise<string>>()
+    const result = await handleSessionImplementAskIfNeeded(doneOutput, "implement", continueTask, deps)
 
     expect(result).toBe(doneOutput)
     expect(deps.promptContinue).not.toHaveBeenCalled()
-    expect(deps.waitAfterContinue).not.toHaveBeenCalled()
+    expect(continueTask).not.toHaveBeenCalled()
   })
 
-  it("prompts without printing implementer body, then waits and continues on yes + DONE", async () => {
+  it("prompts without printing implementer body, then continues on yes + DONE", async () => {
     const log = vi.fn()
     const deps = createDeps({
       log,
       promptContinue: vi.fn().mockResolvedValue(true),
-      waitAfterContinue: vi.fn().mockResolvedValue(undefined),
-      readOutput: vi.fn().mockResolvedValue(doneOutput),
     })
+    const continueTask = vi.fn<() => Promise<string>>().mockResolvedValue(doneOutput)
 
-    const result = await handleImplementAskIfNeeded("pane-1", askOutput, "implement", deps)
+    const result = await handleSessionImplementAskIfNeeded(askOutput, "implement", continueTask, deps)
 
     expect(result).toBe(doneOutput)
     expect(log).toHaveBeenCalledWith(
@@ -50,34 +48,34 @@ describe("handleImplementAskIfNeeded", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("implement"))
     expect(String(log.mock.calls[0]?.[0])).not.toContain("IMPLEMENT_ASK")
     expect(deps.promptContinue).toHaveBeenCalledOnce()
-    expect(deps.waitAfterContinue).toHaveBeenCalledWith("pane-1")
-    expect(deps.readOutput).toHaveBeenCalledWith("pane-1")
+    expect(continueTask).toHaveBeenCalledOnce()
   })
 
   it("throws ImplementAskAbortError when user answers no", async () => {
     const deps = createDeps({
       promptContinue: vi.fn().mockResolvedValue(false),
     })
+    const continueTask = vi.fn<() => Promise<string>>()
 
     await expect(
-      handleImplementAskIfNeeded("pane-1", askOutput, "revise round 2", deps),
+      handleSessionImplementAskIfNeeded(askOutput, "revise round 2", continueTask, deps),
     ).rejects.toBeInstanceOf(ImplementAskAbortError)
 
-    expect(deps.waitAfterContinue).not.toHaveBeenCalled()
-    expect(deps.readOutput).not.toHaveBeenCalled()
+    expect(continueTask).not.toHaveBeenCalled()
   })
 
   it("re-prompts when yes still yields IMPLEMENT_ASK", async () => {
     const deps = createDeps({
       promptContinue: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true),
-      waitAfterContinue: vi.fn().mockResolvedValue(undefined),
-      readOutput: vi.fn().mockResolvedValueOnce(askOutput).mockResolvedValueOnce(doneOutput),
     })
+    const continueTask = vi.fn<() => Promise<string>>()
+      .mockResolvedValueOnce(askOutput)
+      .mockResolvedValueOnce(doneOutput)
 
-    const result = await handleImplementAskIfNeeded("pane-1", askOutput, "post-check", deps)
+    const result = await handleSessionImplementAskIfNeeded(askOutput, "post-check", continueTask, deps)
 
     expect(result).toBe(doneOutput)
     expect(deps.promptContinue).toHaveBeenCalledTimes(2)
-    expect(deps.waitAfterContinue).toHaveBeenCalledTimes(2)
+    expect(continueTask).toHaveBeenCalledTimes(2)
   })
 })

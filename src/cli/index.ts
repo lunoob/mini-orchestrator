@@ -9,12 +9,12 @@ export const printHelp = () => {
   mini-orch --config <path> [options]
   mini-orch --resume-from <path> --needs-check-action <action> [options]
 
-在 Herdr pane 内串起 implementer 与 reviewer agent 工作流。
+Agent 管理由 mini-orch 内部 Session API 完成；Herdr 仅用于 pane 展示。
 
 按配置中的 issues[] 数组顺序串行执行多个 issue。
 
 Options:
-  --testStatus              进入 herdr 状态测试模式（无需 --config）
+  --testStatus              进入 agent 状态测试模式（无需 --config）
   --config <path>           workflow 配置文件路径（首次启动必填；resume 时可省略）
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
