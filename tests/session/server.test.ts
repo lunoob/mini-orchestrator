@@ -50,6 +50,34 @@ const readUntilTurnComplete = async (response: Response) => {
   }
 }
 
+const readUntilActivity = async (response: Response, targetType: string) => {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error("Expected an SSE stream body")
+
+  const decoder = new TextDecoder()
+  const events: Array<Record<string, unknown>> = []
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) throw new Error("SSE stream closed before target event")
+    buffer += decoder.decode(value, { stream: true })
+
+    const frames = buffer.split("\n\n")
+    buffer = frames.pop() ?? ""
+    for (const frame of frames) {
+      const payload = frame.split("\n").find(line => line.startsWith("data: "))
+      if (!payload) continue
+      const event = JSON.parse(payload.slice(6)) as Record<string, unknown>
+      events.push(event)
+      if (event.type === targetType) {
+        await reader.cancel()
+        return events
+      }
+    }
+  }
+}
+
 describe("Session API server", () => {
   test("creates, drives and reads a session through authenticated events", async () => {
     const { createSessionApiServer } = await import(serverModulePath) as typeof import("@src/session/server")
@@ -302,9 +330,87 @@ describe("Session API server", () => {
         data: { status: "working" },
         type: "status",
       })
+      const activityResponse = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, "parent-token", {
+        data: {
+          activity: { kind: "tool_started", label: "forged", turnId: "turn-1" },
+          turnId: "turn-1",
+        },
+        type: "activity",
+      })
 
       expect(response.status).toBe(403)
       expect(statusResponse.status).toBe(403)
+      expect(activityResponse.status).toBe(403)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("accepts activity events with runner token and forwards controllerId via SSE", async () => {
+    const { createSessionApiServer } = await import(serverModulePath) as typeof import("@src/session/server")
+    const server = createSessionApiServer({ runDirectory, token: "parent-token" })
+    const { baseUrl } = await server.start()
+
+    try {
+      const createResponse = await postJson(`${baseUrl}/v1/sessions`, "parent-token", {
+        agent,
+        role: "implementer",
+        workspace: "/tmp/project",
+      })
+      const { runnerToken, session } = await createResponse.json() as {
+        runnerToken: string
+        session: { id: string }
+      }
+
+      const streamResponse = await fetch(`${baseUrl}/v1/sessions/${session.id}/stream`, {
+        headers: { authorization: "Bearer parent-token" },
+      })
+      const streamPromise = readUntilActivity(streamResponse, "activity")
+
+      const readyResponse = await postJson(
+        `${baseUrl}/v1/sessions/${session.id}/events`,
+        runnerToken,
+        { type: "runner.ready" },
+      )
+      expect(readyResponse.status).toBe(202)
+      const { controllerId } = await readyResponse.json() as { controllerId: string }
+
+      const messageResponse = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, "parent-token", {
+        data: { content: "do work" },
+        eventId: "event-activity-1",
+        type: "message",
+      })
+      const { turnId } = await messageResponse.json() as { turnId: string }
+
+      const forgedActivity = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, "parent-token", {
+        controllerId,
+        data: {
+          activity: { kind: "tool_started", label: "forged", turnId },
+          turnId,
+        },
+        type: "activity",
+      })
+      expect(forgedActivity.status).toBe(403)
+
+      const activityResponse = await postJson(`${baseUrl}/v1/sessions/${session.id}/events`, runnerToken, {
+        controllerId,
+        data: {
+          activity: { kind: "tool_started", label: "Read src/file.ts", turnId },
+          turnId,
+        },
+        type: "activity",
+      })
+      expect(activityResponse.status).toBe(202)
+
+      const sseEvents = await streamPromise
+      const controllerEvent = sseEvents.find(event => event.type === "runner.controller")
+      const activityEvent = sseEvents.find(event => event.type === "activity")
+      expect(controllerEvent).toMatchObject({ controllerId, type: "runner.controller" })
+      expect(activityEvent).toMatchObject({
+        data: { activity: { kind: "tool_started", label: "Read src/file.ts" } },
+        turnId,
+        type: "activity",
+      })
     } finally {
       await server.stop()
     }

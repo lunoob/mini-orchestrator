@@ -1,9 +1,13 @@
 import type { AgentConfig } from "../../types.js"
+import type { AgentActivity } from "../activity.js"
 
 /** 所有 adapter 统一的事件形状，与 CodexEvent 对齐 */
 export type AdapterEvent = {
   data: Record<string, string>
   type: "output_item.done" | "output_text.delta" | "turn.completed" | "turn.failed" | "turn.interrupted"
+} | {
+  data: { activity: AgentActivity; turnId: string }
+  type: "activity"
 }
 
 /** adapter 内部通知（供诊断/日志，不影响 Session 状态机） */

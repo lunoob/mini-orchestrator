@@ -2,6 +2,7 @@ import { readFile, unlink } from "node:fs/promises"
 
 import type { AgentConfig } from "../types.js"
 import { notifyNeedsInput } from "../notify/index.js"
+import { formatActivity } from "./activity.js"
 import { createSessionClient } from "./client.js"
 import { createSessionAdapter } from "./adapters/factory.js"
 import type { AdapterEvent, AdapterNotification } from "./adapters/types.js"
@@ -25,14 +26,44 @@ export type InternalRunnerConfig = {
   workspace: string
 }
 
+const renderState = { atLineStart: true }
+
+export const resetRunnerRenderState = () => {
+  renderState.atLineStart = true
+}
+
+const writeStatusLine = (line: string) => {
+  const prefix = renderState.atLineStart ? "" : "\n"
+  process.stdout.write(`${prefix}${line}\n`)
+  renderState.atLineStart = true
+}
+
 export const renderRunnerEvent = (event: AdapterEvent) => {
-  const turnId = event.data.turnId
   if (event.type === "output_text.delta") {
     process.stdout.write(event.data.delta)
+    if (event.data.delta.length > 0) renderState.atLineStart = event.data.delta.endsWith("\n")
     return
   }
-  const status = event.type.replace("turn.", "")
-  process.stdout.write(`\n[Session] turn ${turnId} ${status}\n`)
+  if (event.type === "activity") {
+    writeStatusLine(formatActivity(event.data.activity))
+    return
+  }
+  if (event.type === "turn.completed") {
+    writeStatusLine("[Turn ✓] completed")
+    return
+  }
+  if (event.type === "turn.failed") {
+    const reason = event.data.reason ? ` — ${event.data.reason}` : ""
+    writeStatusLine(`[Turn ✗] failed${reason}`)
+    return
+  }
+  if (event.type === "turn.interrupted") {
+    writeStatusLine("[Turn ✗] interrupted")
+    return
+  }
+  // Fallback for other events
+  const turnId = event.data.turnId
+  writeStatusLine(`[Session] ${event.type} ${turnId}`)
 }
 
 export const renderAdapterNotification = (notification: AdapterNotification) => {

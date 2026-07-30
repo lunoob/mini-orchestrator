@@ -97,6 +97,13 @@ export const applySessionEvent = (
     deps.publish(sessionId, { status: updated.status, type: "session.status" })
     return { queued: false, turnId: turn.id }
   }
+  // Activity events (tool started/completed/failed) — pass through to subscribers
+  if (event.type === "activity") {
+    const turn = deps.getTurn(sessionId, event.data.turnId)
+    if (!turn) throw new Error(`[Session] Unknown turn: ${event.data.turnId}`)
+    deps.publish(sessionId, { data: { activity: event.data.activity }, turnId: turn.id, type: "activity" })
+    return { queued: false, turnId: turn.id }
+  }
   if (event.type === "output_item.done" || event.type === "runner.output_item.done") {
     const turn = deps.getTurn(sessionId, event.data.turnId)
     if (!turn) throw new Error(`[Session] Unknown turn: ${event.data.turnId}`)

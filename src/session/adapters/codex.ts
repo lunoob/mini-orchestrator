@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 
+import { createActivity, type AgentActivity } from "../activity.js"
 import type { AgentConfig } from "../../types.js"
 import { splitCommand } from "../../lib/utils.js"
 
@@ -17,6 +18,9 @@ export type CodexTransport = {
 export type CodexEvent = {
   data: Record<string, string>
   type: "output_item.done" | "output_text.delta" | "turn.completed" | "turn.failed" | "turn.interrupted"
+} | {
+  data: { activity: AgentActivity; turnId: string }
+  type: "activity"
 }
 
 export type CodexAdapter = {
@@ -38,6 +42,55 @@ type AdapterOptions = {
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null ? value as Record<string, unknown> : undefined
+
+/** 已知的 Codex App Server 工具 item 类型 */
+const CODEX_TOOL_TYPES = new Set(["commandExecution", "fileChange", "mcpToolCall", "toolCall"])
+
+/** 清理字符串：移除所有控制字符（包括换行），截断 */
+const cleanString = (input: string, maxLen: number): string => {
+  const cleaned = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").replace(/[\r\n\t]/g, " ").trim()
+  if (cleaned.length <= maxLen) return cleaned
+  return `${cleaned.slice(0, maxLen - 3)}...`
+}
+
+/**
+ * 从 Codex App Server 工具 item 构建安全 label。
+ * 仅使用白名单字段，避免泄露命令参数、token 等敏感数据。
+ */
+const buildCodexToolLabel = (item: Record<string, unknown>): string => {
+  const itemType = typeof item.type === "string" ? item.type : "unknown"
+  const toolName = typeof item.name === "string" ? item.name : itemType
+
+  // fileChange → 展示文件路径
+  if (itemType === "fileChange") {
+    const filePath = typeof item.path === "string" ? item.path
+      : typeof item.filePath === "string" ? item.filePath
+      : undefined
+    return filePath ? `fileChange ${cleanString(filePath, 80)}` : "fileChange"
+  }
+
+  // mcpToolCall → 展示 MCP 工具名
+  if (itemType === "mcpToolCall") {
+    const mcpTool = typeof item.toolName === "string" ? item.toolName
+      : typeof item.name === "string" ? item.name
+      : undefined
+    return mcpTool ? `mcp:${cleanString(mcpTool, 60)}` : "mcpToolCall"
+  }
+
+  // commandExecution → 仅展示工具名（不展示完整命令，避免泄露 token/密钥）
+  if (itemType === "commandExecution") {
+    // 从 command 中提取首个词作为工具名（如 bash, node 等）
+    if (typeof item.command === "string") {
+      const firstWord = item.command.split(/\s+/)[0]
+      const base = firstWord ? cleanString(firstWord, 30) : "command"
+      return `exec ${base}`
+    }
+    return "exec"
+  }
+
+  // toolCall / 其他 → 展示 name
+  return cleanString(toolName, 60)
+}
 
 const createJsonRpcTransport = (agent: AgentConfig, cwd: string): CodexTransport => {
   const [command, ...commandArgs] = splitCommand(agent.command)
@@ -182,11 +235,35 @@ export const createCodexAdapter = (options: AdapterOptions): CodexAdapter => {
       await emit({ data: { delta: params.delta, turnId: localTurnId }, type: "output_text.delta" })
       return
     }
+    // item/started — tool item 开始（commandExecution, fileChange, mcpToolCall, toolCall）
+    if (method === "item/started") {
+      const item = asRecord(params.item)
+      if (item && typeof item.type === "string" && CODEX_TOOL_TYPES.has(item.type)) {
+        const label = buildCodexToolLabel(item)
+        await emit({ data: { activity: createActivity("tool_started", label, localTurnId), turnId: localTurnId }, type: "activity" })
+      }
+      return
+    }
     if (method === "item/completed") {
       const item = asRecord(params.item)
-      if (item?.type === "agentMessage" && typeof item.text === "string" && typeof item.id === "string" && !completedItems.has(item.id)) {
+      if (!item) return
+      // agentMessage → 输出文本
+      if (item.type === "agentMessage" && typeof item.text === "string" && typeof item.id === "string" && !completedItems.has(item.id)) {
         completedItems.add(item.id)
         await emit({ data: { content: item.text, turnId: localTurnId }, type: "output_item.done" })
+        return
+      }
+      // 工具 item completed/failed → 工具活动
+      if (typeof item.type === "string" && CODEX_TOOL_TYPES.has(item.type)) {
+        const label = buildCodexToolLabel(item)
+        const status = typeof item.status === "string" ? item.status : "completed"
+        if (status === "failed") {
+          const rawError = typeof item.error === "string" ? item.error : undefined
+          const detail = rawError ? cleanString(rawError, 120) : undefined
+          await emit({ data: { activity: createActivity("tool_failed", label, localTurnId, detail), turnId: localTurnId }, type: "activity" })
+        } else {
+          await emit({ data: { activity: createActivity("tool_completed", label, localTurnId), turnId: localTurnId }, type: "activity" })
+        }
       }
       return
     }
@@ -195,7 +272,9 @@ export const createCodexAdapter = (options: AdapterOptions): CodexAdapter => {
       if (status === "interrupted") await emit({ data: { turnId: localTurnId }, type: "turn.interrupted" })
       else if (status === "failed") {
         const error = asRecord(asRecord(params.turn)?.error)
-        await emit({ data: { reason: JSON.stringify(error ?? "Codex turn failed"), turnId: localTurnId }, type: "turn.failed" })
+        const rawReason = typeof error?.message === "string" ? error.message : "Codex turn failed"
+        const reason = cleanString(rawReason, 120)
+        await emit({ data: { reason, turnId: localTurnId }, type: "turn.failed" })
       } else if (status === "completed") await emit({ data: { turnId: localTurnId }, type: "turn.completed" })
     }
   }

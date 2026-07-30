@@ -1,3 +1,4 @@
+import type { AgentActivity } from "./activity.js"
 import type { AgentConfig } from "../types.js"
 import type { InputRequest } from "../workflow/agent-outcome.js"
 
@@ -106,6 +107,7 @@ export type SessionInputEvent =
   | WithControllerId & { data: TurnEventData & { reason?: string }; source?: "runner"; type: "turn.failed" }
   | WithControllerId & { data: TurnEventData; source?: "runner"; type: "turn.interrupted" }
   | WithControllerId & { data: { content?: string } & TurnEventData; source?: "runner"; type: "runner.turn.completed" }
+  | WithControllerId & { data: { activity: AgentActivity } & TurnEventData; source?: "runner"; type: "activity" }
   | { data: { interactionId: string; request: InputRequest; role: SessionRole; turnId?: string }; type: "interaction.request" }
   | { data: { interactionId: string; optionId?: string; text?: string }; type: "interaction.response" }
   | { data: { interactionId: string }; type: "interaction.cancel" }
@@ -125,6 +127,7 @@ export type SessionStreamEvent = {
   status?: SessionStatus
   turnId?: string
   type:
+    | "activity"
     | "output_item.done"
     | "output_text.delta"
     | "response.output_item.done"

@@ -1,10 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 
+import { createActivity, type AgentActivity } from "../activity.js"
 import type { AgentConfig } from "../../types.js"
 import type { AdapterEvent, AdapterOptions, SessionAdapter } from "./types.js"
 
 /** Cursor transport 发出的原始事件，与 Claude transport 同构 */
 type CursorRawEvent = {
+  /** Tool activity event (from tool_call.started/completed) */
+  activity?: AgentActivity
   done?: boolean
   failed?: boolean
   interrupted?: boolean
@@ -79,6 +82,10 @@ export const createCursorAdapter = (options: CreateOptions): SessionAdapter => {
       await emit({ data: { turnId: localTurnId }, type: "turn.completed" })
       localToCursorTurn.delete(localTurnId)
       cursorToLocalTurn.delete(raw.turnId)
+      return
+    }
+    if (raw.activity) {
+      await emit({ data: { activity: createActivity(raw.activity.kind, raw.activity.label, localTurnId, raw.activity.detail), turnId: localTurnId }, type: "activity" })
       return
     }
     if (raw.text !== undefined) {
@@ -161,6 +168,15 @@ export const createCursorAdapter = (options: CreateOptions): SessionAdapter => {
 
 const extractCliName = (command: string) => command.split(/\s+/)[0]
 
+/** 从工具名称和参数构建简短 label（仅使用白名单路径字段，避免泄露敏感数据） */
+export const buildToolLabel = (toolName: string, args: unknown): string => {
+  const record = typeof args === "object" && args !== null ? args as Record<string, unknown> : undefined
+  const path = typeof record?.file_path === "string" ? record.file_path
+    : typeof record?.path === "string" ? record.path
+    : undefined
+  return path ? `${toolName} ${path}` : toolName
+}
+
 /** 获取 Cursor assistant 消息中的纯文本拼接 */
 const extractCursorText = (message: Record<string, unknown> | undefined) => {
   if (!message) return ""
@@ -229,6 +245,20 @@ export const createCursorTransport = (agent: AgentConfig, cwd: string): CursorTr
           if (msg.type === "assistant") {
             const text = extractCursorText(msg.message as Record<string, unknown> | undefined)
             if (text) emit({ text, turnId })
+            continue
+          }
+
+          // tool_call 事件 → 工具活动（官方 stream-json 的 tool_call.started/completed）
+          if (msg.type === "tool_call") {
+            const toolName = typeof msg.name === "string" ? msg.name : "unknown"
+            const status = typeof msg.status === "string" ? msg.status : undefined
+            if (status === "started") {
+              const label = buildToolLabel(toolName, msg.arguments)
+              emit({ activity: createActivity("tool_started", label, turnId), turnId })
+            } else if (status === "completed") {
+              const label = buildToolLabel(toolName, msg.arguments)
+              emit({ activity: createActivity("tool_completed", label, turnId), turnId })
+            }
             continue
           }
 

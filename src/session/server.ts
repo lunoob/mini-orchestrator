@@ -70,7 +70,7 @@ const bearerToken = (request: IncomingMessage) => {
 }
 
 const isRunnerEvent = (event: SessionInputEvent) =>
-  event.type === "ready" || event.type === "status" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.") || event.type === "interaction.response" || event.type === "interaction.cancel"
+  event.type === "ready" || event.type === "status" || event.type === "activity" || event.type.startsWith("runner.") || event.type.startsWith("output_") || event.type.startsWith("turn.") || event.type === "interaction.response" || event.type === "interaction.cancel"
 
 const createRequestHandler = (
   store: SessionStore,
