@@ -60,6 +60,45 @@ export type FailEvent = {
   reason: string
 }
 
+/** 用户在 terminal 面板中的交互操作 */
+export type UserActionEvent = {
+  type: "user_action"
+  /** 操作类型 */
+  action: string
+  /** 操作的目标 agent */
+  agent: "implementer" | "reviewer"
+}
+
+/**
+ * 结构化交互请求。
+ *
+ * 由 workflow 发起，terminal UI 展示并收集用户输入。
+ */
+export type InteractionRequest = {
+  /** 显示给用户的提示信息 */
+  prompt: string
+  /** 可选的预定义操作列表（如 approve/revise/retry-review/abort） */
+  actions?: string[]
+  /** 操作的目标 agent */
+  agent: "implementer" | "reviewer"
+  /** 需要必填文本输入的 action 列表（如 ["revise", "retry-review"]） */
+  textRequiredFor?: string[]
+  /** 所有 action 是否允许可选文本输入 */
+  textOptional?: boolean
+  /** 文本输入的占位提示 */
+  textInputPlaceholder?: string
+}
+
+/**
+ * 结构化交互结果。
+ */
+export type InteractionResult = {
+  /** 用户选择的操作 */
+  action: string
+  /** 用户输入的文本（如 notes） */
+  text?: string
+}
+
 export type WorkflowEvent =
   | IssueChangeEvent
   | PhaseChangeEvent
@@ -70,6 +109,7 @@ export type WorkflowEvent =
   | PauseEvent
   | CompleteEvent
   | FailEvent
+  | UserActionEvent
 
 // ── 快照类型 ──
 
@@ -139,6 +179,19 @@ export type WorkflowEventBus = {
   getSnapshot: () => WorkflowSnapshot
   /** 重置快照到初始状态 */
   reset: () => void
+  /**
+   * 请求用户交互（terminal 面板）。
+   *
+   * 返回 Promise，当用户在面板中完成操作时 resolve。
+   * 如果没有注册 handler（非 TTY 模式），立即 reject。
+   */
+  requestInteraction: (request: InteractionRequest) => Promise<InteractionResult>
+  /**
+   * 注册交互 handler（由 terminal UI 调用）。
+   *
+   * 当 requestInteraction 被调用时，handler 会被执行。
+   */
+  setInteractionHandler: (handler: ((request: InteractionRequest) => Promise<InteractionResult>) | null) => void
 }
 
 const initialSnapshot = (): WorkflowSnapshot => ({
@@ -180,6 +233,7 @@ const mapAgentStatus = (status: string): AgentDisplayStatus => {
 export const createWorkflowEventBus = (): WorkflowEventBus => {
   let snapshot = initialSnapshot()
   const subscribers = new Set<WorkflowEventSubscriber>()
+  let interactionHandler: ((request: InteractionRequest) => Promise<InteractionResult>) | null = null
 
   const applyToSnapshot = (event: WorkflowEvent) => {
     switch (event.type) {
@@ -286,6 +340,17 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
 
     reset: () => {
       snapshot = initialSnapshot()
+    },
+
+    requestInteraction: (request) => {
+      if (!interactionHandler) {
+        return Promise.reject(new Error("No interaction handler registered (non-interactive mode)"))
+      }
+      return interactionHandler(request)
+    },
+
+    setInteractionHandler: (handler) => {
+      interactionHandler = handler
     },
   }
 }

@@ -16,7 +16,7 @@ import type { IssueConfig } from "../types.js"
 import { parseAgentOutput } from "../lib/status-parser.js"
 import { render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
-import { handleIntervention, type InterventionCheckpointContext } from "./implement-ask.js"
+import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -84,6 +84,9 @@ const runSingleSpecCycle = async (
     }
 
     const parsed = parseAgentOutput(finalText, "implementer")
+    // 使用真实 readline fallback，仅在 eventBus 有 handler 时使用面板交互
+    const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
+
     if (monitorStatus === "needs_input" || parsed.status === "needs_input") {
       const reason = question ?? "需要人工确认"
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
@@ -91,7 +94,7 @@ const runSingleSpecCycle = async (
       runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
-        undefined, question, false, runtime.needsCheckMode, implementCtx,
+        depsWithBus, question, false, runtime.needsCheckMode, implementCtx,
       )
       // intervention 完成后恢复为 working → completed
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
@@ -107,7 +110,7 @@ const runSingleSpecCycle = async (
       console.warn(`[Implement] Invalid output: ${reason}. Entering intervention...`)
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
-        undefined, parsed.reason, true, runtime.needsCheckMode, implementCtx,
+        depsWithBus, parsed.reason, true, runtime.needsCheckMode, implementCtx,
       )
       // intervention 完成后恢复为 working → completed
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })

@@ -5,6 +5,7 @@ import type { NeedsCheckCheckpointInput } from "./checkpoint.js"
 import { writeNeedsCheckCheckpoint } from "./checkpoint.js"
 import type { ParsedArgs } from "../types.js"
 import type { ReviewVerdict } from "../lib/utils.js"
+import type { WorkflowEventBus } from "../workflow/events.js"
 
 export type NeedsCheckAction = "approve" | "revise" | "retry-review" | "abort"
 
@@ -77,6 +78,21 @@ export const buildNeedsCheckMessage = (round: number, verdict: ReviewVerdict, re
   return lines.join("\n")
 }
 
+/** 构建面板专用的 needs-check 摘要（不含完整 reviewOutput，避免面板溢出） */
+export const buildNeedsCheckPanelPrompt = (round: number, verdict: ReviewVerdict) => {
+  const lines = [
+    `Review round ${round}: REVIEW_NEEDS_CHECK`,
+    "Reviewer 无法仅从 diff 验证部分项。",
+    "请核查后选择：[1]approve [2]revise [3]retry-review [4]abort",
+  ]
+
+  if (verdict.cannotVerifySummary) {
+    lines.push(`⚠️ ${verdict.cannotVerifySummary}`)
+  }
+
+  return lines.join("\n")
+}
+
 export const printNeedsCheckSummary = (round: number, verdict: ReviewVerdict, reviewOutput: string) => {
   console.log(`\n=== Needs Check — Round ${round} ===\n`)
   console.log(buildNeedsCheckMessage(round, verdict, reviewOutput))
@@ -122,8 +138,38 @@ export const promptNeedsCheckInteractive = async (
   round: number,
   verdict: ReviewVerdict,
   reviewOutput: string,
+  eventBus?: WorkflowEventBus,
 ): Promise<NeedsCheckDecision> => {
   printNeedsCheckSummary(round, verdict, reviewOutput)
+
+  // 使用 eventBus 面板交互或回退到 readline
+  if (eventBus) {
+    try {
+      // printNeedsCheckSummary 已输出完整 reviewOutput，面板只显示摘要
+      const result = await eventBus.requestInteraction({
+        prompt: buildNeedsCheckPanelPrompt(round, verdict),
+        agent: "reviewer",
+        actions: ["approve", "revise", "retry-review", "abort"],
+        textRequiredFor: ["revise", "retry-review"],
+        textInputPlaceholder: "说明（revise/retry-review 必填）",
+      })
+      const action = result.action as NeedsCheckAction
+      if (action === "approve" || action === "abort") {
+        return { action, notes: "" }
+      }
+      // revise/retry-review 必须有 notes，面板交互已通过文本输入捕获
+      const notes = result.text ?? ""
+      if (!notes) {
+        // 面板未提供文本（异常情况），用日志提示而非 readline
+        console.log(`[NeedsCheck] ${action} 需要说明文本，请重试。`)
+        // 重新请求交互
+        return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus)
+      }
+      return { action, notes }
+    } catch {
+      // 非交互模式，回退到 readline
+    }
+  }
 
   const action = await promptChoice()
 
@@ -182,6 +228,7 @@ export const resolveNeedsCheckDecision = async (
   checkpointInput: NeedsCheckCheckpointInput,
   dir: string,
   notificationContext?: NeedsCheckNotificationContext,
+  eventBus?: WorkflowEventBus,
 ): Promise<NeedsCheckDecision> => {
   const fromArgs = decisionFromArgs(args)
   if (fromArgs) return fromArgs
@@ -190,5 +237,5 @@ export const resolveNeedsCheckDecision = async (
     await pauseForLlmNeedsCheck(dir, checkpointInput, round, verdict, reviewOutput, notificationContext)
   }
 
-  return promptNeedsCheckInteractive(round, verdict, reviewOutput)
+  return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus)
 }

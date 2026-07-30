@@ -225,6 +225,7 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
               false, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues),
             sessionDir,
             notificationContext,
+            runtime.eventBus,
           )
           console.log(`[Resume] REVIEW_NEEDS_CHECK → decision: ${decision.action}`)
 
@@ -284,6 +285,7 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
               false, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues),
             sessionDir,
             notificationContext,
+            runtime.eventBus,
           )
           console.log(`[Resume] Post-check REVIEW_NEEDS_CHECK → decision: ${decision.action}`)
           if (decision.action === "approve") {

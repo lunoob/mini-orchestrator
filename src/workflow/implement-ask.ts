@@ -5,6 +5,7 @@ import type { AgentRole, AgentSessionHandle } from "../agent/transcript/types.js
 import { sendTask, waitForAgentWithMonitor } from "../agent/index.js"
 import { parseAgentOutput } from "../lib/status-parser.js"
 import { notifyImplementAsk, notifyInvalidOutput, notifyNeedsInput, resetNotifyDedup } from "../notify/index.js"
+import type { WorkflowEventBus } from "./events.js"
 
 export class ImplementAskAbortError extends Error {
   constructor(context: string) {
@@ -16,6 +17,8 @@ export class ImplementAskAbortError extends Error {
 export type ImplementAskDeps = {
   log: (message: string) => void
   promptContinue: () => Promise<boolean>
+  /** 可选的 event bus，用于 terminal 面板交互 */
+  eventBus?: WorkflowEventBus
 }
 
 const promptContinueInteractive = async (): Promise<boolean> => {
@@ -148,6 +151,26 @@ export const handleIntervention = async (
     throw new NeedsCheckPauseError(checkpointPath, notificationContext)
   }
 
+  // 使用 eventBus 面板交互或回退到 readline
+  const promptUser = async (prompt: string): Promise<{ shouldContinue: boolean; answer?: string }> => {
+    if (deps.eventBus) {
+      try {
+        const result = await deps.eventBus.requestInteraction({
+          prompt,
+          agent: role,
+          actions: ["continue", "abort"],
+          textOptional: true,
+          textInputPlaceholder: "回答（可选，将发送给 Agent）",
+        })
+        return { shouldContinue: result.action === "continue", answer: result.text }
+      } catch {
+        // 非交互模式（无 handler），回退到 readline
+        return { shouldContinue: await deps.promptContinue() }
+      }
+    }
+    return { shouldContinue: await deps.promptContinue() }
+  }
+
   let needsInput = !isInvalidOutput
   let isInvalid = isInvalidOutput
   let currentOutput = output
@@ -171,8 +194,10 @@ export const handleIntervention = async (
       deps.log(`[Intervention] ${label} 输出无效（${context}）: ${reason}`)
       deps.log(`[Intervention] 继续等待修正？`)
 
-      const ok = await deps.promptContinue()
-      if (!ok) throw new ImplementAskAbortError(`${context} (invalid_output)`)
+      const { shouldContinue } = await promptUser(
+        `[${label}] pane: ${paneId}\n输出无效: ${reason}\n可在 pane 中处理后选择继续`,
+      )
+      if (!shouldContinue) throw new ImplementAskAbortError(`${context} (invalid_output)`)
 
       // 先增量检查 JSONL，若用户已在 pane 中修正则直接消费终态
       let handled = false
@@ -209,7 +234,9 @@ export const handleIntervention = async (
 
     notifyNeedsInput(role, sessionHandle.provider, questionDisplay, sessionHandle.resumeId, paneId, String(sessionHandle.offset))
 
-    const shouldContinue = await deps.promptContinue()
+    const { shouldContinue, answer } = await promptUser(
+      `[${label}] pane: ${paneId}\n${questionDisplay}\n可在 pane 中处理后选择继续，或输入回答`,
+    )
     if (!shouldContinue) throw new ImplementAskAbortError(context)
 
     // 快速检查是否已自行完成
@@ -229,9 +256,12 @@ export const handleIntervention = async (
 
     if (handled) continue
 
-    // 发送续办 prompt
+    // 发送续办 prompt（包含用户回答如有）
     deps.log(`[Intervention] ${label} 未自动完成，发送续办 prompt...`)
-    await sendTask(paneId, CONTINUATION_PROMPT)
+    const continuationText = answer
+      ? `User answered: ${answer}\n${CONTINUATION_PROMPT}`
+      : CONTINUATION_PROMPT
+    await sendTask(paneId, continuationText)
 
     const result = await waitForAgentWithMonitor(sessionHandle)
     sessionHandle.offset = result.finalOffset

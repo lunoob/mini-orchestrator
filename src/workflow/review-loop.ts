@@ -15,7 +15,7 @@ import {
 } from "../lib/utils.js"
 import { parseAgentOutput } from "../lib/status-parser.js"
 import { notifyNeedsInput } from "../notify/index.js"
-import { handleIntervention, type InterventionCheckpointContext } from "./implement-ask.js"
+import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
 import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
 import type { WorkflowPhase } from "./events.js"
@@ -63,9 +63,14 @@ const handleMonitorResult = async (
     eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "working" })
   }
 
+  // 创建带有 eventBus 的 deps，保留真实 readline fallback
+  const depsWithBus = eventBus
+    ? { ...defaultImplementAskDeps(), eventBus }
+    : undefined
+
   if (status === "needs_input") {
     publishInterventionEvents("needs_input", question ?? "需要确认")
-    const result = await handleIntervention(role, paneId, finalText, context, session, undefined, question, false, needsCheckMode, ctx)
+    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
     publishResumeEvents()
     return result
   }
@@ -73,7 +78,7 @@ const handleMonitorResult = async (
   if (parsed.status === "needs_input") {
     if (role === "reviewer") return finalText
     publishInterventionEvents("needs_input", question ?? "需要确认")
-    const result = await handleIntervention(role, paneId, finalText, context, session, undefined, question, false, needsCheckMode, ctx)
+    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
     publishResumeEvents()
     return result
   }
@@ -90,7 +95,7 @@ const handleMonitorResult = async (
 
   if (parsed.status === "invalid_output") {
     publishInterventionEvents("invalid_output", parsed.reason ?? "输出缺少合法 STATUS")
-    const result = await handleIntervention(role, paneId, finalText, context, session, undefined,
+    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus,
       parsed.reason, true, needsCheckMode, ctx)
     publishResumeEvents()
     return result
@@ -238,6 +243,7 @@ const handleNeedsCheck = async (
       reuseCurrentPane, specPath, issueIndex, issues),
     sessionDir,
     notificationContext,
+    runtime.eventBus,
   )
 
   switch (decision.action) {
@@ -365,9 +371,12 @@ export const runReviewLoop = async (
         // 发布详情和暂停事件
         runtime.eventBus.publish({ type: "invalid_output", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason })
         runtime.eventBus.publish({ type: "pause", reason: `reviewer invalid_output: ${reason}` })
+        const depsWithBus = runtime.eventBus
+          ? { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
+          : undefined
         const resolved = await handleIntervention(
           "reviewer", runtime.reviewerPane, reviewOutput,
-          `review round ${round}`, runtime.reviewerSession!, undefined,
+          `review round ${round}`, runtime.reviewerSession!, depsWithBus,
           parsed.reason, true, runtime.needsCheckMode, mkCtx(runtime, round, "review-intervention"),
         )
         // intervention 完成后恢复

@@ -1,3 +1,5 @@
+import { format } from "node:util"
+
 import { NeedsCheckPauseError } from "./review/needs-check.js"
 import { notifyError, notifyInvalidOutput, notifyNeedsCheck, notifyNeedsInput, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
@@ -6,6 +8,31 @@ import { runSkillCli } from "./cli/skill.js"
 import { ImplementAskAbortError } from "./workflow/implement-ask.js"
 import { runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
+import { createWorkflowEventBus } from "./workflow/events.js"
+import { createTerminalUI, isInteractiveTTY, type LogSink } from "./terminal/ui.js"
+
+/**
+ * 将 console.log/warn/error 代理到 LogSink。
+ *
+ * - 使用 util.format 保留 console 的格式化行为（%s, %d, 对象展开等）
+ * - log 写入 stdout sink，warn/error 写入 stderr sink
+ * - 返回恢复函数
+ */
+const proxyConsoleToSink = (sink: LogSink): (() => void) => {
+  const originalLog = console.log
+  const originalWarn = console.warn
+  const originalError = console.error
+
+  console.log = (...args: any[]) => { sink.log(format(...args)) }
+  console.warn = (...args: any[]) => { sink.logStderr(format(...args)) }
+  console.error = (...args: any[]) => { sink.logStderr(format(...args)) }
+
+  return () => {
+    console.log = originalLog
+    console.warn = originalWarn
+    console.error = originalError
+  }
+}
 
 export const main = async () => {
   const argv = process.argv.slice(2)
@@ -24,20 +51,40 @@ export const main = async () => {
 
   const args = parseArgs(argv)
 
-  if (args.testStatus === "true") {
-    await runTestStatus(args)
-    notifyTestStatusComplete()
-    return
-  }
-
   if (args.config) {
     args.config = getConfigPath(args)
-  } else if (!args["resume-from"]) {
+  } else if (!args["resume-from"] && args.testStatus !== "true") {
     throw new Error("[Config] Missing required argument --config /absolute/path/to/workflow.json")
   }
 
-  await runWorkflow(args)
-  notifySuccess()
+  // 创建共享事件总线和 terminal UI（所有 workflow 分支共用）
+  const useBlessedUI = isInteractiveTTY() && args["needs-check-mode"] !== "llm"
+  const eventBus = createWorkflowEventBus()
+  const ui = useBlessedUI
+    ? await createTerminalUI(eventBus)
+    : (await import("./terminal/ui.js")).createPlainTextUI(eventBus)
+  const logSink = ui.getLogSink()
+
+  try {
+    let restoreConsole: (() => void) | undefined
+    if (isInteractiveTTY()) {
+      restoreConsole = proxyConsoleToSink(logSink)
+    }
+
+    try {
+      if (args.testStatus === "true") {
+        await runTestStatus(args, eventBus)
+        notifyTestStatusComplete()
+      } else {
+        await runWorkflow(args, { eventBus })
+        notifySuccess()
+      }
+    } finally {
+      restoreConsole?.()
+    }
+  } finally {
+    ui.teardown()
+  }
 }
 
 void main().catch((error) => {
