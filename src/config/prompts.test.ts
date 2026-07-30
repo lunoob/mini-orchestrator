@@ -30,18 +30,20 @@ const buildMinimalConfig = (dir: string, overrides: Record<string, string> = {})
 })
 
 describe("loadPrompts", () => {
-  it("injects default output partials with delimiter constants", async () => {
+  it("injects default output partials with STATUS instructions", async () => {
     const config = buildMinimalConfig(PROJECT_ROOT)
 
     const prompts = await loadPrompts(config, PROJECT_ROOT)
 
-    expect(prompts.implement).toContain(IMPLEMENT_RESULT_START)
-    expect(prompts.implement).toContain(IMPLEMENT_RESULT_END)
+    // 新 prompt 不再包含分隔线标记，而是包含 STATUS 指令
+    expect(prompts.implement).toContain("IMPLEMENT_DONE")
+    expect(prompts.implement).toContain("IMPLEMENT_ASK")
     expect(prompts.implement).not.toContain("{{outputFormat}}")
     expect(prompts.implement).not.toContain("{{delimiterStart}}")
 
-    expect(prompts.review).toContain(REVIEW_RESULT_START)
-    expect(prompts.review).toContain(REVIEW_RESULT_END)
+    expect(prompts.review).toContain("REVIEW_PASS")
+    expect(prompts.review).toContain("REVIEW_FAIL")
+    expect(prompts.review).toContain("REVIEW_NEEDS_CHECK")
     expect(prompts.review).not.toContain("{{outputFormat}}")
     expect(prompts.review).not.toContain("{{delimiterStart}}")
   })
@@ -69,6 +71,7 @@ describe("loadPrompts", () => {
 
     const prompts = await loadPrompts(config, dir)
 
+    // 自定义 partial 仍可使用 delimiter 占位符
     expect(prompts.implement).toContain(
       `CUSTOM IMPLEMENT OUTPUT: ${IMPLEMENT_RESULT_START} / ${IMPLEMENT_RESULT_END}`,
     )

@@ -109,3 +109,75 @@ export const notifyError = (errorMessage: string) => {
     "error",
   )
 }
+
+// ── needs_input / invalid_output 通知 + 去重 ──
+
+/** 通知去重器：按 key 确保同一 agent 同一 turn 只通知一次 */
+export type NotifyDedup = {
+  notifyOnce: (key: string, fn: () => void) => void
+}
+
+export const createNotifyDedup = (): NotifyDedup => {
+  const keys = new Set<string>()
+  return {
+    notifyOnce: (key, fn) => {
+      if (keys.has(key)) return
+      keys.add(key)
+      fn()
+    },
+  }
+}
+
+let globalDedupKeys = new Set<string>()
+
+export const resetNotifyDedup = () => {
+  globalDedupKeys = new Set()
+}
+
+// 全局去重器也使用独立 set
+const globalDedup: NotifyDedup = {
+  notifyOnce: (key, fn) => {
+    if (globalDedupKeys.has(key)) return
+    globalDedupKeys.add(key)
+    fn()
+  },
+}
+
+export const notifyNeedsInput = (
+  role: string,
+  provider: string,
+  reason: string,
+  resumeId?: string,
+  paneId?: string,
+  /** turn 序号或偏移，确保同一 turn 只通知一次 */
+  turnId?: string,
+) => {
+  const key = `needs_input:${role}:${provider}:${resumeId ?? "unknown"}:${turnId ?? "0"}`
+  globalDedup.notifyOnce(key, () => {
+    const paneInfo = paneId ? ` (pane: ${paneId})` : ""
+    notify(
+      "编排器",
+      `[${role}/${provider}]${paneInfo} 需要人工输入: ${reason}`,
+      "warning",
+    )
+  })
+}
+
+export const notifyInvalidOutput = (
+  role: string,
+  provider: string,
+  reason: string,
+  resumeId?: string,
+  paneId?: string,
+  turnId?: string,
+) => {
+  const key = `invalid_output:${role}:${provider}:${resumeId ?? "unknown"}:${turnId ?? "0"}`
+  globalDedup.notifyOnce(key, () => {
+    const paneInfo = paneId ? ` (pane: ${paneId})` : ""
+    notify(
+      "编排器",
+      `[${role}/${provider}]${paneInfo} 输出无效: ${reason}`,
+      "error",
+    )
+  })
+}

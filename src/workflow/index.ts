@@ -37,6 +37,7 @@ export const runWorkflow = async (args: ParsedArgs) => {
     args,
     baseSha,
     config,
+    configPath,
     hasGit,
     implementerPane: "",
     issueIndex: 0,

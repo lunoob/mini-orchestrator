@@ -1,15 +1,14 @@
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "./prompt-delimiters.js"
+import { parseAgentOutput } from "./status-parser.js"
 
 export type ImplementStatus = "done" | "needs_input" | "unknown"
 
+/**
+ * @deprecated 使用 parseAgentOutput 替代；保留以兼容旧测试和旧代码路径
+ */
 export const parseImplementStatus = (output: string): ImplementStatus => {
-  if (hasStatus(output, "IMPLEMENT_DONE")) return "done"
-  if (hasStatus(output, "IMPLEMENT_ASK")) return "needs_input"
+  const result = parseAgentOutput(output, "implementer")
+  if (result.status === "completed") return "done"
+  if (result.status === "needs_input") return "needs_input"
   return "unknown"
 }
 
@@ -47,49 +46,58 @@ const extractCannotVerifySummary = (output: string) => {
   return body
 }
 
+/**
+ * @deprecated 使用 parseAgentOutput 替代；保留以兼容旧代码路径
+ */
 export const parseReviewVerdict = (output: string): ReviewVerdict => {
-  const explicitPass = hasStatus(output, "REVIEW_PASS")
-  const explicitFail = hasStatus(output, "REVIEW_FAIL")
-  const explicitNeedsCheck = hasStatus(output, "REVIEW_NEEDS_CHECK")
+  const result = parseAgentOutput(output, "reviewer")
 
   const cannotVerifySummary = extractCannotVerifySummary(output)
   const hasCannotVerify = cannotVerifySummary !== null
 
-  const kind: ReviewVerdictKind =
-    explicitFail ? "fail" :
-    (explicitNeedsCheck || hasCannotVerify) ? "needs_check" :
-    explicitPass ? "pass" :
-    "fail"
+  // parseAgentOutput 的结果映射回 ReviewVerdict
+  if (result.status === "completed" && "statusValue" in result) {
+    const kind: ReviewVerdictKind =
+      result.statusValue === "REVIEW_PASS" ? "pass"
+      : result.statusValue === "REVIEW_FAIL" ? "fail"
+      : hasCannotVerify ? "needs_check"
+      : "fail"
 
+    return {
+      cannotVerifySummary,
+      hasCannotVerify,
+      kind,
+      passed: kind === "pass",
+    }
+  }
+
+  if (result.status === "needs_input") {
+    return {
+      cannotVerifySummary,
+      hasCannotVerify,
+      kind: "needs_check",
+      passed: false,
+    }
+  }
+
+  // invalid_output → fail
   return {
     cannotVerifySummary,
     hasCannotVerify,
-    kind,
-    passed: kind === "pass",
+    kind: "fail",
+    passed: false,
   }
 }
 
-export const extractReviewResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(REVIEW_RESULT_START)
-  if (startIdx === -1) return output
+/**
+ * @deprecated 不再使用分隔线标记；保留以兼容旧代码路径
+ */
+export const extractReviewResult = (output: string): string => output
 
-  const afterStart = startIdx + REVIEW_RESULT_START.length
-  const endIdx = output.lastIndexOf(REVIEW_RESULT_END)
-  if (endIdx <= afterStart) return output
-
-  return output.slice(afterStart, endIdx).trim() || output
-}
-
-export const extractImplementResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(IMPLEMENT_RESULT_START)
-  if (startIdx === -1) return output
-
-  const afterStart = startIdx + IMPLEMENT_RESULT_START.length
-  const endIdx = output.lastIndexOf(IMPLEMENT_RESULT_END)
-  if (endIdx <= afterStart) return output
-
-  return output.slice(afterStart, endIdx).trim() || output
-}
+/**
+ * @deprecated 不再使用分隔线标记；保留以兼容旧代码路径
+ */
+export const extractImplementResult = (output: string): string => output
 
 /** 整行 STATUS 标记（允许前导空白）；每次新建 RegExp，避免 g 标志的 lastIndex 串扰 */
 const STATUS_LINE_PATTERN = "^[ \\t]*STATUS: .+$"

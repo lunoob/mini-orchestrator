@@ -4,23 +4,18 @@ import { fileURLToPath } from "node:url"
 
 import {
   agentWaitOptions,
+  bootstrapSession,
   runAgentIntegration,
   runAgentUpdate,
-  sendTaskAndWait,
-  startAgent,
+  sendTaskAndMonitor,
+  startAgentResumed,
   stopAgent,
   waitForAgentReady,
 } from "../agent/index.js"
 import { resolveAgentConfig } from "../config/agents.js"
 import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-} from "../lib/prompt-delimiters.js"
-import {
-  extractImplementResult,
   parseImplementStatus,
   printSection,
-  render,
   stripStatusLines,
 } from "../lib/utils.js"
 import type { ParsedArgs } from "../types.js"
@@ -40,10 +35,8 @@ const TEST_PROMPT = `#任务
 
 export const loadImplementOutputFormat = async () => {
   const template = await readFile(IMPLEMENT_OUTPUT_PARTIAL, "utf8")
-  return render(template, {
-    delimiterEnd: IMPLEMENT_RESULT_END,
-    delimiterStart: IMPLEMENT_RESULT_START,
-  })
+  // 不再使用分隔线占位符；直接返回模板内容
+  return template
 }
 
 export const buildTestStatusPrompt = (outputFormat: string) =>
@@ -66,7 +59,11 @@ export const runTestStatus = async (args: ParsedArgs) => {
     runAgentIntegration(agent),
   ])
 
-  const paneId = await startAgent(projectDir, agent, { ensureUniqueName: true })
+  // 使用 JSONL-based monitoring 流程
+  const sessionHandle = await bootstrapSession(agent)
+  const paneId = await startAgentResumed(projectDir, agent, sessionHandle.resumeId, {
+    ensureUniqueName: true,
+  })
   let started = false
 
   try {
@@ -77,12 +74,11 @@ export const runTestStatus = async (args: ParsedArgs) => {
     const prompt = buildTestStatusPrompt(outputFormat)
     console.log(`[TestStatus] Sending prompt:\n${prompt}`)
 
-    const rawOutput = await sendTaskAndWait(paneId, prompt, agentWaitOptions(agent))
-    const resultBody = extractImplementResult(rawOutput)
-    const status = parseImplementStatus(resultBody)
+    const { finalText } = await sendTaskAndMonitor(paneId, prompt, sessionHandle)
+    const status = parseImplementStatus(finalText)
 
     console.log(`[TestStatus] Status: ${status}`)
-    printSection("TestStatus Output", stripStatusLines(resultBody))
+    printSection("TestStatus Output", stripStatusLines(finalText))
     console.log("[TestStatus] Agent completed idle cycle successfully")
   } finally {
     if (started) await stopAgent(paneId)

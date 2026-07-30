@@ -1,9 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import type { AgentRole, AgentSessionHandle } from "../agent/transcript/types.js"
 import type { IssueConfig } from "../types.js"
 
-export const CHECKPOINT_VERSION = 2
+export const CHECKPOINT_VERSION = 5
 
 export type NeedsCheckCheckpoint = {
   baseSha: string | undefined
@@ -12,15 +13,29 @@ export type NeedsCheckCheckpoint = {
   createdAt: string
   hasGit: boolean
   implementerPane: string
+  implementerSession?: AgentSessionHandle
   maxReviewRounds: number
   projectDir: string
   reviewOutput: string
   reviewerPane: string
+  reviewerSession?: AgentSessionHandle
   reuseCurrentPane: boolean
   round: number
   version: typeof CHECKPOINT_VERSION
   currentIssueIndex: number
   issues: IssueConfig[]
+  /** intervention 类型: needs_input / invalid_output */
+  interventionType?: string
+  /** 触发 intervention 的角色 */
+  interventionRole?: AgentRole
+  /** 原始问题或原因 */
+  interventionQuestion?: string
+  /** 触发 intervention 的 workflow 阶段 */
+  interventionPhase?: string
+  /** post-check 阶段的 review 状态（REVIEW_PASS / REVIEW_NEEDS_CHECK） */
+  reviewStatus?: string
+  /** 原始 reviewer 输出（post-check intervention 时保留） */
+  interventionReviewOutput?: string
 }
 
 export type NeedsCheckCheckpointInput = Omit<NeedsCheckCheckpoint, "createdAt" | "version">
