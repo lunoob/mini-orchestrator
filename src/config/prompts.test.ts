@@ -4,12 +4,6 @@ import os from "node:os"
 import { describe, expect, it } from "vitest"
 
 import { loadPrompts } from "./load.js"
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "../lib/prompt-delimiters.js"
 import type { WorkflowConfig } from "../types.js"
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..")
@@ -35,17 +29,15 @@ describe("loadPrompts", () => {
 
     const prompts = await loadPrompts(config, PROJECT_ROOT)
 
-    // 新 prompt 不再包含分隔线标记，而是包含 STATUS 指令
+    // prompt 包含 STATUS 指令，不包含分隔线标记
     expect(prompts.implement).toContain("IMPLEMENT_DONE")
     expect(prompts.implement).toContain("IMPLEMENT_ASK")
     expect(prompts.implement).not.toContain("{{outputFormat}}")
-    expect(prompts.implement).not.toContain("{{delimiterStart}}")
 
     expect(prompts.review).toContain("REVIEW_PASS")
     expect(prompts.review).toContain("REVIEW_FAIL")
     expect(prompts.review).toContain("REVIEW_NEEDS_CHECK")
     expect(prompts.review).not.toContain("{{outputFormat}}")
-    expect(prompts.review).not.toContain("{{delimiterStart}}")
   })
 
   it("supports custom output format partials", async () => {
@@ -55,12 +47,12 @@ describe("loadPrompts", () => {
 
     writeFileSync(
       customImplementPartial,
-      "CUSTOM IMPLEMENT OUTPUT: {{delimiterStart}} / {{delimiterEnd}}",
+      "CUSTOM IMPLEMENT OUTPUT: use STATUS: IMPLEMENT_DONE",
       "utf8",
     )
     writeFileSync(
       customReviewPartial,
-      "CUSTOM REVIEW OUTPUT: {{delimiterStart}} / {{delimiterEnd}}",
+      "CUSTOM REVIEW OUTPUT: use STATUS: REVIEW_PASS",
       "utf8",
     )
 
@@ -71,13 +63,9 @@ describe("loadPrompts", () => {
 
     const prompts = await loadPrompts(config, dir)
 
-    // 自定义 partial 仍可使用 delimiter 占位符
-    expect(prompts.implement).toContain(
-      `CUSTOM IMPLEMENT OUTPUT: ${IMPLEMENT_RESULT_START} / ${IMPLEMENT_RESULT_END}`,
-    )
-    expect(prompts.review).toContain(
-      `CUSTOM REVIEW OUTPUT: ${REVIEW_RESULT_START} / ${REVIEW_RESULT_END}`,
-    )
+    // 自定义 partial 被注入到 prompt 中
+    expect(prompts.implement).toContain("CUSTOM IMPLEMENT OUTPUT")
+    expect(prompts.review).toContain("CUSTOM REVIEW OUTPUT")
   })
 
   it("preserves runtime placeholders after outputFormat injection", async () => {

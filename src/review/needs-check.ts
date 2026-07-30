@@ -17,13 +17,27 @@ export type NeedsCheckDecision = {
 
 const VALID_ACTIONS = new Set<string>(["approve", "revise", "retry-review", "abort"])
 
+export type NeedsCheckNotificationContext = {
+  role: string
+  provider: string
+  paneId: string
+  reason: string
+  turnId?: string
+  /** 明确的干预类型，避免从本地化原因文本推断 */
+  interventionType: "needs_input" | "invalid_output"
+  /** checkpoint 路径，供通知包含恢复指引 */
+  checkpointPath?: string
+}
+
 export class NeedsCheckPauseError extends Error {
   checkpointPath: string
+  notificationContext?: NeedsCheckNotificationContext
 
-  constructor(checkpointPath: string) {
+  constructor(checkpointPath: string, notificationContext?: NeedsCheckNotificationContext) {
     super("Workflow paused: awaiting needs-check decision (LLM mode)")
     this.name = "NeedsCheckPauseError"
     this.checkpointPath = checkpointPath
+    this.notificationContext = notificationContext
   }
 }
 
@@ -127,8 +141,14 @@ export const pauseForLlmNeedsCheck = async (
   round: number,
   verdict: ReviewVerdict,
   reviewOutput: string,
+  notificationContext?: NeedsCheckNotificationContext,
 ) => {
   const checkpointPath = await writeNeedsCheckCheckpoint(dir, checkpointInput)
+
+  // 将 checkpointPath 写回通知上下文，供主入口生成完整恢复指引
+  const mergedContext: NeedsCheckNotificationContext | undefined = notificationContext
+    ? { ...notificationContext, checkpointPath }
+    : undefined
 
   printNeedsCheckSummary(round, verdict, reviewOutput)
 
@@ -137,7 +157,7 @@ export const pauseForLlmNeedsCheck = async (
   console.log("")
   console.log("[NeedsCheck] （LLM 模式：脚本已暂停。请外层 agent 询问用户后，使用 --resume-from 继续。）")
 
-  throw new NeedsCheckPauseError(checkpointPath)
+  throw new NeedsCheckPauseError(checkpointPath, mergedContext)
 }
 
 export const decisionFromArgs = (args: ParsedArgs): NeedsCheckDecision | undefined => {
@@ -161,12 +181,13 @@ export const resolveNeedsCheckDecision = async (
   reviewOutput: string,
   checkpointInput: NeedsCheckCheckpointInput,
   dir: string,
+  notificationContext?: NeedsCheckNotificationContext,
 ): Promise<NeedsCheckDecision> => {
   const fromArgs = decisionFromArgs(args)
   if (fromArgs) return fromArgs
 
   if (mode === "llm") {
-    await pauseForLlmNeedsCheck(dir, checkpointInput, round, verdict, reviewOutput)
+    await pauseForLlmNeedsCheck(dir, checkpointInput, round, verdict, reviewOutput, notificationContext)
   }
 
   return promptNeedsCheckInteractive(round, verdict, reviewOutput)

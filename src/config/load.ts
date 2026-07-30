@@ -2,12 +2,6 @@ import { access as fsAccess, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "../lib/prompt-delimiters.js"
 import type {
   AgentInputConfig,
   IssueConfig,
@@ -129,11 +123,8 @@ const injectOutputFormat = (template: string, outputFormat: string) =>
 const loadOutputFormat = async (
   configDir: string,
   partialPath: string,
-  delimiterStart: string,
-  delimiterEnd: string,
 ) => {
-  const template = await readPrompt(configDir, partialPath)
-  return render(template, { delimiterEnd, delimiterStart })
+  return readPrompt(configDir, partialPath)
 }
 
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
@@ -141,14 +132,10 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     loadOutputFormat(
       configDir,
       config.prompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
-      IMPLEMENT_RESULT_START,
-      IMPLEMENT_RESULT_END,
     ),
     loadOutputFormat(
       configDir,
       config.prompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
-      REVIEW_RESULT_START,
-      REVIEW_RESULT_END,
     ),
   ])
 

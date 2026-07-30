@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  extractImplementResult,
-  extractReviewResult,
   extractStatusLines,
   parseImplementStatus,
   parseReviewVerdict,
@@ -26,29 +24,25 @@ describe("render", () => {
 
 describe("parseImplementStatus", () => {
   it("detects IMPLEMENT_DONE", () => {
-    const output = "---IMPLEMENT_RESULT_START---\nSTATUS: IMPLEMENT_DONE\n---IMPLEMENT_RESULT_END---"
-    expect(parseImplementStatus(extractImplementResult(output))).toBe("done")
+    const output = "Some text\nSTATUS: IMPLEMENT_DONE\nMore text"
+    expect(parseImplementStatus(output)).toBe("done")
   })
 
   it("detects IMPLEMENT_ASK", () => {
-    const output = "---IMPLEMENT_RESULT_START---\nSTATUS: IMPLEMENT_ASK\n---IMPLEMENT_RESULT_END---"
-    expect(parseImplementStatus(extractImplementResult(output))).toBe("needs_input")
+    const output = "Question?\nSTATUS: IMPLEMENT_ASK"
+    expect(parseImplementStatus(output)).toBe("needs_input")
   })
 
   it("returns unknown when STATUS is missing", () => {
-    expect(parseImplementStatus(extractImplementResult("no status here"))).toBe("unknown")
+    expect(parseImplementStatus("no status here")).toBe("unknown")
   })
 })
 
 describe("parseReviewVerdict", () => {
-  it("parses review status from delimited output", () => {
-    const output = [
-      "---REVIEW_RESULT_START---",
-      "STATUS: REVIEW_PASS",
-      "---REVIEW_RESULT_END---",
-    ].join("\n")
+  it("parses review status from plain output", () => {
+    const output = "Looks good.\nSTATUS: REVIEW_PASS"
 
-    expect(parseReviewVerdict(extractReviewResult(output)).kind).toBe("pass")
+    expect(parseReviewVerdict(output).kind).toBe("pass")
   })
 })
 

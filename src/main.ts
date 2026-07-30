@@ -1,5 +1,5 @@
 import { NeedsCheckPauseError } from "./review/needs-check.js"
-import { notifyError, notifyNeedsCheck, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
+import { notifyError, notifyInvalidOutput, notifyNeedsCheck, notifyNeedsInput, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runSkillCli } from "./cli/skill.js"
@@ -42,7 +42,21 @@ export const main = async () => {
 
 void main().catch((error) => {
   if (error instanceof NeedsCheckPauseError) {
-    notifyNeedsCheck(error.checkpointPath)
+    // 优先使用详细通知上下文，否则回退到通用通知
+    if (error.notificationContext) {
+      const { role, provider, paneId, reason, turnId, interventionType, checkpointPath } = error.notificationContext
+      const cp = checkpointPath ?? error.checkpointPath
+      const resumeCmd = cp
+        ? `\nRESUME: mini-orch --resume-from ${cp} --needs-check-action <action> --needs-check-notes <answer>\n  actions: approve | revise | retry-review | abort`
+        : ""
+      if (interventionType === "invalid_output") {
+        notifyInvalidOutput(role, provider, `${reason}${resumeCmd}`, undefined, paneId, turnId)
+      } else {
+        notifyNeedsInput(role, provider, `${reason}${resumeCmd}`, undefined, paneId, turnId)
+      }
+    } else {
+      notifyNeedsCheck(error.checkpointPath)
+    }
     process.exitCode = 2
     return
   }

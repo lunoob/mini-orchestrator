@@ -126,13 +126,26 @@ export const handleIntervention = async (
         interventionReviewOutput: ctx.interventionReviewOutput,
       },
     )
+    // 通知上下文传递给 NeedsCheckPauseError，由主入口统一发送
+    const reason = isInvalidOutput
+      ? (initialQuestion ?? "输出缺少合法 STATUS")
+      : (initialQuestion ?? "需要人工确认")
+    const notificationContext = {
+      role,
+      provider: sessionHandle.provider,
+      paneId,
+      reason,
+      turnId: String(sessionHandle.offset),
+      interventionType: (isInvalidOutput ? "invalid_output" : "needs_input") as "invalid_output" | "needs_input",
+      checkpointPath,
+    }
     deps.log(`[Intervention] LLM 模式：已保存 checkpoint 到 ${checkpointPath}`)
     deps.log(`ROLE: ${role}  TYPE: ${isInvalidOutput ? "invalid_output" : "needs_input"}  PHASE: ${ctx.phase}`)
     if (initialQuestion) deps.log(`QUESTION: ${initialQuestion}`)
     deps.log(`STATUS: ORCHESTRATOR_NEEDS_CHECK`)
     deps.log(`CHECKPOINT: ${checkpointPath}`)
     const { NeedsCheckPauseError } = await import("../review/needs-check.js")
-    throw new NeedsCheckPauseError(checkpointPath)
+    throw new NeedsCheckPauseError(checkpointPath, notificationContext)
   }
 
   let needsInput = !isInvalidOutput
@@ -161,14 +174,31 @@ export const handleIntervention = async (
       const ok = await deps.promptContinue()
       if (!ok) throw new ImplementAskAbortError(`${context} (invalid_output)`)
 
-      await sendTask(paneId, CONTINUATION_PROMPT)
-      const result = await waitForAgentWithMonitor(sessionHandle)
-      sessionHandle.offset = result.finalOffset
-      resetNotifyDedup()
-      currentOutput = result.finalText
-      needsInput = result.status === "needs_input"
-      isInvalid = !needsInput && parseAgentOutput(currentOutput, role).status === "invalid_output"
-      currentQuestion = result.lastEvent?.question
+      // 先增量检查 JSONL，若用户已在 pane 中修正则直接消费终态
+      let handled = false
+      try {
+        const quickCheck = await waitForAgentWithMonitor(sessionHandle, { timeoutMs: 3000 })
+        sessionHandle.offset = quickCheck.finalOffset
+        resetNotifyDedup()
+        if (quickCheck.status !== "working" && quickCheck.status !== "failed") {
+          currentOutput = quickCheck.finalText
+          needsInput = quickCheck.status === "needs_input"
+          isInvalid = !needsInput && quickCheck.status !== "completed" && parseAgentOutput(currentOutput, role).status === "invalid_output"
+          currentQuestion = quickCheck.lastEvent?.question
+          handled = true
+        }
+      } catch { /* timeout = not completed */ }
+
+      if (!handled) {
+        await sendTask(paneId, CONTINUATION_PROMPT)
+        const result = await waitForAgentWithMonitor(sessionHandle)
+        sessionHandle.offset = result.finalOffset
+        resetNotifyDedup()
+        currentOutput = result.finalText
+        needsInput = result.status === "needs_input"
+        isInvalid = !needsInput && parseAgentOutput(currentOutput, role).status === "invalid_output"
+        currentQuestion = result.lastEvent?.question
+      }
       continue
     }
 

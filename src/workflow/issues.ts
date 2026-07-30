@@ -60,6 +60,8 @@ const runSingleSpecCycle = async (
   } else {
     await ensureImplementerSession(runtime)
     const sh = runtime.implementerSession!
+    runtime.eventBus.publish({ type: "phase_change", phase: "implement" })
+    runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
 
     const { finalText, status: monitorStatus, question } = await sendTaskAndMonitor(
       runtime.implementerPane,
@@ -83,18 +85,36 @@ const runSingleSpecCycle = async (
 
     const parsed = parseAgentOutput(finalText, "implementer")
     if (monitorStatus === "needs_input" || parsed.status === "needs_input") {
+      const reason = question ?? "需要人工确认"
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
+      runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
+      runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
         undefined, question, false, runtime.needsCheckMode, implementCtx,
       )
+      // intervention 完成后恢复为 working → completed
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
     } else if (monitorStatus === "failed") {
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
       console.warn("[Implement] Implementer failed. Proceeding to review anyway.")
     } else if (parsed.status === "invalid_output") {
-      console.warn(`[Implement] Invalid output: ${parsed.reason}. Entering intervention...`)
+      const reason = parsed.reason ?? "输出缺少合法 STATUS"
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "invalid_output" })
+      runtime.eventBus.publish({ type: "invalid_output", agent: "implementer", provider: sh.provider, reason })
+      runtime.eventBus.publish({ type: "pause", reason: `implementer invalid_output: ${reason}` })
+      console.warn(`[Implement] Invalid output: ${reason}. Entering intervention...`)
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
         undefined, parsed.reason, true, runtime.needsCheckMode, implementCtx,
       )
+      // intervention 完成后恢复为 working → completed
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+    } else {
+      // completed
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
     }
   }
 
@@ -110,6 +130,11 @@ export const runIssueQueueFromIndex = async (
   startIndex: number,
   issues: IssueConfig[],
 ) => {
+  // 仅在整个 issue 队列结束后发布 workflow complete
+  const publishCompleteWhenDone = () => {
+    runtime.eventBus.publish({ type: "complete" })
+  }
+
   for (let index = startIndex; index < issues.length; index += 1) {
     const issue = issues[index]
     console.log(`\n[Issue] === Issue ${index + 1}/${issues.length}: ${issue.title} ===`)
@@ -121,6 +146,7 @@ export const runIssueQueueFromIndex = async (
     }
 
     runtime.issueIndex = index
+    runtime.eventBus.publish({ type: "issue_change", issueIndex: index, issueCount: issues.length, issueTitle: issue.title })
 
     if (runtime.implementerPane) { await stopAgent(runtime.implementerPane); runtime.implementerPane = "" }
     if (runtime.reviewerPane) { await stopAgent(runtime.reviewerPane); runtime.reviewerPane = "" }
@@ -141,6 +167,9 @@ export const runIssueQueueFromIndex = async (
       if (rp) { runtime.reviewerPane = ""; await stopAgent(rp).catch(() => {}) }
     }
   }
+
+  // 所有 issue 处理完毕，发布 workflow complete
+  publishCompleteWhenDone()
 }
 
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {

@@ -1,6 +1,7 @@
 import type { IssueConfig, LoadedPrompts, ParsedArgs, WorkflowConfig } from "../types.js"
 import type { NeedsCheckMode } from "../review/needs-check.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
+import type { WorkflowEventBus } from "./events.js"
 
 export type WorkflowRuntime = {
   args: ParsedArgs
@@ -8,6 +9,7 @@ export type WorkflowRuntime = {
   config: WorkflowConfig
   /** 当前 workflow 配置文件路径，供 checkpoint 恢复使用 */
   configPath: string
+  eventBus: WorkflowEventBus
   hasGit: boolean
   implementerPane: string
   implementerSession?: AgentSessionHandle

@@ -13,13 +13,12 @@ const legalStatuses = (role: AgentRole): readonly string[] =>
  * - 完整原始文本作为 output 字段保留
  */
 export const parseAgentOutput = (output: string, role: AgentRole): StatusParseResult => {
-  // 把 literal \n 转为真实换行，统一处理
-  const normalized = output.replaceAll("\\n", "\n")
+  // 直接解析原始文本，不做 literal \n 转换，避免伪造非独占行
   const allowed = legalStatuses(role)
 
-  // 匹配所有 STATUS 行（允许前导空白）
-  const statusPattern = /^\s*STATUS:\s*(.+)$/gm
-  const matches = [...normalized.matchAll(statusPattern)]
+  // 匹配所有 STATUS 行：行首仅允许空格/Tab，行内空白也限于单行
+  const statusPattern = /^[ \t]*STATUS:[ \t]*(.+)$/gm
+  const matches = [...output.matchAll(statusPattern)]
 
   if (matches.length === 0) {
     return { status: "invalid_output", reason: "缺少 STATUS 标记", output }

@@ -89,7 +89,8 @@ describe("parseAgentOutput", () => {
         "text\\nSTATUS: IMPLEMENT_DONE\\nmore",
         "implementer",
       )
-      expect(result.status).toBe("completed")
+      // literal \\n 不应被转换为真实换行，避免伪造非独占行
+      expect(result.status).toBe("invalid_output")
     })
 
     it("multiple same legal status still counts as invalid", () => {
