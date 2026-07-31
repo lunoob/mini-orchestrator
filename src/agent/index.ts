@@ -6,6 +6,8 @@ import type { AgentSessionHandle, AgentStatus, TranscriptEvent } from "./transcr
 import { createTranscriptMonitor } from "./transcript/monitor.js"
 import { splitCommand } from "../lib/utils.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
+import type { OutputCallback } from "./subprocess.js"
+export type { OutputCallback }
 
 const DEFAULT_MONITOR_POLL_MS = 10_000
 const DEFAULT_MONITOR_TIMEOUT_MS = 3_600_000
@@ -112,15 +114,43 @@ export const readAgentOutputWithRetry = async (
 
 // ── Agent lifecycle ──
 
-export const runAgentUpdate = async (projectDir: string, agent: AgentConfig): Promise<boolean> => {
-  if (!agent.updateCommand) return true
-  console.log(`[Agent] Running update for "${agent.name}": ${agent.updateCommand}`)
-  const [cmd, ...args] = splitCommand(agent.updateCommand)
-  const { code } = await new Promise<{ code: number | null }>((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd: projectDir, env: process.env, stdio: "inherit" })
+/**
+ * 启动子进程并捕获输出，通过 onOutput 回调转发。
+ * 避免使用 stdio: "inherit" 导致子进程输出绕过 Blessed UI 覆盖终端内容。
+ */
+const spawnWithOutput = (
+  cmd: string, args: string[], opts: { cwd: string },
+  onOutput?: OutputCallback,
+): Promise<{ code: number | null }> =>
+  new Promise<{ code: number | null }>((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: opts.cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    if (onOutput) {
+      child.stdout?.on("data", (chunk: Buffer | string) => {
+        for (const line of chunk.toString().split("\n")) {
+          if (line) onOutput(line, "stdout")
+        }
+      })
+      child.stderr?.on("data", (chunk: Buffer | string) => {
+        for (const line of chunk.toString().split("\n")) {
+          if (line) onOutput(line, "stderr")
+        }
+      })
+    }
     child.on("error", reject)
     child.on("close", resolve)
   })
+
+export const runAgentUpdate = async (
+  projectDir: string, agent: AgentConfig, onOutput?: OutputCallback,
+): Promise<boolean> => {
+  if (!agent.updateCommand) return true
+  console.log(`[Agent] Running update for "${agent.name}": ${agent.updateCommand}`)
+  const [cmd, ...args] = splitCommand(agent.updateCommand)
+  const { code } = await spawnWithOutput(cmd, args, { cwd: projectDir }, onOutput)
   if (code !== 0) {
     console.warn(`[Agent] Update for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
     return false
@@ -128,9 +158,9 @@ export const runAgentUpdate = async (projectDir: string, agent: AgentConfig): Pr
   return true
 }
 
-export const runAgentIntegration = async (agent: AgentConfig): Promise<boolean> => {
+export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputCallback): Promise<boolean> => {
   console.log(`[Agent] Running herdr integration for "${agent.name}": herdr integration ${agent.integrationAgent}`)
-  const { code } = await tryRunHerdr(["integration", "install", agent.integrationAgent])
+  const { code } = await tryRunHerdr(["integration", "install", agent.integrationAgent], onOutput)
   if (code !== 0) {
     console.warn(`[Agent] Integration for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
     return false
@@ -141,9 +171,8 @@ export const runAgentIntegration = async (agent: AgentConfig): Promise<boolean> 
 // ── JSONL-based session management ──
 
 const BOOTSTRAP_META_PROMPT = [
-  "Output ONLY the following JSON object with your session metadata. Do not output anything else.",
-  '{"resumeId":"<your-session-resume-id>","jsonl":"<absolute-path-to-your-session-jsonl-file>"}',
-  "IMPORTANT: Output ONLY the JSON object, no markdown fences, no other text.",
+  "输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出一个 json 字符串即可，格式如: { resumeId, jsonl }",
+  "不要使用 markdown 代码块",
 ].join("\n")
 
 export const bootstrapSession = async (

@@ -8,6 +8,7 @@ import {
   startAgentResumed,
   stopAgent,
 } from "../agent/index.js"
+import type { OutputCallback } from "../agent/index.js"
 import { createSession } from "../agent/session.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
@@ -193,13 +194,18 @@ export const runIssueQueueFromIndex = async (
   publishCompleteWhenDone()
 }
 
+/** 将子进程输出通过 console 重定向到 log sink */
+const agentOutput: OutputCallback = (msg, stream) => {
+  if (stream === "stderr") console.warn(msg); else console.log(msg)
+}
+
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
   const { implementer, reviewer, projectDir } = runtime.config
   await Promise.all([
-    runAgentUpdate(projectDir, implementer),
-    runAgentUpdate(projectDir, reviewer),
-    runAgentIntegration(implementer),
-    runAgentIntegration(reviewer),
+    runAgentUpdate(projectDir, implementer, agentOutput),
+    runAgentUpdate(projectDir, reviewer, agentOutput),
+    runAgentIntegration(implementer, agentOutput),
+    runAgentIntegration(reviewer, agentOutput),
   ])
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

@@ -12,6 +12,7 @@ import {
   stopAgent,
   waitForAgentWithMonitor,
 } from "../agent/index.js"
+import type { OutputCallback } from "../agent/index.js"
 import { resolveAgentConfig } from "../config/agents.js"
 import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
 import { printSection, stripAgentOutcome } from "../lib/utils.js"
@@ -44,7 +45,7 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
   const projectDir = args.projectDir ?? process.cwd()
   const agent = resolveAgentConfig({
     agent: "claude",
-    model: "default",
+    model: "haiku",
     name: "test-claude",
   })
 
@@ -58,14 +59,19 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
   let primaryError: Error | undefined
   let failPublished = false
 
+  // 将子进程输出通过 console 重定向到 log sink，避免绕过 Blessed UI 覆盖终端
+  const agentOutput: OutputCallback = (msg, stream) => {
+    if (stream === "stderr") console.warn(msg); else console.log(msg)
+  }
+
   try {
     console.log("[TestStatus] Starting herdr status test with claude agent")
     console.log(`[TestStatus] Project dir: ${projectDir}`)
     console.log(`[TestStatus] Command: ${agent.command}`)
 
     await Promise.all([
-      runAgentUpdate(projectDir, agent),
-      runAgentIntegration(agent),
+      runAgentUpdate(projectDir, agent, agentOutput),
+      runAgentIntegration(agent, agentOutput),
     ])
 
     // 使用 JSONL-based monitoring 流程
@@ -103,9 +109,10 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
       printSection("TestStatus Output", stripAgentOutcome(currentOutput))
 
       if (effectiveStatus === "done") {
-        eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-        eventBus?.publish({ type: "complete" })
-        failPublished = false
+        // 用户手动注释的
+        // eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+        // eventBus?.publish({ type: "complete" })
+        // failPublished = false
         console.log("[TestStatus] Agent completed idle cycle successfully")
         break
       }

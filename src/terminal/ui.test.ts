@@ -39,6 +39,7 @@ const createMockBlessed = () => {
     append: vi.fn(),
     render: vi.fn(),
     destroy: vi.fn(),
+    clear: vi.fn(),
     on: vi.fn((event: string, handler: Function) => {
       if (!screenListeners[event]) screenListeners[event] = []
       screenListeners[event].push(handler)
@@ -47,6 +48,8 @@ const createMockBlessed = () => {
     program: {
       showCursor: vi.fn(),
       normalBuffer: vi.fn(),
+      clear: vi.fn(),
+      write: vi.fn(),
     },
     cols: 80,
     rows: 24,
@@ -107,13 +110,13 @@ describe("TerminalUI", () => {
   })
 
   describe("initialization", () => {
-    it("creates screen with smartCSR for incremental redraw", () => {
+    it("creates screen with smartCSR and fullUnicode for CJK support", () => {
       const blessed = createMockBlessed()
       const eventBus = createEventBus()
       createBlessedUI(eventBus, blessed)
 
       expect(blessed.screen).toHaveBeenCalledWith(
-        expect.objectContaining({ smartCSR: true })
+        expect.objectContaining({ smartCSR: true, forceUnicode: true, fullUnicode: true })
       )
     })
 
@@ -260,7 +263,7 @@ describe("TerminalUI", () => {
 
     it("renders wrapped status when terminal is narrow", () => {
       const blessed = createMockBlessed()
-      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn() }, cols: 40, rows: 24 }
+      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), clear: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn(), clear: vi.fn(), write: vi.fn() }, cols: 40, rows: 24 }
       blessed.screen.mockReturnValue(screenInstance)
 
       const statusBox = { setContent: vi.fn(), height: 1 }
@@ -451,7 +454,7 @@ describe("TerminalUI", () => {
   describe("teardown", () => {
     it("destroys screen", () => {
       const blessed = createMockBlessed()
-      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn(), normalBuffer: vi.fn() }, cols: 80, rows: 24 }
+      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), clear: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn(), normalBuffer: vi.fn(), clear: vi.fn(), write: vi.fn() }, cols: 80, rows: 24 }
       blessed.screen.mockReturnValue(screenInstance)
 
       const eventBus = createEventBus()
@@ -486,7 +489,7 @@ describe("TerminalUI", () => {
 
     it("calls screen.destroy for full terminal cleanup including cursor", () => {
       const blessed = createMockBlessed()
-      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn(), normalBuffer: vi.fn() }, cols: 80, rows: 24 }
+      const screenInstance = { append: vi.fn(), render: vi.fn(), destroy: vi.fn(), clear: vi.fn(), on: vi.fn(), key: vi.fn(), program: { showCursor: vi.fn(), normalBuffer: vi.fn(), clear: vi.fn(), write: vi.fn() }, cols: 80, rows: 24 }
       blessed.screen.mockReturnValue(screenInstance)
 
       const eventBus = createEventBus()
@@ -524,9 +527,10 @@ describe("TerminalUI", () => {
         append: vi.fn(),
         render: vi.fn(),
         destroy: vi.fn(),
+        clear: vi.fn(),
         on: vi.fn(),
         key: vi.fn(),
-        program: { showCursor: vi.fn(), normalBuffer: vi.fn() },
+        program: { showCursor: vi.fn(), normalBuffer: vi.fn(), clear: vi.fn(), write: vi.fn() },
         cols: 80,
         rows: 24,
       }

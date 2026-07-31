@@ -63,11 +63,16 @@ export const createBlessedUI = (
   let unsubscribe: (() => void) | null = null
   const logHistory: Array<{ text: string; stream: "stdout" | "stderr" }> = []
 
-  // 创建 screen
+  // 创建 screen（启用 fullUnicode 支持 CJK 双宽字符）
   const screen = blessed.screen({
     smartCSR: true,
     title: "mini-orch",
+    forceUnicode: true,
+    fullUnicode: true,
   })
+
+  // 清屏：通过 program 发送 ANSI 清屏序列
+  screen.program.write("\x1b[2J\x1b[H")
 
   // 创建日志区（关闭 tags 避免动态内容被误解析为 Blessed 标签）
   const logWidget = blessed.log({
@@ -81,7 +86,6 @@ export const createBlessedUI = (
       ch: " ",
     },
     tags: false,
-    border: "line",
   })
 
   // 创建状态面板（关闭 tags 避免 issue 标题、reason 等动态内容被误解析）
