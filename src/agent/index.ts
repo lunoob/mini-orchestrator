@@ -171,8 +171,7 @@ export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputC
 // ── JSONL-based session management ──
 
 const BOOTSTRAP_META_PROMPT = [
-  "输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出一个 json 字符串即可，格式如: { resumeId, jsonl }",
-  "不要使用 markdown 代码块",
+  "输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出一个 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。",
 ].join("\n")
 
 export const bootstrapSession = async (
