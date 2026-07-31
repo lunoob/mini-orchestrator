@@ -120,6 +120,55 @@ export const buildBootstrapCommand = (config: AgentConfig, metaPrompt: string): 
   return `${escaped.join(" ")} 2>/dev/null`
 }
 
+/** shell-safe 转义单个参数 */
+const shellEscape = (arg: string): string => {
+  const clean = arg.replace(/^"|"$/g, "")
+  if (clean.includes(" ") || clean.includes("'") || clean.includes('"')) {
+    return `'${clean.replace(/'/g, "'\\''")}'`
+  }
+  return clean
+}
+
+/**
+ * 构建 Claude bootstrap Step 1 命令：发送 "Hello" 并获取 session_id。
+ * 返回可直接用 shell 执行的完整命令字符串。
+ */
+export const buildClaudeBootstrapStep1Command = (config: AgentConfig): string => {
+  const definition = AGENT_DEFINITIONS[config.agent]
+  if (!definition) {
+    throw new Error(`[Config] Unknown agent "${config.agent}"`)
+  }
+
+  const cli = definition.cli ?? config.agent
+  const args = [cli, "-p", "Hello", "--output-format", "json"]
+
+  if (config.model) args.push("--model", config.model)
+  if (config.effort) args.push("--effort", config.effort)
+
+  const escaped = args.map(shellEscape)
+  return `${escaped.join(" ")} 2>/dev/null`
+}
+
+/**
+ * 构建 Claude bootstrap Step 2 命令：使用 session_id 恢复会话并获取 resumeId 和 jsonl。
+ * 返回可直接用 shell 执行的完整命令字符串。
+ */
+export const buildClaudeBootstrapStep2Command = (config: AgentConfig, sessionId: string, metaPrompt: string): string => {
+  const definition = AGENT_DEFINITIONS[config.agent]
+  if (!definition) {
+    throw new Error(`[Config] Unknown agent "${config.agent}"`)
+  }
+
+  const cli = definition.cli ?? config.agent
+  const args = [cli, "--resume", sessionId, "-p", metaPrompt]
+
+  if (config.model) args.push("--model", config.model)
+  if (config.effort) args.push("--effort", config.effort)
+
+  const escaped = args.map(shellEscape)
+  return `${escaped.join(" ")} 2>/dev/null`
+}
+
 /** 构建 resume 时 pane 中使用的 CLI 参数（不含 CLI 名，由 splitCommand 处理后附加） */
 export const buildResumeArgs = (config: AgentConfig, resumeId: string) => {
   const definition = AGENT_DEFINITIONS[config.agent]

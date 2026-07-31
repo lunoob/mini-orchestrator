@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process"
 
 import type { AgentConfig, AgentListResult, AgentStartResult, PaneSplitResult } from "../types.js"
-import { buildBootstrapCommand, buildResumeArgs, parseBootstrapOutput } from "../config/agents.js"
+import {
+  buildBootstrapCommand,
+  buildClaudeBootstrapStep1Command,
+  buildClaudeBootstrapStep2Command,
+  buildResumeArgs,
+  parseBootstrapOutput,
+} from "../config/agents.js"
 import type { AgentSessionHandle, AgentStatus, TranscriptEvent } from "./transcript/types.js"
 import { createTranscriptMonitor } from "./transcript/monitor.js"
 import { splitCommand } from "../lib/utils.js"
@@ -171,28 +177,129 @@ export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputC
 // ── JSONL-based session management ──
 
 const BOOTSTRAP_META_PROMPT = [
-  "输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出一个 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。",
+  "我给你读取的权限，输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。",
 ].join("\n")
+
+/**
+ * 执行 headless 命令并返回 stdout。
+ */
+const execHeadless = async (shellCommand: string): Promise<{ stdout: string; code: number | null }> => {
+  return new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
+    const child = spawn(shellCommand, {
+      env: process.env, shell: true, stdio: ["ignore", "pipe", "pipe"],
+    })
+    let out = ""
+    child.stdout.on("data", (chunk: Buffer | string) => { out += chunk.toString() })
+    child.on("error", reject)
+    child.on("close", (exitCode) => resolve({ code: exitCode, stdout: out }))
+  })
+}
+
+/**
+ * 等待 JSONL 文件就绪（最多 15 秒）。
+ */
+const waitForJsonlReady = async (jsonlPath: string, agentName: string): Promise<number> => {
+  const { open } = await import("node:fs/promises")
+  const deadline = Date.now() + 15_000
+
+  while (Date.now() < deadline) {
+    try {
+      const fh = await open(jsonlPath, "r")
+      const stat = await fh.stat()
+      if (stat.size > 0) {
+        const buffer = Buffer.alloc(stat.size)
+        const { bytesRead } = await fh.read(buffer, 0, stat.size, 0)
+        if (buffer.toString("utf8", 0, bytesRead).includes("\n")) {
+          await fh.close()
+          return stat.size
+        }
+      }
+      await fh.close()
+    } catch { /* JSONL not ready */ }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+
+  throw new Error(`[Agent] Bootstrap failed for "${agentName}": JSONL not ready within 15s: ${jsonlPath}`)
+}
+
+/**
+ * Claude bootstrap 的两步流程：
+ * Step 1: 发送 "Hello" 获取 session_id
+ * Step 2: 使用 session_id 恢复会话并获取 resumeId 和 jsonl
+ */
+const bootstrapClaudeSession = async (
+  agent: AgentConfig, metaPrompt: string,
+): Promise<AgentSessionHandle> => {
+  // Step 1: 发送 "Hello" 获取 session_id
+  const step1Command = buildClaudeBootstrapStep1Command(agent)
+  console.log(`[Agent] Bootstrap Step 1: Getting session_id for "${agent.name}"...`)
+
+  const { stdout: step1Output, code: step1Code } = await execHeadless(step1Command)
+  if (step1Code !== 0) {
+    throw new Error(`[Agent] Bootstrap Step 1 failed for "${agent.name}" (exit ${step1Code})`)
+  }
+
+  // 解析 Step 1 输出，提取 session_id
+  let step1Parsed: unknown
+  try {
+    step1Parsed = JSON.parse(step1Output.trim())
+  } catch {
+    throw new Error(
+      `[Agent] Bootstrap Step 1 failed for "${agent.name}": invalid JSON output. ` +
+      `stdout was: ${step1Output.slice(0, 500)}`,
+    )
+  }
+
+  const sessionId = (step1Parsed as Record<string, unknown>)?.session_id
+  if (typeof sessionId !== "string" || !sessionId.trim()) {
+    throw new Error(
+      `[Agent] Bootstrap Step 1 failed for "${agent.name}": session_id not found in output. ` +
+      `stdout was: ${step1Output.slice(0, 500)}`,
+    )
+  }
+
+  console.log(`[Agent] Bootstrap Step 1 OK: session_id=${sessionId}`)
+
+  // Step 2: 使用 session_id 恢复会话并获取 resumeId 和 jsonl
+  const step2Command = buildClaudeBootstrapStep2Command(agent, sessionId, metaPrompt)
+  console.log(`[Agent] Bootstrap Step 2: Getting resumeId and jsonl for "${agent.name}"...`)
+
+  const { stdout: step2Output, code: step2Code } = await execHeadless(step2Command)
+  if (step2Code !== 0) {
+    throw new Error(`[Agent] Bootstrap Step 2 failed for "${agent.name}" (exit ${step2Code})`)
+  }
+
+  // 解析 Step 2 输出
+  const handle = parseBootstrapOutput(step2Output, agent.agent as AgentSessionHandle["provider"])
+  if (!handle) {
+    throw new Error(
+      `[Agent] Bootstrap Step 2 failed for "${agent.name}": could not parse { resumeId, jsonl } from stdout. ` +
+      `stdout was: ${step2Output.slice(0, 500)}`,
+    )
+  }
+
+  // 等待 JSONL 就绪
+  handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
+
+  console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
+  return handle
+}
 
 export const bootstrapSession = async (
   agent: AgentConfig, metaPrompt?: string,
 ): Promise<AgentSessionHandle> => {
   const prompt = metaPrompt ?? BOOTSTRAP_META_PROMPT
+
+  // Claude 使用两步 bootstrap 流程
+  if (agent.agent === "claude") {
+    return bootstrapClaudeSession(agent, prompt)
+  }
+
+  // 其他 agent 使用单步 bootstrap 流程
   const shellCommand = buildBootstrapCommand(agent, prompt)
   console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
 
-  const { stdout, code } = await new Promise<{ code: number | null; stdout: string }>(
-    (resolve, reject) => {
-      const child = spawn(shellCommand, {
-        env: process.env, shell: true, stdio: ["ignore", "pipe", "pipe"],
-      })
-      let out = ""
-      child.stdout.on("data", (chunk: Buffer | string) => { out += chunk.toString() })
-      child.on("error", reject)
-      child.on("close", (exitCode) => resolve({ code: exitCode, stdout: out }))
-    },
-  )
-
+  const { stdout, code } = await execHeadless(shellCommand)
   if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
 
   const handle = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])
@@ -203,33 +310,8 @@ export const bootstrapSession = async (
     )
   }
 
-  // Wait for JSONL to be ready
-  const { open } = await import("node:fs/promises")
-  const jsonlWaitDeadline = Date.now() + 15_000
-  let jsonlReady = false
-
-  while (Date.now() < jsonlWaitDeadline) {
-    try {
-      const fh = await open(handle.jsonl, "r")
-      const stat = await fh.stat()
-      if (stat.size > 0) {
-        const buffer = Buffer.alloc(stat.size)
-        const { bytesRead } = await fh.read(buffer, 0, stat.size, 0)
-        if (buffer.toString("utf8", 0, bytesRead).includes("\n")) {
-          handle.offset = stat.size
-          await fh.close()
-          jsonlReady = true
-          break
-        }
-      }
-      await fh.close()
-    } catch { /* JSONL not ready */ }
-    await new Promise((r) => setTimeout(r, 500))
-  }
-
-  if (!jsonlReady) {
-    throw new Error(`[Agent] Bootstrap failed for "${agent.name}": JSONL not ready within 15s: ${handle.jsonl}`)
-  }
+  // 等待 JSONL 就绪
+  handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
 
   console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
   return handle
