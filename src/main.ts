@@ -5,7 +5,7 @@ import { notifyError, notifyInvalidOutput, notifyNeedsCheck, notifyNeedsInput, n
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runSkillCli } from "./cli/skill.js"
-import { ImplementAskAbortError } from "./workflow/implement-ask.js"
+import { AgentFailError, ImplementAskAbortError } from "./workflow/implement-ask.js"
 import { runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
 import { createWorkflowEventBus } from "./workflow/events.js"
@@ -105,6 +105,14 @@ void main().catch((error) => {
       notifyNeedsCheck(error.checkpointPath)
     }
     process.exitCode = 2
+    return
+  }
+
+  // Agent 失败：workflow 失败，返回退出码 1 并发送错误通知
+  if (error instanceof AgentFailError) {
+    console.error(`\n[Workflow] ${error.message}`)
+    notifyError(error.message)
+    process.exitCode = 1
     return
   }
 

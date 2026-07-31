@@ -53,4 +53,38 @@ describe("Codex adapter", () => {
     const line = { event_msg: { payload: { type: "response_item" } } }
     expect(processLine(line)).toBeUndefined()
   })
+
+  it("emits failed for task_error with error message", () => {
+    const line = {
+      event_msg: {
+        payload: { type: "task_error", error: "Model unavailable" },
+      },
+    }
+    const result = processLine(line)
+    expect(result).not.toBeUndefined()
+    expect(result!.type).toBe("failed")
+    expect(result!.reason).toContain("Model unavailable")
+  })
+
+  it("emits failed for task_failed with message", () => {
+    const line = {
+      event_msg: {
+        payload: { type: "task_failed", message: "Task cancelled by user" },
+      },
+    }
+    const result = processLine(line)
+    expect(result!.type).toBe("failed")
+    expect(result!.reason).toContain("Task cancelled by user")
+  })
+
+  it("emits failed for exception payload", () => {
+    const line = {
+      event_msg: {
+        payload: { type: "exception", message: "Unexpected internal error" },
+      },
+    }
+    const result = processLine(line)
+    expect(result!.type).toBe("failed")
+    expect(result!.reason).toContain("Unexpected internal error")
+  })
 })

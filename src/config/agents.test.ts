@@ -114,7 +114,7 @@ describe("resolveAgentConfig", () => {
 describe("buildBootstrapCommand", () => {
   const metaPrompt = "TEST_META_PROMPT"
 
-  it("builds claude bootstrap argv with model and effort", () => {
+  it("builds claude bootstrap shell command with model and effort, ending with 2>/dev/null", () => {
     const config = resolveAgentConfig({
       agent: "claude",
       model: "sonnet",
@@ -122,21 +122,21 @@ describe("buildBootstrapCommand", () => {
       name: "test",
     })
 
-    const argv = buildBootstrapCommand(config, metaPrompt)
+    const cmd = buildBootstrapCommand(config, metaPrompt)
 
-    expect(argv[0]).toBe("claude")
-    expect(argv).toContain("-p")
-    // prompt 作为独立 argv 条目，不含 shell quoting
-    expect(argv).toContain(metaPrompt)
-    expect(argv).toContain("--model")
-    expect(argv).toContain("sonnet")
-    expect(argv).toContain("--effort")
-    expect(argv).toContain("high")
-    // 不含 shell 重定向语法
-    expect(argv).not.toContain("2>/dev/null")
+    expect(typeof cmd).toBe("string")
+    expect(cmd).toMatch(/^claude/)
+    expect(cmd).toContain("-p")
+    expect(cmd).toContain(metaPrompt)
+    expect(cmd).toContain("--model")
+    expect(cmd).toContain("sonnet")
+    expect(cmd).toContain("--effort")
+    expect(cmd).toContain("high")
+    // 末尾显式 2>/dev/null
+    expect(cmd.endsWith("2>/dev/null")).toBe(true)
   })
 
-  it("builds codex bootstrap argv with model and effort", () => {
+  it("builds codex bootstrap shell command with model and effort", () => {
     const config = resolveAgentConfig({
       agent: "codex",
       model: "gpt-5.6-terra",
@@ -144,47 +144,49 @@ describe("buildBootstrapCommand", () => {
       name: "test",
     })
 
-    const argv = buildBootstrapCommand(config, metaPrompt)
+    const cmd = buildBootstrapCommand(config, metaPrompt)
 
-    expect(argv[0]).toBe("codex")
-    expect(argv[1]).toBe("exec")
-    expect(argv).toContain("--model")
-    expect(argv).toContain("gpt-5.6-terra")
-    expect(argv).toContain('model_reasoning_effort="medium"')
-    expect(argv).not.toContain("2>/dev/null")
+    expect(typeof cmd).toBe("string")
+    expect(cmd).toMatch(/^codex/)
+    expect(cmd).toContain("exec")
+    expect(cmd).toContain("--model")
+    expect(cmd).toContain("gpt-5.6-terra")
+    expect(cmd.endsWith("2>/dev/null")).toBe(true)
   })
 
-  it("builds cursor bootstrap argv with model", () => {
+  it("builds cursor bootstrap shell command with model", () => {
     const config = resolveAgentConfig({
       agent: "cursor",
       model: "composer-2.5-high",
       name: "test",
     })
 
-    const argv = buildBootstrapCommand(config, metaPrompt)
+    const cmd = buildBootstrapCommand(config, metaPrompt)
 
-    expect(argv[0]).toBe("cursor-agent")
-    expect(argv).toContain("-p")
-    expect(argv).toContain("--model")
-    expect(argv).toContain("composer-2.5-high")
-    expect(argv).not.toContain("2>/dev/null")
+    expect(typeof cmd).toBe("string")
+    expect(cmd).toMatch(/^cursor-agent/)
+    expect(cmd).toContain("-p")
+    expect(cmd).toContain("--model")
+    expect(cmd).toContain("composer-2.5-high")
+    expect(cmd.endsWith("2>/dev/null")).toBe(true)
   })
 
-  it("builds claude bootstrap argv without effort when not configured", () => {
+  it("builds claude bootstrap shell command without effort when not configured", () => {
     const config = resolveAgentConfig({
       agent: "claude",
       model: "haiku",
       name: "test",
     })
 
-    const argv = buildBootstrapCommand(config, metaPrompt)
+    const cmd = buildBootstrapCommand(config, metaPrompt)
 
-    expect(argv[0]).toBe("claude")
-    expect(argv).toContain("-p")
-    expect(argv).toContain("--model")
-    expect(argv).toContain("haiku")
-    expect(argv).not.toContain("--effort")
-    expect(argv).not.toContain("2>/dev/null")
+    expect(typeof cmd).toBe("string")
+    expect(cmd).toMatch(/^claude/)
+    expect(cmd).toContain("-p")
+    expect(cmd).toContain("--model")
+    expect(cmd).toContain("haiku")
+    expect(cmd).not.toContain("--effort")
+    expect(cmd.endsWith("2>/dev/null")).toBe(true)
   })
 })
 

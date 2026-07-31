@@ -1,16 +1,4 @@
-import { parseAgentOutput } from "./status-parser.js"
-
-export type ImplementStatus = "done" | "needs_input" | "unknown"
-
-/**
- * @deprecated 使用 parseAgentOutput 替代；保留以兼容旧测试和旧代码路径
- */
-export const parseImplementStatus = (output: string): ImplementStatus => {
-  const result = parseAgentOutput(output, "implementer")
-  if (result.status === "completed") return "done"
-  if (result.status === "needs_input") return "needs_input"
-  return "unknown"
-}
+import { isProtocolError, parseOutcome, type AgentOutcome } from "./outcome-parser.js"
 
 export const assertHerdrEnv = () => {
   if (process.env.HERDR_ENV === "1") return
@@ -22,9 +10,6 @@ export const getErrorMessage = (error: unknown) => {
   return String(error)
 }
 
-export const hasStatus = (output: string, status: string) =>
-  new RegExp(`STATUS: ${status}`, "m").test(output.trim())
-
 export type ReviewVerdictKind = "pass" | "fail" | "needs_check"
 
 export type ReviewVerdict = {
@@ -34,88 +19,84 @@ export type ReviewVerdict = {
   passed: boolean
 }
 
-const extractCannotVerifySummary = (output: string) => {
-  const match = output.match(
-    /⚠️\s*Cannot verify from diff:\s*([\s\S]*?)(?=\n### |\n#### |\n- ✅|\n- ❌|$)/i,
-  )
-  if (!match) return null
+/**
+ * 从 agent 输出中移除末尾 JSON outcome 块，仅保留业务内容。
+ * 先尝试整体 JSON.parse；若失败则从后往前找并移除末尾 JSON。
+ */
+export const stripAgentOutcome = (output: string): string => {
+  const normalized = output.replaceAll("\\n", "\n").trimEnd()
 
-  const body = match[1].trim()
-  if (!body || /^\(none\)$/i.test(body) || body === "无") return null
+  // 纯 JSON outcome 时提取 report 字段内容（用于 revise 流程传递 reviewer 反馈）
+  // P2-5: 没有 report 时用 summary 作为 fallback，避免 revise/controller prompt 收不到反馈
+  try {
+    const parsed = JSON.parse(normalized.trim())
+    if (typeof parsed === "object" && parsed !== null) {
+      if (typeof parsed.report === "string" && parsed.report.trim()) {
+        return parsed.report.trim()
+      }
+      // fallback: 使用 summary
+      if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+        return parsed.summary.trim()
+      }
+    }
+    return ""
+  } catch { /* 有混合内容 */ }
 
-  return body
+  // 从后往前找最后一个 JSON 对象，正确跳过字符串内容
+  const len = normalized.length
+  let end = len - 1
+  while (end >= 0 && /\s/.test(normalized[end])) end--
+  if (end < 0 || normalized[end] !== "}") return normalized.trim()
+
+  let depth = 0
+  let inString = false
+  let escape = false
+  let jsonStart = -1
+  for (let i = end; i >= 0; i--) {
+    const ch = normalized[i]
+    if (escape) { escape = false; continue }
+    if (ch === "\\") { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === "}") depth++
+    else if (ch === "{") depth--
+    if (depth === 0) { jsonStart = i; break }
+  }
+  if (jsonStart >= 0 && jsonStart < len) {
+    // 验证是合法 JSON outcome
+    const candidate = normalized.slice(jsonStart, end + 1)
+    try {
+      const parsed = JSON.parse(candidate)
+      if (typeof parsed === "object" && parsed !== null && "outcome" in parsed) {
+        return normalized.slice(0, jsonStart).trim()
+      }
+    } catch { /* 非 JSON */ }
+  }
+  return normalized.trim()
 }
 
-/**
- * @deprecated 使用 parseAgentOutput 替代；保留以兼容旧代码路径
- */
-export const parseReviewVerdict = (output: string): ReviewVerdict => {
-  const result = parseAgentOutput(output, "reviewer")
 
-  const cannotVerifySummary = extractCannotVerifySummary(output)
-  const hasCannotVerify = cannotVerifySummary !== null
+export const extractOutcomeSummary = (output: string): string => {
+  const result = parseOutcome(output, "reviewer")
+  if (!isProtocolError(result) && result.outcome !== "failed") return formatOutcome(result)
 
-  // parseAgentOutput 的结果映射回 ReviewVerdict
-  if (result.status === "completed" && "statusValue" in result) {
-    const kind: ReviewVerdictKind =
-      result.statusValue === "REVIEW_PASS" ? "pass"
-      : result.statusValue === "REVIEW_FAIL" ? "fail"
-      : hasCannotVerify ? "needs_check"
-      : "fail"
+  const implResult = parseOutcome(output, "implementer")
+  if (!isProtocolError(implResult)) return formatOutcome(implResult)
 
-    return {
-      cannotVerifySummary,
-      hasCannotVerify,
-      kind,
-      passed: kind === "pass",
-    }
-  }
-
-  if (result.status === "needs_input") {
-    return {
-      cannotVerifySummary,
-      hasCannotVerify,
-      kind: "needs_check",
-      passed: false,
-    }
-  }
-
-  // invalid_output → fail
-  return {
-    cannotVerifySummary,
-    hasCannotVerify,
-    kind: "fail",
-    passed: false,
-  }
+  return `PROTOCOL_ERROR: ${isProtocolError(result) ? result.reason : ""}`
 }
 
-/**
- * @deprecated 不再使用分隔线标记；保留以兼容旧代码路径
- */
-export const extractReviewResult = (output: string): string => output
-
-/**
- * @deprecated 不再使用分隔线标记；保留以兼容旧代码路径
- */
-export const extractImplementResult = (output: string): string => output
-
-/** 整行 STATUS 标记（允许前导空白）；每次新建 RegExp，避免 g 标志的 lastIndex 串扰 */
-const STATUS_LINE_PATTERN = "^[ \\t]*STATUS: .+$"
-const statusLineRe = () => new RegExp(STATUS_LINE_PATTERN, "gm")
-
-export const stripStatusLines = (output: string): string =>
-  output
-    .replaceAll("\\n", "\n")
-    .trim()
-    .replace(statusLineRe(), "")
-    .trim()
-
-/** 仅保留 STATUS 行，供控制台摘要打印（避免刷完整 agent 输出） */
-export const extractStatusLines = (output: string): string => {
-  const normalized = output.replaceAll("\\n", "\n")
-  const matches = normalized.match(statusLineRe())
-  if (!matches) return ""
-  return matches.map((line) => line.trim()).join("\n")
+const formatOutcome = (outcome: AgentOutcome): string => {
+  switch (outcome.outcome) {
+    case "completed":
+      return "review" in outcome && outcome.review
+        ? `REVIEW_${outcome.review.verdict.toUpperCase()}`
+        : "IMPLEMENT_DONE"
+    case "needs_input":
+      return `QUESTION: ${outcome.request.question.slice(0, 100)}`
+    case "failed":
+      return `FAILED: ${outcome.failure.message.slice(0, 100)}`
+  }
 }
 
 export const printSection = (title: string, body: string) => {

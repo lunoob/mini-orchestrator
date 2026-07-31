@@ -70,6 +70,50 @@ describe("Claude adapter", () => {
     expect(processLine(line)).toBeUndefined()
   })
 
+  it("emits failed for stop_reason error", () => {
+    const line = {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "Something went wrong" }],
+        stop_reason: "error",
+      },
+    }
+
+    const result = processLine(line)
+    expect(result).not.toBeUndefined()
+    expect(result!.type).toBe("failed")
+    expect(result!.reason).toContain("Something went wrong")
+  })
+
+  it("emits failed for stop_reason refusal", () => {
+    const line = {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "I cannot do that" }],
+        stop_reason: "refusal",
+      },
+    }
+
+    const result = processLine(line)
+    expect(result!.type).toBe("failed")
+    expect(result!.reason).toContain("I cannot do that")
+  })
+
+  it("emits completed with [max_tokens] for max_tokens stop", () => {
+    const line = {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "Partial output" }],
+        stop_reason: "max_tokens",
+      },
+    }
+
+    const result = processLine(line)
+    expect(result!.type).toBe("completed")
+    expect(result!.text).toContain("[max_tokens]")
+    expect(result!.text).toContain("Partial output")
+  })
+
   it("end_turn returns last accumulated text", () => {
     const adapter = createClaudeAdapter()
     // simulate tool_use (no text on working)

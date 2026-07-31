@@ -90,15 +90,34 @@ const buildBootstrapArgv = (
   return args
 }
 
-/** 构建 headless bootstrap 命令 argv，不含 shell 重定向 */
-export const buildBootstrapCommand = (config: AgentConfig, metaPrompt: string): string[] => {
+/**
+ * 构建 headless bootstrap 命令字符串，末尾显式追加 2>/dev/null。
+ *
+ * 返回可直接用 shell 执行的完整命令字符串，argv 中的每个参数均经过 shell-safe 转义。
+ * 与 spawn 不同：此函数生成的字符串经过 shell 解析，2>/dev/null 是 shell 重定向而非
+ * 普通 argv 参数。
+ */
+export const buildBootstrapCommand = (config: AgentConfig, metaPrompt: string): string => {
   const definition = AGENT_DEFINITIONS[config.agent]
   if (!definition) {
     throw new Error(`[Config] Unknown agent "${config.agent}"`)
   }
 
   const cli = definition.cli ?? config.agent
-  return buildBootstrapArgv(cli, config.agent, metaPrompt, config.model, config.effort)
+  const argv = buildBootstrapArgv(cli, config.agent, metaPrompt, config.model, config.effort)
+
+  // shell-safe 转义：引用含空格或特殊字符的参数
+  const escaped = argv.map((arg) => {
+    // 如果参数已经是双引号包裹的（如 -c 参数），去除内层引号再重新转义
+    const clean = arg.replace(/^"|"$/g, "")
+    if (clean.includes(" ") || clean.includes("'") || clean.includes('"')) {
+      return `'${clean.replace(/'/g, "'\\''")}'`
+    }
+    return clean
+  })
+
+  // 显式追加 2>/dev/null，由 shell 解析为重定向
+  return `${escaped.join(" ")} 2>/dev/null`
 }
 
 /** 构建 resume 时 pane 中使用的 CLI 参数（不含 CLI 名，由 splitCommand 处理后附加） */

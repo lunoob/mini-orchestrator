@@ -1,19 +1,17 @@
 import { resolveNeedsCheckDecision } from "../review/needs-check.js"
 import type { IssueConfig } from "../types.js"
 import {
-  agentWaitOptions,
   sendTaskAndMonitor,
   startAgentResumed,
-  waitForAgentReady,
 } from "../agent/index.js"
 import type { AgentRole, AgentSessionHandle } from "../agent/transcript/types.js"
 import {
-  extractStatusLines,
+  extractOutcomeSummary,
   printSection,
   render,
-  stripStatusLines,
+  stripAgentOutcome,
 } from "../lib/utils.js"
-import { parseAgentOutput } from "../lib/status-parser.js"
+import { isProtocolError, parseOutcome, type AgentOutcome } from "../lib/outcome-parser.js"
 import { notifyNeedsInput } from "../notify/index.js"
 import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
@@ -22,9 +20,6 @@ import type { WorkflowPhase } from "./events.js"
 
 /**
  * 统一处理 sendTaskAndMonitor 返回结果。
- *
- * P1-1: 仅 monitor 级 needs_input（原生提问）启动 intervention；
- * STATUS 级 needs_input（REVIEW_NEEDS_CHECK / IMPLEMENT_ASK）原样返回上层处理。
  */
 const handleMonitorResult = async (
   role: AgentRole,
@@ -38,70 +33,81 @@ const handleMonitorResult = async (
   checkpointCtx?: InterventionCheckpointContext,
   eventBus?: import("./events.js").WorkflowEventBus,
 ): Promise<string> => {
-  const parsed = parseAgentOutput(finalText, role)
+  const result = parseOutcome(finalText, role)
   const ctx = checkpointCtx ? { ...checkpointCtx, phase: checkpointCtx.phase || context } : undefined
-
-  if (parsed.status === "completed") return finalText
-
-  // 发布 intervention 状态、详情、暂停事件
-  const publishInterventionEvents = (intType: "needs_input" | "invalid_output", reason: string) => {
-    if (!eventBus) return
-    eventBus.publish({ type: "agent_state_change", agent: role === "implementer" ? "implementer" : "reviewer", status: intType })
-    if (intType === "needs_input") {
-      eventBus.publish({ type: "needs_input", agent: role === "implementer" ? "implementer" : "reviewer", provider: session.provider, reason })
-    } else {
-      eventBus.publish({ type: "invalid_output", agent: role === "implementer" ? "implementer" : "reviewer", provider: session.provider, reason })
-    }
-    eventBus.publish({ type: "pause", reason: `${role} ${intType}: ${reason}` })
-  }
 
   const agentKey = role === "implementer" ? "implementer" : "reviewer"
 
-  // intervention 完成后恢复 working 状态，清除 paused 和 intervention 详情
+  const publishInterventionEvents = (reason: string) => {
+    if (!eventBus) return
+    eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "needs_input" })
+    eventBus.publish({ type: "needs_input", agent: agentKey, provider: session.provider, reason })
+    eventBus.publish({ type: "pause", reason: `${role} needs_input: ${reason}` })
+  }
+
   const publishResumeEvents = () => {
     if (!eventBus) return
     eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "working" })
   }
 
-  // 创建带有 eventBus 的 deps，保留真实 readline fallback
   const depsWithBus = eventBus
     ? { ...defaultImplementAskDeps(), eventBus }
     : undefined
 
+  // monitor 级 needs_input（原生提问）→ 启动 intervention
   if (status === "needs_input") {
-    publishInterventionEvents("needs_input", question ?? "需要确认")
-    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
+    publishInterventionEvents(question ?? "需要确认")
+    const intrResult1 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
     publishResumeEvents()
-    return result
+    return intrResult1
   }
 
-  if (parsed.status === "needs_input") {
-    if (role === "reviewer") return finalText
-    publishInterventionEvents("needs_input", question ?? "需要确认")
-    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
-    publishResumeEvents()
-    return result
-  }
-
-  // failed 优先于 invalid_output：Agent 失败时 finalText 通常为空，会先命中 invalid_output
-  // failed 进入独立失败流程，不复用 invalid_output 干预
+  // failed（monitor 级或 outcome 级）→ 直接终止
   if (status === "failed") {
     if (eventBus) {
       eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "failed" })
-      eventBus.publish({ type: "fail", reason: `${role} failed in ${context}` })
+      eventBus.publish({ type: "fail", reason:  `${role} failed in ${context}` })
     }
     throw new Error(`[${role}] Agent failed in ${context}`)
   }
 
-  if (parsed.status === "invalid_output") {
-    publishInterventionEvents("invalid_output", parsed.reason ?? "输出缺少合法 STATUS")
-    const result = await handleIntervention(role, paneId, finalText, context, session, depsWithBus,
-      parsed.reason, true, needsCheckMode, ctx)
+  // 协议错误 → intervention（不终止流程）
+  if (isProtocolError(result)) {
+    const reason = result.reason
+    // invalid_output 发布正确状态，而非 needs_input
+    if (eventBus) {
+      eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "invalid_output" })
+      eventBus.publish({ type: "invalid_output", agent: agentKey, provider: session.provider, reason })
+      eventBus.publish({ type: "pause", reason: `${role} invalid_output: ${reason}` })
+    }
+    const intrResult = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, true, needsCheckMode, ctx)
     publishResumeEvents()
-    return result
+    return intrResult
   }
 
-  console.warn(`[handleMonitorResult] Unknown status for ${role}: ${status}`)
+  // 以下 result 已通过 isProtocolError 检查，是 AgentOutcome
+  const outcome = result
+
+  if (outcome.outcome === "failed") {
+    if (eventBus) {
+      eventBus.publish({ type: "agent_state_change", agent: agentKey, status: "failed" })
+      eventBus.publish({ type: "fail", reason: outcome.failure.message })
+    }
+    throw new Error(`[${role}] Agent failed in ${context}: ${outcome.failure.message}`)
+  }
+
+  if (outcome.outcome === "needs_input") {
+    // P1-3: reviewer needs_input 也要启动 intervention，传递结构化选项
+    const reason = outcome.request.question
+    publishInterventionEvents(reason)
+    const intrResult2 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, false, needsCheckMode, ctx)
+    publishResumeEvents()
+    return intrResult2
+  }
+
+  if (outcome.outcome === "completed") return finalText
+
+  console.warn(`[handleMonitorResult] Unknown state for ${role}`)
   return finalText
 }
 
@@ -132,7 +138,7 @@ export const sendControllerRevise = async (
   const { finalText, status, question } = await sendTaskAndMonitor(
     runtime.implementerPane,
     render(runtime.prompts.controllerImplementer, {
-      controllerNotes, reviewOutput: stripStatusLines(reviewOutput), round: String(round),
+      controllerNotes, reviewOutput: stripAgentOutcome(reviewOutput), round: String(round),
     }),
     runtime.implementerSession,
   )
@@ -143,7 +149,6 @@ export const sendControllerRevise = async (
     runtime.eventBus,
   )
 
-  // handleMonitorResult 正常返回表示 implementer 完成
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
 }
 
@@ -164,7 +169,7 @@ const conductReview = async (
     ? render(runtime.prompts.controllerReReview, {
         baseSha: reviewContext.baseSha, controllerNotes: options.controllerReviewNotes,
         diffFileSection, headSha: reviewContext.headSha,
-        reviewOutput: stripStatusLines(options.lastReviewOutput), round: String(round), specPath,
+        reviewOutput: stripAgentOutcome(options.lastReviewOutput), round: String(round), specPath,
       })
     : render(runtime.prompts[round === 1 ? "review" : "reReview"], {
         baseSha: reviewContext.baseSha, diffFileSection, headSha: reviewContext.headSha,
@@ -175,41 +180,47 @@ const conductReview = async (
     runtime.reviewerPane, prompt, runtime.reviewerSession,
   )
 
-  // P1-2/P1-3: 用 reviewer 角色处理 intervention（handleMonitorResult 会发布完整 intervention 事件）
   const final = await handleMonitorResult(
     "reviewer", runtime.reviewerPane, finalText, status, question,
     `review round ${round}`, runtime.reviewerSession, runtime.needsCheckMode, mkCtx(runtime, round, "review"),
     runtime.eventBus,
   )
 
-  const parsed = parseAgentOutput(final, "reviewer")
-  printSection(`Review Round ${round}`, extractStatusLines(final) || "(no STATUS)")
+  const parseResult = parseOutcome(final, "reviewer")
+  printSection(`Review Round ${round}`, extractOutcomeSummary(final) || "(no outcome)")
 
-  // 发布 reviewer 完成状态
-  if (parsed.status === "completed") {
-    runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "completed" })
-  } else if (parsed.status === "needs_input") {
-    runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
-    runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession.provider, reason: question ?? "Reviewer 需要确认" })
-  } else if (parsed.status === "invalid_output") {
-    runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "invalid_output" })
+  // 发布 reviewer 状态
+  if (!isProtocolError(parseResult)) {
+    if (parseResult.outcome === "completed") {
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "completed" })
+    } else if (parseResult.outcome === "needs_input") {
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
+      runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession.provider, reason: question ?? "Reviewer 需要确认" })
+    }
   }
 
-  // P1-4: 不转换 invalid_output 为 REVIEW_FAIL；保留它让上层判断
-  return { reviewOutput: final, parsed }
+  return { reviewOutput: final, parseResult }
+}
+
+/**
+ * 从 AgentOutcome / ProtocolError 推导 reviewer 的 STATUS 等效值，用于 needs-check 决策。
+ */
+const outcomeToReviewStatus = (o: ReturnType<typeof parseOutcome>): string => {
+  if (isProtocolError(o)) return "REVIEW_FAIL"
+  if (o.outcome === "completed" && "review" in o && o.review?.verdict === "pass") return "REVIEW_PASS"
+  if (o.outcome === "completed" && "review" in o && o.review?.verdict === "fail") return "REVIEW_FAIL"
+  if (o.outcome === "completed" && "review" in o && o.review?.verdict === "needs_check") return "REVIEW_NEEDS_CHECK"
+  if (o.outcome === "needs_input") return "REVIEW_NEEDS_CHECK"
+  return "REVIEW_FAIL"
 }
 
 const handleNeedsCheck = async (
   runtime: WorkflowRuntime, configPath: string, round: number, reviewOutput: string,
-  parsed: ReturnType<typeof parseAgentOutput>, reuseCurrentPane: boolean,
+  outcome: ReturnType<typeof parseOutcome>, reuseCurrentPane: boolean,
   sessionDir: string, specPath: string, issueIndex: number, issues: IssueConfig[],
 ): Promise<NeedsCheckOutcome> => {
-  const statusValue = parsed.status === "needs_input" ? "REVIEW_NEEDS_CHECK"
-    : parsed.status === "completed" && "statusValue" in parsed ? parsed.statusValue
-    : "REVIEW_FAIL"
+  const statusValue = outcomeToReviewStatus(outcome)
 
-  // REVIEW_NEEDS_CHECK 时发送系统通知（LLM 模式由主入口统一发送，此处仅处理 interactive 模式）
-  // 使用 transcript offset 作为 turnId，避免同轮 retry-review 被误去重
   if (statusValue === "REVIEW_NEEDS_CHECK" && runtime.reviewerSession && runtime.needsCheckMode === "interactive") {
     notifyNeedsInput(
       "reviewer", runtime.reviewerSession.provider,
@@ -219,7 +230,6 @@ const handleNeedsCheck = async (
     )
   }
 
-  // 构建通知上下文（LLM 模式下传递给 NeedsCheckPauseError）
   const notificationContext = statusValue === "REVIEW_NEEDS_CHECK" && runtime.reviewerSession
     ? {
         role: "reviewer",
@@ -231,19 +241,33 @@ const handleNeedsCheck = async (
       }
     : undefined
 
+  // 从 outcome 中提取 cannotVerifySummary（如有）
+  const cvSummary = !isProtocolError(outcome) && outcome.outcome === "completed" && "review" in outcome
+    ? outcome.review.cannotVerifySummary ?? null : null
+
+  const verdict = {
+    kind: statusValue === "REVIEW_PASS" ? "pass" as const
+      : statusValue === "REVIEW_NEEDS_CHECK" ? "needs_check" as const
+      : "fail" as const,
+    passed: statusValue === "REVIEW_PASS",
+    cannotVerifySummary: cvSummary,
+    hasCannotVerify: cvSummary !== null,
+  }
+
+  // 从 reviewer 的 needs_input 中提取问题，展示给人工核查面板
+  const reviewerQuestion = !isProtocolError(outcome) && outcome.outcome === "needs_input"
+    ? outcome.request.question : undefined
+
   const decision = await resolveNeedsCheckDecision(
     runtime.args, runtime.needsCheckMode, round,
-    {
-      kind: statusValue === "REVIEW_PASS" ? "pass" : statusValue === "REVIEW_NEEDS_CHECK" ? "needs_check" : "fail",
-      passed: statusValue === "REVIEW_PASS", cannotVerifySummary: null, hasCannotVerify: false,
-    },
+    verdict,
     reviewOutput,
-    buildCheckpointInput(runtime, configPath, round, reviewOutput,
-      { cannotVerifySummary: null, hasCannotVerify: false, kind: statusValue === "REVIEW_PASS" ? "pass" : statusValue === "REVIEW_NEEDS_CHECK" ? "needs_check" : "fail", passed: statusValue === "REVIEW_PASS" },
+    buildCheckpointInput(runtime, configPath, round, reviewOutput, verdict,
       reuseCurrentPane, specPath, issueIndex, issues),
     sessionDir,
     notificationContext,
     runtime.eventBus,
+    reviewerQuestion,
   )
 
   switch (decision.action) {
@@ -268,13 +292,11 @@ const handleNeedsCheck = async (
 
 export const sendPostReviewCheck = async (
   runtime: WorkflowRuntime, round: number, reviewStatus: PostReviewStatus,
-  /** 原始 reviewer 输出（用于 intervention checkpoint 保留上下文） */
   reviewerOutput?: string,
 ) => {
   if (!runtime.implementerSession) return
   console.log(`[PostCheck] Review ${reviewStatus} — verifying checks.`)
 
-  // 发布 post-check 阶段及 implementer 状态事件
   runtime.eventBus.publish({ type: "phase_change", phase: "post-check" })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
 
@@ -291,7 +313,6 @@ export const sendPostReviewCheck = async (
     runtime.eventBus,
   )
 
-  // post-check 完成
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
 }
 
@@ -304,7 +325,7 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
 
   const { finalText, status, question } = await sendTaskAndMonitor(
     runtime.implementerPane,
-    render(runtime.prompts.revise, { reviewOutput: stripStatusLines(reviewOutput), round: String(round) }),
+    render(runtime.prompts.revise, { reviewOutput: stripAgentOutcome(reviewOutput), round: String(round) }),
     runtime.implementerSession,
   )
 
@@ -314,7 +335,6 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
     runtime.eventBus,
   )
 
-  // handleMonitorResult 正常返回表示 implementer 完成
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
 }
 
@@ -330,7 +350,6 @@ export const runReviewLoop = async (
       runtime.config.projectDir, runtime.config.reviewer,
       runtime.reviewerSession.resumeId, { ensureUniqueName: true },
     )
-    await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
   }
 
   for (let round = startRound; round <= runtime.config.maxReviewRounds; round += 1) {
@@ -339,62 +358,45 @@ export const runReviewLoop = async (
 
     while (retrySameRound) {
       retrySameRound = false
-      const { reviewOutput, parsed } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
+      const { reviewOutput, parseResult } = await conductReview(runtime, round, sessionDir, specPath, activeLoopOptions ?? {})
       activeLoopOptions = undefined
 
       // completed + REVIEW_PASS → done
-      if (parsed.status === "completed" && "statusValue" in parsed && parsed.statusValue === "REVIEW_PASS") {
+      if (!isProtocolError(parseResult) && parseResult.outcome === "completed" && "review" in parseResult && parseResult.review?.verdict === "pass") {
         await sendPostReviewCheck(runtime, round, "REVIEW_PASS", reviewOutput)
         console.log(`\n[Review] Workflow finished: review passed in round ${round}.`)
         return
       }
 
-      // needs_input → needs-check
-      if (parsed.status === "needs_input") {
+      // completed + needs_check → 人工核查（复用 handleNeedsCheck 流程）
+      if (!isProtocolError(parseResult) && parseResult.outcome === "completed" && "review" in parseResult && parseResult.review?.verdict === "needs_check") {
         await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK", reviewOutput)
-        // post-check 完成后发布 pause，避免 implementer working 清除 reviewer 的 needsInput 和 paused 状态
         runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
         runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason: "Review 需要人工核查" })
-        runtime.eventBus.publish({ type: "pause", reason: "reviewer needs_input: REVIEW_NEEDS_CHECK" })
-        const outcome = await handleNeedsCheck(runtime, configPath, round, reviewOutput, parsed, reuseCurrentPane, sessionDir, specPath, issueIndex, issues)
-        if (outcome.type === "approved") return
-        if (outcome.type === "continue_round") break
-        activeLoopOptions = { controllerReviewNotes: outcome.controllerNotes, lastReviewOutput: outcome.lastReviewOutput }
+        runtime.eventBus.publish({ type: "pause", reason: "reviewer needs_check" })
+        const decision = await handleNeedsCheck(runtime, configPath, round, reviewOutput, parseResult, reuseCurrentPane, sessionDir, specPath, issueIndex, issues)
+        if (decision.type === "approved") return
+        if (decision.type === "continue_round") break
+        activeLoopOptions = { controllerReviewNotes: decision.controllerNotes, lastReviewOutput: decision.lastReviewOutput }
         retrySameRound = true
         continue
       }
 
-      // P1-4: invalid_output → 不转换为 REVIEW_FAIL，通过 intervention 暂停
-      if (parsed.status === "invalid_output") {
-        const reason = parsed.reason ?? "输出缺少合法 STATUS"
-        console.warn(`[Review] Reviewer invalid output (${reason}). Entering intervention...`)
-        // 发布详情和暂停事件
-        runtime.eventBus.publish({ type: "invalid_output", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason })
-        runtime.eventBus.publish({ type: "pause", reason: `reviewer invalid_output: ${reason}` })
-        const depsWithBus = runtime.eventBus
-          ? { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
-          : undefined
-        const resolved = await handleIntervention(
-          "reviewer", runtime.reviewerPane, reviewOutput,
-          `review round ${round}`, runtime.reviewerSession!, depsWithBus,
-          parsed.reason, true, runtime.needsCheckMode, mkCtx(runtime, round, "review-intervention"),
-        )
-        // intervention 完成后恢复
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
-        const reParsed = parseAgentOutput(resolved, "reviewer")
-        if (reParsed.status === "completed") {
-          // 干预后有合法输出，重新进入同轮判断
-          const { reviewOutput: newOutput } = await conductReview(runtime, round, sessionDir, specPath, {})
-          const newParsed = parseAgentOutput(newOutput, "reviewer")
-          if (newParsed.status === "completed" && "statusValue" in newParsed && newParsed.statusValue === "REVIEW_PASS") {
-            await sendPostReviewCheck(runtime, round, "REVIEW_PASS", reviewOutput)
-            console.log(`\n[Review] Workflow finished after intervention.`)
-            return
-          }
-        }
-        // 干预失败→按 fail 处理
+      // needs_input → needs-check
+      if (!isProtocolError(parseResult) && parseResult.outcome === "needs_input") {
+        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK", reviewOutput)
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
+        runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason: "Review 需要人工核查" })
+        runtime.eventBus.publish({ type: "pause", reason: "reviewer needs_input: REVIEW_NEEDS_CHECK" })
+        const decision = await handleNeedsCheck(runtime, configPath, round, reviewOutput, parseResult, reuseCurrentPane, sessionDir, specPath, issueIndex, issues)
+        if (decision.type === "approved") return
+        if (decision.type === "continue_round") break
+        activeLoopOptions = { controllerReviewNotes: decision.controllerNotes, lastReviewOutput: decision.lastReviewOutput }
+        retrySameRound = true
+        continue
       }
 
+      // completed + REVIEW_FAIL 或 failed → 进入 revise 流程
       if (round === runtime.config.maxReviewRounds) {
         runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxReviewRounds} rounds` })
         throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)

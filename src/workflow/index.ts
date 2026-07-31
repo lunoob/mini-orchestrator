@@ -55,5 +55,8 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
     reviewerPane: "",
   }
 
+  // 通知 UI 工作流实际开始时间，对齐计时起点
+  eventBus.publish({ type: "workflow_started", startedAt: Date.now() })
+
   await runIssueQueue(runtime, configPath)
 }

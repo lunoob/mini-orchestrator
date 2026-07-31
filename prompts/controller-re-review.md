@@ -20,10 +20,12 @@
 
 {{reviewOutput}}
 
-请结合 Controller 补充信息，重新评估此前 `⚠️ Cannot verify` 项是否可确认。按 `review` prompt 相同格式输出，并给出**一个**状态信号：
+请结合 Controller 补充信息，重新评估此前 `⚠️ Cannot verify` 项是否可确认。
 
-- 全部确认通过：`STATUS: REVIEW_PASS`
-- 仍有无法验证项：`STATUS: REVIEW_NEEDS_CHECK`
-- 发现需修复项：`STATUS: REVIEW_FAIL`
+**你的整个回复必须是一个 JSON 对象**。将分析内容写入 `report` 字段。在 JSON 中标记**一个**状态：
+
+- 全部确认通过：`{"outcome":"completed","summary":"全部确认通过","review":{"verdict":"pass"},"report":"分析..."}`
+- 仍有无法验证项：`{"outcome":"needs_input","summary":"需人工核查","request":{"question":"具体问题","allowFreeform":true},"report":"分析..."}`
+- 发现需修复项：`{"outcome":"completed","summary":"发现需修复项","review":{"verdict":"fail"},"report":"分析..."}`
 
 {{outputFormat}}

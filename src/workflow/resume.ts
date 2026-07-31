@@ -3,7 +3,7 @@ import path from "node:path"
 import { readNeedsCheckCheckpoint } from "../review/checkpoint.js"
 import { loadConfig, loadPrompts } from "../config/load.js"
 import { parseNeedsCheckAction, parseNeedsCheckMode } from "../review/needs-check.js"
-import { agentWaitOptions, bootstrapSession, startAgentResumed, stopAgent, waitForAgentReady } from "../agent/index.js"
+import { bootstrapSession, startAgentResumed, stopAgent } from "../agent/index.js"
 import type { ParsedArgs } from "../types.js"
 import { createWorkflowEventBus } from "./events.js"
 import { sendControllerRevise, runReviewLoop } from "./review-loop.js"
@@ -65,6 +65,9 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
   console.log(`[Resume] Resuming from checkpoint: ${checkpointPath}`)
   console.log(`[Resume] Needs-check action: ${action}`)
 
+  // 通知 UI 工作流实际开始时间
+  runtime.eventBus.publish({ type: "workflow_started", startedAt: Date.now() })
+
   // P1-5: abort 优先处理
   if (action === "abort" && checkpoint.interventionRole) {
     throw new Error(`[Resume] Intervention aborted for ${checkpoint.interventionRole} (${checkpoint.interventionType})`)
@@ -88,12 +91,28 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
         runtime.config.projectDir, agentConfig, session.resumeId, { ensureUniqueName: true },
       )
       createdPaneIds.push(paneId)
-      await waitForAgentReady(paneId, agentWaitOptions(agentConfig))
 
       // intervention 仅支持携带必填回答继续（abort 已在上方处理）
       const { sendTask, waitForAgentWithMonitor } = await import("../agent/index.js")
 
-      const combinedPrompt = `${notes}\n\nBased on the response above, continue with the previous task. Output the STATUS marker as required.`
+      // P1-3: 统一使用结构化 user_response 恢复
+      const requestConfig = checkpoint.interventionRequestConfig
+      const structuredResponse: Record<string, unknown> = { type: "user_response" }
+      if (requestConfig) {
+        // 尝试从 notes 匹配预设选项的 optionId
+        const matchedOption = requestConfig.options?.find(
+          (o) => o.id === notes || o.label === notes
+        )
+        if (matchedOption) {
+          structuredResponse.optionId = matchedOption.id
+        } else if (notes) {
+          structuredResponse.text = notes
+        }
+      } else if (notes) {
+        structuredResponse.text = notes
+      }
+      const userMessage = JSON.stringify(structuredResponse)
+      const combinedPrompt = `${userMessage}\n\nBased on the response above, continue with the previous task. Output the outcome as a JSON object with the required schema.`
       await sendTask(paneId, combinedPrompt)
 
       console.log(`[Resume] Intervention: sent reply to ${checkpoint.interventionRole} pane ${paneId}. Waiting...`)
@@ -108,11 +127,11 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
         runtime.reviewerPane = paneId; runtime.reviewerSession = session
       }
 
-      const { parseAgentOutput } = await import("../lib/status-parser.js")
-      const parsed = parseAgentOutput(result.finalText, checkpoint.interventionRole!)
+      const { isProtocolError, parseOutcome } = await import("../lib/outcome-parser.js")
+      const parseResult = parseOutcome(result.finalText, checkpoint.interventionRole!)
 
       // helper: write re-checkpoint and throw
-      const recheckpoint = async (type: string, question?: string) => {
+      const recheckpoint = async (type: string, question?: string, requestConfig?: import("../lib/outcome-parser.js").RequestConfig) => {
         const { writeNeedsCheckCheckpoint } = await import("../review/checkpoint.js")
         const rePath = await writeNeedsCheckCheckpoint(path.dirname(checkpointPath), {
           baseSha: checkpoint.baseSha, cannotVerifySummary: result.finalText.slice(0, 500),
@@ -124,11 +143,12 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
           reuseCurrentPane: checkpoint.reuseCurrentPane, round: checkpoint.round,
           currentIssueIndex: checkpoint.currentIssueIndex, issues: checkpoint.issues,
           interventionType: type, interventionRole: checkpoint.interventionRole,
-          interventionQuestion: question, interventionPhase: checkpoint.interventionPhase,
+          interventionQuestion: question, interventionRequestConfig: requestConfig,
+          interventionPhase: checkpoint.interventionPhase,
           reviewStatus: checkpoint.reviewStatus,
           interventionReviewOutput: checkpoint.interventionReviewOutput,
         })
-        const reason = question ?? (type === "invalid_output" ? "输出缺少合法 STATUS" : "需要人工确认")
+        const reason = question ?? (type === "invalid_output" ? "输出缺少合法 outcome" : "需要人工确认")
         const notificationContext = {
           role: checkpoint.interventionRole!,
           provider: session!.provider,
@@ -143,16 +163,29 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
         throw new NeedsCheckPauseError(rePath, notificationContext)
       }
 
-      // monitor-level needs_input or failed → re-checkpoint
-      if (result.status === "needs_input" || result.status === "failed") {
-        await recheckpoint(checkpoint.interventionType, result.lastEvent?.question)
+      // monitor-level or outcome-level failed → 终止恢复流程
+      if (result.status === "failed" || (!isProtocolError(parseResult) && parseResult.outcome === "failed")) {
+        const failReason = !isProtocolError(parseResult) && parseResult.outcome === "failed"
+          ? parseResult.failure.message : (result.lastEvent?.reason ?? result.lastEvent?.question ?? "Agent failed")
+        runtime.eventBus.publish({ type: "fail", reason: `Resume: ${checkpoint.interventionRole} failed — ${failReason}` })
+        throw new Error(`[Resume] ${checkpoint.interventionRole} failed during intervention recovery: ${failReason}`)
       }
 
-      // impr validated STATUS
-      const needsRecheckpoint = parsed.status === "invalid_output" ||
-        (parsed.status === "needs_input" && checkpoint.interventionRole !== "reviewer")
-      if (needsRecheckpoint) {
-        await recheckpoint(parsed.status === "needs_input" ? "needs_input" : "invalid_output")
+      // monitor-level needs_input → re-checkpoint（尝试从 finalText 提取结构化选项）
+      // P2: 使用当前实际状态，而非旧的 checkpoint.interventionType
+      if (result.status === "needs_input") {
+        const monitorReqConfig = !isProtocolError(parseResult) && parseResult.outcome === "needs_input"
+          ? parseResult.request : undefined
+        await recheckpoint("needs_input", result.lastEvent?.question ?? monitorReqConfig?.question, monitorReqConfig)
+      }
+
+      // P1-3: needs_input → recheckpoint（包括 reviewer，保留结构化选项上下文）
+      if (isProtocolError(parseResult) ||
+          (!isProtocolError(parseResult) && parseResult.outcome === "needs_input")) {
+        const requestConfig = !isProtocolError(parseResult) && parseResult.outcome === "needs_input"
+          ? parseResult.request : undefined
+        const question = requestConfig?.question
+        await recheckpoint(!isProtocolError(parseResult) && parseResult.outcome === "needs_input" ? "needs_input" : "invalid_output", question, requestConfig)
       }
 
       // --- phase dispatch ---
@@ -168,23 +201,57 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
             runtime.config.projectDir, runtime.config.implementer,
             runtime.implementerSession.resumeId, { ensureUniqueName: true },
           )
-          await waitForAgentReady(runtime.implementerPane, agentWaitOptions(runtime.config.implementer))
           createdPaneIds.push(runtime.implementerPane)
           console.log(`[Resume] Created implementer pane: ${runtime.implementerPane}`)
         }
       }
 
       if (phase === "review") {
-        if (parsed.status === "completed" && "statusValue" in parsed) {
-          if (parsed.statusValue === "REVIEW_PASS") {
-            // P1: 复用 sendPostReviewCheck（含统一干预处理）
+        const reviewCompleted = !isProtocolError(parseResult) && parseResult.outcome === "completed" && "review" in parseResult && (parseResult as any).review !== undefined
+        if (reviewCompleted) {
+          const verdict = (parseResult as any).review!.verdict as string
+          if (verdict === "pass") {
             console.log(`[Resume] Review PASS — running post-review check.`)
             await ensureImplPane()
             const { sendPostReviewCheck } = await import("./review-loop.js")
             await sendPostReviewCheck(runtime, checkpoint.round, "REVIEW_PASS", result.finalText)
             await markIssueFinished(configPath, checkpoint.currentIssueIndex, checkpoint.issues)
-          } else if (parsed.statusValue === "REVIEW_FAIL") {
-            // P3: 检查轮次上限
+          } else if (verdict === "needs_check") {
+            // needs_check → 复用人工核查流程
+            await ensureImplPane()
+            const { sendPostReviewCheck } = await import("./review-loop.js")
+            await sendPostReviewCheck(runtime, checkpoint.round, "REVIEW_NEEDS_CHECK", result.finalText)
+
+            const reviewerSession = runtime.reviewerSession ?? checkpoint.reviewerSession
+            const notificationContext = reviewerSession
+              ? { role: "reviewer", provider: reviewerSession.provider, paneId: runtime.reviewerPane, reason: "Review 需要人工核查", turnId: String(reviewerSession.offset), interventionType: "needs_input" as const }
+              : undefined
+
+            const { resolveNeedsCheckDecision } = await import("../review/needs-check.js")
+            const decision = await resolveNeedsCheckDecision(
+              runtime.args, runtime.needsCheckMode, checkpoint.round,
+              { kind: "needs_check", passed: false, cannotVerifySummary: null, hasCannotVerify: false },
+              result.finalText,
+              buildCheckpointInput(runtime, configPath, checkpoint.round, result.finalText,
+                { cannotVerifySummary: null, hasCannotVerify: false, kind: "needs_check", passed: false },
+                false, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues),
+              sessionDir, notificationContext, runtime.eventBus,
+            )
+            if (decision.action === "approve") await markIssueFinished(configPath, checkpoint.currentIssueIndex, checkpoint.issues)
+            else if (decision.action === "abort") throw new Error(`[Resume] Workflow aborted after REVIEW_NEEDS_CHECK`)
+            else if (decision.action === "revise") {
+              await ensureImplPane()
+              const { sendControllerRevise } = await import("./review-loop.js")
+              await sendControllerRevise(runtime, checkpoint.round, decision.notes, result.finalText)
+              await runReviewLoop(runtime, configPath, checkpoint.round + 1, checkpoint.reuseCurrentPane, sessionDir, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues)
+              await markIssueFinished(configPath, checkpoint.currentIssueIndex, checkpoint.issues)
+            } else {
+              await runReviewLoop(runtime, configPath, checkpoint.round, checkpoint.reuseCurrentPane, sessionDir, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues,
+                { controllerReviewNotes: decision.notes, lastReviewOutput: result.finalText })
+              await markIssueFinished(configPath, checkpoint.currentIssueIndex, checkpoint.issues)
+            }
+          } else {
+            // fail
             if (checkpoint.round >= checkpoint.maxReviewRounds) {
               throw new Error(`[Resume] Review failed after ${checkpoint.maxReviewRounds} rounds.`)
             }
@@ -196,7 +263,7 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
               sessionDir, ci.specPath, checkpoint.currentIssueIndex, checkpoint.issues)
             await markIssueFinished(configPath, checkpoint.currentIssueIndex, checkpoint.issues)
           }
-        } else if (parsed.status === "needs_input" && "statusValue" in parsed && parsed.statusValue === "REVIEW_NEEDS_CHECK") {
+        } else if (!isProtocolError(parseResult) && parseResult.outcome === "needs_input") {
           // P3: 同正常流程 — 先 post-check，再 needs-check 决策
           await ensureImplPane()
           const { sendPostReviewCheck } = await import("./review-loop.js")
@@ -347,7 +414,6 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
         runtime.config.projectDir, runtime.config.implementer,
         runtime.implementerSession.resumeId, { ensureUniqueName: true },
       )
-      await waitForAgentReady(runtime.implementerPane, agentWaitOptions(runtime.config.implementer))
       console.log(`[Resume] Created implementer pane: ${runtime.implementerPane}`)
     }
   }
@@ -358,7 +424,6 @@ export const runWorkflowResume = async (args: ParsedArgs, options?: import("./in
         runtime.config.projectDir, runtime.config.reviewer,
         runtime.reviewerSession.resumeId, { ensureUniqueName: true },
       )
-      await waitForAgentReady(runtime.reviewerPane, agentWaitOptions(runtime.config.reviewer))
       console.log(`[Resume] Created reviewer pane: ${runtime.reviewerPane}`)
     }
   }

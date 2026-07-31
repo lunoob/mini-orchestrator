@@ -213,19 +213,29 @@ const wrapText = (text: string, maxWidth: number): string[] => {
   return lines
 }
 
-/** 格式化交互请求（prompt + action 列表） */
+/** 格式化交互请求（prompt + 结构化选项） */
 export const formatInteractionRequest = (req: InteractionRequest): string[] => {
   const lines: string[] = []
 
-  // 将 prompt 拆分为多行
-  const promptLines = req.prompt.split("\n")
-  for (const line of promptLines) {
+  for (const line of req.prompt.split("\n")) {
     lines.push(line)
   }
 
-  // 渲染 action 列表（带数字键提示）
-  if (req.actions && req.actions.length > 0) {
-    const actionParts = req.actions.map((action, i) => `[${i + 1}]${action}`)
+  // 渲染结构化选项（带数字键 + label + description）
+  if (req.requestOptions && req.requestOptions.length > 0) {
+    lines.push("")
+    req.requestOptions.forEach((opt, i) => {
+      const marker = req.recommendation === opt.id ? " ★" : ""
+      const desc = opt.description ? ` — ${opt.description}` : ""
+      lines.push(`  [${i + 1}] ${opt.label}${marker}${desc}`)
+    })
+    if (req.allowFreeform) {
+      const idx = req.requestOptions!.length + 1
+      lines.push(`  [${idx}] 其他（自由输入）`)
+    }
+    lines.push("")
+  } else if (req.actions && req.actions.length > 0) {
+    const actionParts = req.actions.map((a, i) => `[${i + 1}]${a}`)
     lines.push(actionParts.join(" "))
   }
 

@@ -60,6 +60,13 @@ export type FailEvent = {
   reason: string
 }
 
+/** Workflow 实际开始执行时发布，供 UI 对齐计时起点 */
+export type WorkflowStartedEvent = {
+  type: "workflow_started"
+  /** Workflow 实际开始时间戳 */
+  startedAt: number
+}
+
 /** 用户在 terminal 面板中的交互操作 */
 export type UserActionEvent = {
   type: "user_action"
@@ -74,29 +81,34 @@ export type UserActionEvent = {
  *
  * 由 workflow 发起，terminal UI 展示并收集用户输入。
  */
-export type InteractionRequest = {
-  /** 显示给用户的提示信息 */
-  prompt: string
-  /** 可选的预定义操作列表（如 approve/revise/retry-review/abort） */
-  actions?: string[]
-  /** 操作的目标 agent */
-  agent: "implementer" | "reviewer"
-  /** 需要必填文本输入的 action 列表（如 ["revise", "retry-review"]） */
-  textRequiredFor?: string[]
-  /** 所有 action 是否允许可选文本输入 */
-  textOptional?: boolean
-  /** 文本输入的占位提示 */
-  textInputPlaceholder?: string
+export type RequestOptionItem = {
+  id: string
+  label: string
+  description?: string
 }
 
-/**
- * 结构化交互结果。
- */
+export type InteractionRequest = {
+  prompt: string
+  actions?: string[]
+  agent: "implementer" | "reviewer"
+  textRequiredFor?: string[]
+  textOptional?: boolean
+  textInputPlaceholder?: string
+  /** 结构化选项（含描述） */
+  requestOptions?: RequestOptionItem[]
+  /** 推荐项 ID */
+  recommendation?: string
+  /** 是否允许自由输入 */
+  allowFreeform?: boolean
+  /** 文本输入提示 */
+  inputHint?: string
+}
+
 export type InteractionResult = {
-  /** 用户选择的操作 */
   action: string
-  /** 用户输入的文本（如 notes） */
   text?: string
+  /** 选中的结构化选项 ID */
+  optionId?: string
 }
 
 export type WorkflowEvent =
@@ -110,6 +122,7 @@ export type WorkflowEvent =
   | CompleteEvent
   | FailEvent
   | UserActionEvent
+  | WorkflowStartedEvent
 
 // ── 快照类型 ──
 
@@ -304,6 +317,11 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
 
       case "fail":
         snapshot = { ...snapshot, terminalState: "failed" }
+        break
+
+      case "workflow_started":
+        // 以 workflow 实际开始时间作为计时起点，替代 eventBus 创建时间
+        snapshot = { ...snapshot, startedAt: event.startedAt }
         break
     }
 

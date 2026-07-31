@@ -5,6 +5,10 @@ import type { TranscriptEvent } from "./types.js"
  *
  * 仅终端事件（end_turn / AskUserQuestion）携带 text；working 事件不携带文本，
  * 避免 monitor 重复累计中间消息。
+ *
+ * 失败终态映射：
+ * - stop_reason "error" | "refusal" → failed
+ * - stop_reason "max_tokens" → completed（标记 [max_tokens]）
  */
 export const createClaudeAdapter = () => {
   let lastAssistantText: string | undefined
@@ -47,6 +51,20 @@ export const createClaudeAdapter = () => {
       const finalText = lastAssistantText
       lastAssistantText = undefined
       return { type: "completed", text: finalText }
+    }
+
+    // 失败终态：error / refusal → failed，保留原因信息
+    if (stopReason === "error" || stopReason === "refusal") {
+      const reason = currentText ?? `Claude stop_reason=${stopReason}`
+      lastAssistantText = undefined
+      return { type: "failed", reason, text: reason }
+    }
+
+    // max_tokens → 视为完成但标记截断
+    if (stopReason === "max_tokens") {
+      const truncated = currentText
+      lastAssistantText = undefined
+      return { type: "completed", text: truncated ? `[max_tokens] ${truncated}` : undefined }
     }
 
     // 工具回合：不携带文本，避免中间文本被累计

@@ -7,9 +7,9 @@ import {
 } from "./implement-ask.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 
-const askOutput = "Question?\nSTATUS: IMPLEMENT_ASK\n"
+const askOutput = '{"outcome":"needs_input","summary":"需要确认","request":{"question":"Which approach?","allowFreeform":true}}'
 
-const doneOutput = "Done.\nSTATUS: IMPLEMENT_DONE\n"
+const doneOutput = '{"outcome":"completed","summary":"Done."}'
 
 const mockSessionHandle: AgentSessionHandle = {
   provider: "claude",
@@ -28,11 +28,22 @@ import { waitForAgentWithMonitor } from "../agent/index.js"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockEventBus.requestInteraction.mockResolvedValue({ action: "continue" })
 })
+
+const mockEventBus = {
+  publish: vi.fn(),
+  subscribe: vi.fn(),
+  getSnapshot: vi.fn(),
+  reset: vi.fn(),
+  requestInteraction: vi.fn().mockResolvedValue({ action: "continue" }),
+  setInteractionHandler: vi.fn(),
+}
 
 const createDeps = (overrides: Partial<ImplementAskDeps> = {}): ImplementAskDeps => ({
   log: vi.fn(),
   promptContinue: vi.fn(),
+  eventBus: mockEventBus as any,
   ...overrides,
 })
 
@@ -75,12 +86,13 @@ describe("handleImplementAskIfNeeded", () => {
 
     expect(result).toBe(doneOutput)
     expect(log).toHaveBeenCalledWith(expect.stringContaining("需要确认"))
-    expect(deps.promptContinue).toHaveBeenCalledOnce()
+    expect(mockEventBus.requestInteraction).toHaveBeenCalled()
   })
 
   it("throws ImplementAskAbortError when user answers no", async () => {
     const deps = createDeps({
       promptContinue: vi.fn().mockResolvedValue(false),
+      eventBus: { ...mockEventBus, requestInteraction: vi.fn().mockResolvedValue({ action: "abort" }) } as any,
     })
 
     await expect(
@@ -103,7 +115,7 @@ describe("handleImplementAskIfNeeded", () => {
     // 第二次 quick check 返回 completed → 结束
     vi.mocked(waitForAgentWithMonitor)
       .mockResolvedValueOnce({
-        finalText: "Still asking...\nSTATUS: IMPLEMENT_ASK\n",
+        finalText: '{"outcome":"needs_input","summary":"q","request":{"question":"still asking","allowFreeform":true}}',
         status: "needs_input",
         finalOffset: 200,
       })
@@ -122,6 +134,6 @@ describe("handleImplementAskIfNeeded", () => {
     )
 
     expect(result).toBe(doneOutput)
-    expect(deps.promptContinue).toHaveBeenCalledTimes(2)
+    expect(mockEventBus.requestInteraction).toHaveBeenCalledTimes(2)
   })
 })

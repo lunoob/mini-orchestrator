@@ -28,23 +28,6 @@ export type AgentSessionHandle = {
 /** Agent 角色 */
 export type AgentRole = "implementer" | "reviewer"
 
-/** 合法 implementer STATUS 值 */
-export const IMPLEMENT_STATUSES = ["IMPLEMENT_DONE", "IMPLEMENT_ASK"] as const
-export type ImplementStatusValue = (typeof IMPLEMENT_STATUSES)[number]
-
-/** 合法 reviewer STATUS 值 */
-export const REVIEW_STATUSES = ["REVIEW_PASS", "REVIEW_FAIL", "REVIEW_NEEDS_CHECK"] as const
-export type ReviewStatusValue = (typeof REVIEW_STATUSES)[number]
-
-/** 所有合法 STATUS 值 */
-export const ALL_LEGAL_STATUSES = [...IMPLEMENT_STATUSES, ...REVIEW_STATUSES] as const
-
-/** STATUS 解析结果 */
-export type StatusParseResult =
-  | { status: "completed"; statusValue: string; output: string }
-  | { status: "needs_input"; statusValue: string; output: string }
-  | { status: "invalid_output"; reason: string; output: string }
-
 /** Transcript monitor 的监听器回调 */
 export type TranscriptListener = (event: TranscriptEvent) => void
 

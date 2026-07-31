@@ -28,7 +28,7 @@
 ## 工作约束
 
 - 需要做修复并校验
-- 若不清楚应使用哪条命令，先输出 `STATUS: IMPLEMENT_ASK` 并附上问题
-- 全部检查通过（或确认项目无对应检查）后，输出 `STATUS: IMPLEMENT_DONE`
+- 若不清楚应使用哪条命令，先通过 JSON outcome 标记 `needs_input` 并附上问题
+- 全部检查通过（或确认项目无对应检查）后，输出 JSON outcome 标记 `completed`
 
 {{outputFormat}}

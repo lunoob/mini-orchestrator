@@ -19,17 +19,19 @@ export type TranscriptMonitor = {
   getStatus: () => AgentStatus
   poll: () => Promise<TranscriptEvent | undefined>
   getOffset: () => number
-  /** 关闭 reader 释放文件句柄 */
   close: () => Promise<void>
 }
 
+/** 终态优先级：needs_input > failed > completed */
+const TERMINAL_PRIORITY: Record<string, number> = { needs_input: 3, failed: 2, completed: 1 }
+
 /**
- * 创建 transcript monitor：每个 monitor 有独立的 adapter 实例（无共享状态）。
+ * 创建 transcript monitor。
  *
- * 文本累计策略：
- * - working 事件不携带文本，仅更新内部跟踪
- * - 只有 completed / needs_input 事件携带最终文本
- * - monitor 在终态时设置（非追加）accumulatedText
+ * 批次处理策略：
+ * - 按优先级（needs_input > failed > completed）在同批中选出最佳终态事件
+ * - 即使 completed 先出现，后出现的 needs_input 也会覆盖它
+ * - 优先级更高的终态事件不会被较低优先级覆盖
  */
 export const createTranscriptMonitor = (
   handle: AgentSessionHandle,
@@ -40,7 +42,6 @@ export const createTranscriptMonitor = (
   let accumulatedText = ""
   let currentStatus: AgentStatus = "working"
 
-  // 每个 monitor 独立的 adapter 实例（无模块级共享状态）
   const adapter = (() => {
     switch (handle.provider) {
       case "claude": return createClaudeAdapter()
@@ -56,33 +57,39 @@ export const createTranscriptMonitor = (
 
     if (events.length === 0) return undefined
 
-    let latestEvent: TranscriptEvent | undefined
+    let bestTerminalEvent: TranscriptEvent | undefined
+    let bestPriority = 0
+    let lastEvent: TranscriptEvent | undefined
+    let seenTerminal = false
 
     for (const line of events) {
       if (!adapter) continue
       const event = adapter.processLine(line)
       if (!event) continue
 
-      latestEvent = event
+      lastEvent = event
+      const p = TERMINAL_PRIORITY[event.type] ?? 0
 
-      // 仅终态事件设置文本（替换而非追加）
-      if ((event.type === "completed" || event.type === "needs_input") && event.text) {
-        accumulatedText = event.text
-      }
+      if (p > 0) {
+        seenTerminal = true
+        // 按优先级保存最佳终态事件（同优先级保留先出现的）
+        if (p > bestPriority) {
+          bestTerminalEvent = event
+          bestPriority = p
+        }
+        if (event.text) accumulatedText = event.text
 
-      // needs_input 优先于 completed
-      if (event.type === "needs_input") {
-        currentStatus = "needs_input"
-      } else if (event.type === "failed") {
-        currentStatus = "failed"
-      } else if (event.type === "completed" && currentStatus !== "needs_input") {
-        currentStatus = "completed"
-      } else if (event.type === "working" && currentStatus !== "needs_input") {
+        // 状态由最高优先级决定
+        if ((currentStatus as string) === "needs_input") continue // needs_input 不可被覆盖
+        if (event.type === "needs_input") currentStatus = "needs_input"
+        else if (event.type === "failed") currentStatus = "failed"
+        else if (currentStatus !== "needs_input" && currentStatus !== "failed") currentStatus = "completed"
+      } else if (!seenTerminal) {
         currentStatus = "working"
       }
     }
 
-    return latestEvent
+    return bestTerminalEvent ?? lastEvent
   }
 
   return {

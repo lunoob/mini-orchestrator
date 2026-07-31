@@ -1,19 +1,17 @@
 import { readFile } from "node:fs/promises"
 
 import {
-  agentWaitOptions,
   bootstrapSession,
   runAgentIntegration,
   runAgentUpdate,
   sendTaskAndMonitor,
   startAgentResumed,
   stopAgent,
-  waitForAgentReady,
 } from "../agent/index.js"
 import { createSession } from "../agent/session.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
-import { parseAgentOutput } from "../lib/status-parser.js"
+import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
 import { render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
 import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
@@ -36,7 +34,7 @@ const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
     runtime.implementerSession.resumeId,
     { ensureUniqueName: true },
   )
-  await waitForAgentReady(runtime.implementerPane, agentWaitOptions(runtime.config.implementer))
+  // 不再等待 Herdr 状态：Agent 启动后直接发 task，monitor 以 JSONL 首次事件确认为准
 }
 
 const runSingleSpecCycle = async (
@@ -63,7 +61,7 @@ const runSingleSpecCycle = async (
     runtime.eventBus.publish({ type: "phase_change", phase: "implement" })
     runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
 
-    const { finalText, status: monitorStatus, question } = await sendTaskAndMonitor(
+    const { finalText, status: monitorStatus, question, reason: failReasonFromMonitor } = await sendTaskAndMonitor(
       runtime.implementerPane,
       render(runtime.prompts.implement, {
         maxReviewRounds: String(runtime.config.maxReviewRounds),
@@ -83,41 +81,61 @@ const runSingleSpecCycle = async (
       reuseCurrentPane: false,
     }
 
-    const parsed = parseAgentOutput(finalText, "implementer")
-    // 使用真实 readline fallback，仅在 eventBus 有 handler 时使用面板交互
     const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
 
-    if (monitorStatus === "needs_input" || parsed.status === "needs_input") {
+    // P1-1: 先检查 monitor 级状态，再解析输出（agent 原生提问/失败时 finalText 可能为空/非 JSON）
+    if (monitorStatus === "needs_input") {
       const reason = question ?? "需要人工确认"
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
       runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
       runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
-        depsWithBus, question, false, runtime.needsCheckMode, implementCtx,
+        depsWithBus, reason, false, runtime.needsCheckMode, implementCtx,
       )
-      // intervention 完成后恢复为 working → completed
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
     } else if (monitorStatus === "failed") {
+      // P2-4: 优先使用 lastEvent.reason（Claude/Codex 失败原因），其次 question，最后兜底
+      const failReason = failReasonFromMonitor ?? question ?? "unknown error"
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
-      console.warn("[Implement] Implementer failed. Proceeding to review anyway.")
-    } else if (parsed.status === "invalid_output") {
-      const reason = parsed.reason ?? "输出缺少合法 STATUS"
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "invalid_output" })
-      runtime.eventBus.publish({ type: "invalid_output", agent: "implementer", provider: sh.provider, reason })
-      runtime.eventBus.publish({ type: "pause", reason: `implementer invalid_output: ${reason}` })
-      console.warn(`[Implement] Invalid output: ${reason}. Entering intervention...`)
-      await handleIntervention(
-        "implementer", runtime.implementerPane, finalText, "implement", sh,
-        depsWithBus, parsed.reason, true, runtime.needsCheckMode, implementCtx,
-      )
-      // intervention 完成后恢复为 working → completed
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+      runtime.eventBus.publish({ type: "fail", reason: `Implementer failed: ${failReason}` })
+      throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
     } else {
-      // completed
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+      // monitor 状态正常，解析输出
+      const result = parseOutcome(finalText, "implementer")
+
+      if (isProtocolError(result)) {
+        // 协议错误 → intervention（不终止流程）
+        const reason = result.reason
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "invalid_output" })
+        runtime.eventBus.publish({ type: "invalid_output", agent: "implementer", provider: sh.provider, reason })
+        runtime.eventBus.publish({ type: "pause", reason: `implementer protocol_error: ${reason}` })
+        await handleIntervention(
+          "implementer", runtime.implementerPane, finalText, "implement", sh,
+          depsWithBus, reason, true, runtime.needsCheckMode, implementCtx,
+        )
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+      } else if (result.outcome === "needs_input") {
+        const reason = result.request.question
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
+        runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
+        runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
+        await handleIntervention(
+          "implementer", runtime.implementerPane, finalText, "implement", sh,
+          depsWithBus, reason, false, runtime.needsCheckMode, implementCtx,
+        )
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+      } else if (result.outcome === "failed") {
+        const failReason = result.failure.message
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
+        runtime.eventBus.publish({ type: "fail", reason: `Implementer failed: ${failReason}` })
+        throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
+      } else {
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+      }
     }
   }
 

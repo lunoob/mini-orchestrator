@@ -1,6 +1,3 @@
-import { createInterface } from "node:readline/promises"
-import { stdin as input, stdout as output } from "node:process"
-
 import type { NeedsCheckCheckpointInput } from "./checkpoint.js"
 import { writeNeedsCheckCheckpoint } from "./checkpoint.js"
 import type { ParsedArgs } from "../types.js"
@@ -79,16 +76,25 @@ export const buildNeedsCheckMessage = (round: number, verdict: ReviewVerdict, re
 }
 
 /** 构建面板专用的 needs-check 摘要（不含完整 reviewOutput，避免面板溢出） */
-export const buildNeedsCheckPanelPrompt = (round: number, verdict: ReviewVerdict) => {
+export const buildNeedsCheckPanelPrompt = (
+  round: number,
+  verdict: ReviewVerdict,
+  reviewerQuestion?: string,
+) => {
   const lines = [
     `Review round ${round}: REVIEW_NEEDS_CHECK`,
     "Reviewer 无法仅从 diff 验证部分项。",
-    "请核查后选择：[1]approve [2]revise [3]retry-review [4]abort",
   ]
+
+  if (reviewerQuestion) {
+    lines.push("", `❓ Reviewer 提问: ${reviewerQuestion}`, "")
+  }
 
   if (verdict.cannotVerifySummary) {
     lines.push(`⚠️ ${verdict.cannotVerifySummary}`)
   }
+
+  lines.push("", "请核查后选择：[1]approve [2]revise [3]retry-review [4]abort")
 
   return lines.join("\n")
 }
@@ -99,55 +105,19 @@ export const printNeedsCheckSummary = (round: number, verdict: ReviewVerdict, re
   console.log("")
 }
 
-const promptChoice = async (): Promise<NeedsCheckAction> => {
-  const rl = createInterface({ input, output })
-
-  try {
-    while (true) {
-      const answer = (await rl.question("请选择 [approve / revise / retry-review / abort]: "))
-        .trim()
-        .toLowerCase()
-
-      if (VALID_ACTIONS.has(answer)) return answer as NeedsCheckAction
-      console.log("[NeedsCheck] 无效输入，请输入：approve / revise / retry-review / abort")
-    }
-  } finally {
-    rl.close()
-  }
-}
-
-const promptNotes = async (action: NeedsCheckAction) => {
-  const rl = createInterface({ input, output })
-  const hint =
-    action === "revise"
-      ? "发给 implementer 的说明（必填）： "
-      : "发给 reviewer 的补充核查结果（必填）： "
-
-  try {
-    while (true) {
-      const notes = (await rl.question(hint)).trim()
-      if (notes) return notes
-      console.log("[NeedsCheck] 说明不能为空，请重新输入。")
-    }
-  } finally {
-    rl.close()
-  }
-}
-
 export const promptNeedsCheckInteractive = async (
   round: number,
   verdict: ReviewVerdict,
   reviewOutput: string,
   eventBus?: WorkflowEventBus,
+  reviewerQuestion?: string,
 ): Promise<NeedsCheckDecision> => {
   printNeedsCheckSummary(round, verdict, reviewOutput)
 
-  // 使用 eventBus 面板交互或回退到 readline
   if (eventBus) {
     try {
-      // printNeedsCheckSummary 已输出完整 reviewOutput，面板只显示摘要
       const result = await eventBus.requestInteraction({
-        prompt: buildNeedsCheckPanelPrompt(round, verdict),
+        prompt: buildNeedsCheckPanelPrompt(round, verdict, reviewerQuestion),
         agent: "reviewer",
         actions: ["approve", "revise", "retry-review", "abort"],
         textRequiredFor: ["revise", "retry-review"],
@@ -163,22 +133,15 @@ export const promptNeedsCheckInteractive = async (
         // 面板未提供文本（异常情况），用日志提示而非 readline
         console.log(`[NeedsCheck] ${action} 需要说明文本，请重试。`)
         // 重新请求交互
-        return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus)
+        return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus, reviewerQuestion)
       }
       return { action, notes }
     } catch {
-      // 非交互模式，回退到 readline
+      throw new Error("[NeedsCheck] No interaction handler available")
     }
   }
 
-  const action = await promptChoice()
-
-  if (action === "approve" || action === "abort") {
-    return { action, notes: "" }
-  }
-
-  const notes = await promptNotes(action)
-  return { action, notes }
+  throw new Error("[NeedsCheck] No interaction handler available")
 }
 
 export const pauseForLlmNeedsCheck = async (
@@ -229,6 +192,7 @@ export const resolveNeedsCheckDecision = async (
   dir: string,
   notificationContext?: NeedsCheckNotificationContext,
   eventBus?: WorkflowEventBus,
+  reviewerQuestion?: string,
 ): Promise<NeedsCheckDecision> => {
   const fromArgs = decisionFromArgs(args)
   if (fromArgs) return fromArgs
@@ -237,5 +201,5 @@ export const resolveNeedsCheckDecision = async (
     await pauseForLlmNeedsCheck(dir, checkpointInput, round, verdict, reviewOutput, notificationContext)
   }
 
-  return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus)
+  return promptNeedsCheckInteractive(round, verdict, reviewOutput, eventBus, reviewerQuestion)
 }

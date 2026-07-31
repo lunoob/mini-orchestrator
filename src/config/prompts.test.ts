@@ -24,19 +24,18 @@ const buildMinimalConfig = (dir: string, overrides: Record<string, string> = {})
 })
 
 describe("loadPrompts", () => {
-  it("injects default output partials with STATUS instructions", async () => {
+  it("injects default output partials with JSON outcome instructions", async () => {
     const config = buildMinimalConfig(PROJECT_ROOT)
 
     const prompts = await loadPrompts(config, PROJECT_ROOT)
 
-    // prompt 包含 STATUS 指令，不包含分隔线标记
-    expect(prompts.implement).toContain("IMPLEMENT_DONE")
-    expect(prompts.implement).toContain("IMPLEMENT_ASK")
+    // prompt 包含 JSON outcome 指令
+    expect(prompts.implement).toContain('"outcome"')
+    expect(prompts.implement).toContain('"completed"')
     expect(prompts.implement).not.toContain("{{outputFormat}}")
 
-    expect(prompts.review).toContain("REVIEW_PASS")
-    expect(prompts.review).toContain("REVIEW_FAIL")
-    expect(prompts.review).toContain("REVIEW_NEEDS_CHECK")
+    expect(prompts.review).toContain('"outcome"')
+    expect(prompts.review).toContain("verdict")
     expect(prompts.review).not.toContain("{{outputFormat}}")
   })
 

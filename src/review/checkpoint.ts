@@ -3,6 +3,7 @@ import path from "node:path"
 
 import type { AgentRole, AgentSessionHandle } from "../agent/transcript/types.js"
 import type { IssueConfig } from "../types.js"
+import type { RequestConfig } from "../lib/outcome-parser.js"
 
 export const CHECKPOINT_VERSION = 5
 
@@ -30,6 +31,8 @@ export type NeedsCheckCheckpoint = {
   interventionRole?: AgentRole
   /** 原始问题或原因 */
   interventionQuestion?: string
+  /** 结构化提问配置（options / recommendation / allowFreeform 等） */
+  interventionRequestConfig?: RequestConfig
   /** 触发 intervention 的 workflow 阶段 */
   interventionPhase?: string
   /** post-check 阶段的 review 状态（REVIEW_PASS / REVIEW_NEEDS_CHECK） */

@@ -3,7 +3,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import {
-  agentWaitOptions,
   bootstrapSession,
   runAgentIntegration,
   runAgentUpdate,
@@ -11,15 +10,11 @@ import {
   sendTaskAndMonitor,
   startAgentResumed,
   stopAgent,
-  waitForAgentReady,
   waitForAgentWithMonitor,
 } from "../agent/index.js"
 import { resolveAgentConfig } from "../config/agents.js"
-import {
-  parseImplementStatus,
-  printSection,
-  stripStatusLines,
-} from "../lib/utils.js"
+import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
+import { printSection, stripAgentOutcome } from "../lib/utils.js"
 import type { ParsedArgs } from "../types.js"
 import type { WorkflowEventBus } from "./events.js"
 
@@ -31,9 +26,9 @@ const TEST_PROMPT = `#任务
 
 ## 工作约束
 
-- 若 spec 或需求不清楚，先提问并输出 \`STATUS: IMPLEMENT_ASK\`，不要猜测
-- 完成全部实现且通过提交前自审后，输出 \`STATUS: IMPLEMENT_DONE\`
-- 若 review 驳回，根据反馈修改后再次输出 \`STATUS: IMPLEMENT_DONE\`
+- 若 spec 或需求不清楚，先提问并输出 JSON outcome 标记 \`needs_input\`
+- 完成全部实现且通过提交前自审后，输出 JSON outcome 标记 \`completed\`
+- 若 review 驳回，根据反馈修改后再次输出 \`completed\` outcome
 - 禁止自动执行 git commit 完成代码提交`
 
 export const loadImplementOutputFormat = async () => {
@@ -79,8 +74,8 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
       ensureUniqueName: true,
     })
     started = true
-    await waitForAgentReady(paneId, agentWaitOptions(agent))
 
+    eventBus?.publish({ type: "workflow_started", startedAt: Date.now() })
     eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
 
     const outputFormat = await loadImplementOutputFormat()
@@ -94,14 +89,18 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
     let currentQuestion: string | undefined = firstResult.question
 
     while (true) {
-      // 优先使用 monitor 原生状态，再用文本解析补充
-      const parsedStatus = parseImplementStatus(currentOutput)
+      // 优先 monitor 状态，再通过 AgentOutcome 判断
+      const tempResult = parseOutcome(currentOutput, "implementer")
+      const outcomeOutcome = isProtocolError(tempResult) ? "failed" : tempResult.outcome
       const effectiveStatus = currentMonitorStatus === "failed" ? "failed"
         : currentMonitorStatus === "needs_input" ? "needs_input"
-        : parsedStatus
+        : outcomeOutcome === "completed" ? "done"
+        : outcomeOutcome === "needs_input" ? "needs_input"
+        : outcomeOutcome === "failed" ? "failed"
+        : "unknown"
 
-      console.log(`[TestStatus] Status: ${effectiveStatus} (monitor=${currentMonitorStatus}, parsed=${parsedStatus})`)
-      printSection("TestStatus Output", stripStatusLines(currentOutput))
+      console.log(`[TestStatus] Status: ${effectiveStatus} (monitor=${currentMonitorStatus}, outcome=${outcomeOutcome})`)
+      printSection("TestStatus Output", stripAgentOutcome(currentOutput))
 
       if (effectiveStatus === "done") {
         eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -142,9 +141,9 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
         eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
         console.log("[TestStatus] User chose to continue, sending continuation prompt...")
 
-        const continuationText = result.text
-          ? `User answered: ${result.text}\nBased on the user's response above, continue with the previous task. Output the STATUS marker as required.`
-          : "Based on the user's response above, continue with the previous task. Output the STATUS marker as required."
+        const userMsg: Record<string, unknown> = { type: "user_response" }
+        if (result.text) userMsg.text = result.text
+        const continuationText = `${JSON.stringify(userMsg)}\nBased on the user's response above, continue with the previous task. Output the outcome as a JSON object with the required schema.`
         await sendTask(paneId, continuationText)
 
         const continuation = await waitForAgentWithMonitor(sessionHandle)

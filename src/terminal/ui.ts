@@ -57,9 +57,9 @@ export const createBlessedUI = (
   eventBus: WorkflowEventBus,
   blessed: typeof import("blessed"),
 ): TerminalUI => {
-  let timerRunning = true
+  let timerRunning = false
   let elapsedMs = 0
-  const timerStart = Date.now()
+  let timerStart = 0
   let unsubscribe: (() => void) | null = null
   const logHistory: Array<{ text: string; stream: "stdout" | "stderr" }> = []
 
@@ -76,7 +76,7 @@ export const createBlessedUI = (
     width: "100%",
     height: "100%-1",
     scrollable: true,
-    alwaysScroll: true,
+    alwaysScroll: false,
     scrollbar: {
       ch: " ",
     },
@@ -150,9 +150,14 @@ export const createBlessedUI = (
 
   eventBus.setInteractionHandler((request) => {
     currentRequest = request
-    textInputMode = false
     textInputValue = ""
     selectedAction = null
+    // 无按钮时自动进入文本输入模式
+    const hasActions = request.actions && request.actions.length > 0
+    textInputMode = !hasActions
+    if (!hasActions) {
+      selectedAction = "submit"
+    }
     // 立即刷新面板以显示交互请求
     const snap = eventBus.getSnapshot()
     updateStatusBox(snap)
@@ -161,26 +166,29 @@ export const createBlessedUI = (
     })
   })
 
-  // 数字键选择预定义 action（仅当 actions 中有对应选项时生效）
+  // 数字键选择选项
   for (let i = 1; i <= 9; i++) {
     screen.key([String(i)], () => {
       if (textInputMode) return
-      if (pendingResolve && currentRequest?.actions && i <= currentRequest.actions.length) {
-        const action = currentRequest.actions[i - 1]
-        // 如果该 action 需要必填文本，或请求允许可选文本，进入文本输入模式
-        const needsText = currentRequest.textRequiredFor?.includes(action)
-        if (needsText || currentRequest.textOptional) {
-          selectedAction = action
-          textInputMode = true
-          textInputValue = ""
-          const snap = eventBus.getSnapshot()
-          updateStatusBox(snap)
-          return
-        }
-        pendingResolve({ action })
-        pendingResolve = null
-        currentRequest = null
+      if (!pendingResolve || !currentRequest?.actions) return
+      if (i > currentRequest.actions.length) return
+
+      const action = currentRequest.actions[i - 1]
+      // "other" 选项或必填文本选项 → 进入文本输入模式
+      const needsText = action === "other" || currentRequest.textRequiredFor?.includes(action) === true
+      if (needsText) {
+        selectedAction = action
+        textInputMode = true
+        textInputValue = ""
+        updateStatusBox(eventBus.getSnapshot())
+        return
       }
+      // 预设选项：直接 resolve
+      // 仅当有 requestOptions 时附带 optionId（用于结构化选项回传）
+      const hasStructuredOptions = currentRequest.requestOptions && currentRequest.requestOptions.length > 0
+      pendingResolve({ action, optionId: hasStructuredOptions ? action : undefined })
+      pendingResolve = null
+      currentRequest = null
     })
   }
 
@@ -207,7 +215,16 @@ export const createBlessedUI = (
     }
 
     if (key.name === "escape") {
-      // Escape 取消文本输入
+      // 无按钮模式：Esc 直接取消交互（workflow 不阻塞）
+      if (!currentRequest?.actions?.length) {
+        if (pendingResolve) {
+          pendingResolve({ action: "abort" })
+          pendingResolve = null
+          currentRequest = null
+        }
+        return
+      }
+      // 有按钮模式：Esc 退出文本输入，回到按钮选择
       textInputMode = false
       textInputValue = ""
       selectedAction = null
@@ -278,7 +295,12 @@ export const createBlessedUI = (
   }
 
   // 订阅事件
-  unsubscribe = eventBus.subscribe((_event) => {
+  unsubscribe = eventBus.subscribe((event) => {
+    // workflow 实际开始执行时启动计时器
+    if (event.type === "workflow_started" && !timerRunning) {
+      timerStart = event.startedAt
+      timerRunning = true
+    }
     const snap = eventBus.getSnapshot()
     updateStatusBox(snap)
   })

@@ -338,10 +338,31 @@ describe("TerminalUI", () => {
   })
 
   describe("timer", () => {
-    it("starts timer on creation", () => {
+    // 辅助：模拟 workflow_started 事件以启动计时器
+    const fireWorkflowStarted = (eventBus: WorkflowEventBus) => {
+      // 通过 subscribe 注册的 handler 来触发 workflow_started
+      const subscribeFn = eventBus.subscribe as ReturnType<typeof vi.fn>
+      for (const call of subscribeFn.mock.calls) {
+        const handler = call[0] as (event: any) => void
+        handler({ type: "workflow_started", startedAt: Date.now() })
+      }
+    }
+
+    it("does not start timer until workflow_started event", () => {
       const blessed = createMockBlessed()
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
+
+      // 计时器不会在 UI 创建时启动，而是等待 workflow_started 事件
+      expect(ui.isTimerRunning()).toBe(false)
+    })
+
+    it("starts timer on workflow_started event", () => {
+      const blessed = createMockBlessed()
+      const eventBus = createEventBus()
+      const ui = createBlessedUI(eventBus, blessed)
+
+      fireWorkflowStarted(eventBus)
 
       expect(ui.isTimerRunning()).toBe(true)
     })
@@ -351,6 +372,7 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
+      fireWorkflowStarted(eventBus)
       vi.advanceTimersByTime(5000)
 
       const elapsed = ui.getElapsedMs()
@@ -377,6 +399,7 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
+      fireWorkflowStarted(eventBus)
       vi.advanceTimersByTime(3000)
       expect(ui.isTimerRunning()).toBe(true)
 
@@ -393,6 +416,7 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
+      fireWorkflowStarted(eventBus)
       ui.updateStatus(createSnapshot({ terminalState: "failed" }))
       expect(ui.isTimerRunning()).toBe(false)
     })
@@ -402,6 +426,7 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
+      fireWorkflowStarted(eventBus)
       ui.updateStatus(createSnapshot({ terminalState: "paused" }))
       // paused = 等待用户操作或 checkpoint，计时继续
       expect(ui.isTimerRunning()).toBe(true)
@@ -412,6 +437,7 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
+      fireWorkflowStarted(eventBus)
       ui.updateStatus(createSnapshot({
         implementerStatus: "needs_input",
         needsInput: { agent: "implementer", provider: "claude", reason: "Which?" },

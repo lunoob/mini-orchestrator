@@ -171,4 +171,44 @@ describe("createTranscriptMonitor", () => {
     const event = await monitor.poll()
     expect(event!.type).toBe("failed")
   })
+
+  it("preserves needs_input question when followed by completed in same batch", async () => {
+    const filePath = tmpFile()
+    // 同一批中出现 needs_input 和 completed，应保留 needs_input 的 question
+    const lines = [
+      claudeAskLine,
+      claudeCompletedLine,
+    ]
+
+    await writeJsonl(filePath, lines)
+
+    const handle: AgentSessionHandle = { provider: "claude", resumeId: "abc", jsonl: filePath, offset: 0 }
+    const monitor = createTranscriptMonitor(handle, mockDeps())
+
+    const event = await monitor.poll()
+    expect(event).not.toBeUndefined()
+    // 应返回 needs_input（首个终态事件），而非 completed
+    expect(event!.type).toBe("needs_input")
+    expect(event!.question).toContain("Which way?")
+    // 状态应为 needs_input
+    expect(monitor.getStatus()).toBe("needs_input")
+  })
+
+  it("preserves failed reason when followed by completed in same batch", async () => {
+    const filePath = tmpFile()
+    const claudeFailedLine = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "text", text: "API error" }], stop_reason: "error" },
+    })
+
+    await writeJsonl(filePath, [claudeFailedLine, claudeCompletedLine])
+
+    const handle: AgentSessionHandle = { provider: "claude", resumeId: "abc", jsonl: filePath, offset: 0 }
+    const monitor = createTranscriptMonitor(handle, mockDeps())
+
+    const event = await monitor.poll()
+    expect(event!.type).toBe("failed")
+    expect(event!.reason).toContain("API error")
+    expect(monitor.getStatus()).toBe("failed")
+  })
 })
