@@ -23,8 +23,8 @@ export const createCursorAdapter = () => {
       return undefined
     }
 
-    // assistant 消息
-    if (obj.type !== "assistant") return undefined
+    // assistant 消息（JSONL 中使用 role 字段）
+    if (obj.role !== "assistant") return undefined
 
     const message = obj.message as Record<string, unknown> | undefined
     if (!message || !Array.isArray(message.content)) return undefined

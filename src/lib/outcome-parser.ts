@@ -123,7 +123,8 @@ const extractTrailingJson = (text: string): string | null => {
 // ── Parser ──
 
 export const parseOutcome = (output: string, role: AgentRole): ParseResult => {
-  const trimmed = output.trim()
+  // Cursor 隐私功能会在输出末尾附加 [REDACTED] 标记，需剥离后再提取 JSON
+  const trimmed = output.trim().replace(/\[REDACTED\]\s*$/, "").trim()
   if (!trimmed) return protocolErr("Empty agent output", output)
 
   // 解析 JSON：支持纯 JSON 输出，也支持末尾 JSON（agent 可能在 JSON 前输出说明文字）
