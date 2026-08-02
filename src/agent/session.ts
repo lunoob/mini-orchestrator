@@ -4,7 +4,7 @@ import path from "node:path"
 
 import type { ParsedArgs } from "../types.js"
 
-const RESUME_ARGS = new Set(["resume-from", "needs-check-action", "needs-check-notes", "help"])
+const IGNORED_ARGS = new Set(["help"])
 
 export type SessionInfo = {
   sessionId: string
@@ -21,7 +21,7 @@ export type RunMetadata = {
 
 const getIdentityArgs = (args: ParsedArgs): Record<string, string> => {
   const entries = Object.entries(args)
-    .filter(([key]) => !RESUME_ARGS.has(key))
+    .filter(([key]) => !IGNORED_ARGS.has(key))
     .sort(([a], [b]) => a.localeCompare(b))
   return Object.fromEntries(entries)
 }

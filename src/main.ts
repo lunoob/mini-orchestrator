@@ -1,7 +1,6 @@
 import { format } from "node:util"
 
-import { NeedsCheckPauseError } from "./review/needs-check.js"
-import { notifyError, notifyInvalidOutput, notifyNeedsCheck, notifyNeedsInput, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
+import { notifyError, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runSkillCli } from "./cli/skill.js"
@@ -53,12 +52,12 @@ export const main = async () => {
 
   if (args.config) {
     args.config = getConfigPath(args)
-  } else if (!args["resume-from"] && args.testStatus !== "true") {
+  } else if (args.testStatus !== "true") {
     throw new Error("[Config] Missing required argument --config /absolute/path/to/workflow.json")
   }
 
-  // 创建共享事件总线和 terminal UI（所有 workflow 分支共用）
-  const useBlessedUI = isInteractiveTTY() && args["needs-check-mode"] !== "llm"
+  // 创建共享事件总线和 terminal UI
+  const useBlessedUI = isInteractiveTTY()
   const eventBus = createWorkflowEventBus()
   const ui = useBlessedUI
     ? await createTerminalUI(eventBus)
@@ -88,26 +87,6 @@ export const main = async () => {
 }
 
 void main().catch((error) => {
-  if (error instanceof NeedsCheckPauseError) {
-    // 优先使用详细通知上下文，否则回退到通用通知
-    if (error.notificationContext) {
-      const { role, provider, paneId, reason, turnId, interventionType, checkpointPath } = error.notificationContext
-      const cp = checkpointPath ?? error.checkpointPath
-      const resumeCmd = cp
-        ? `\nRESUME: mini-orch --resume-from ${cp} --needs-check-action <action> --needs-check-notes <answer>\n  actions: approve | revise | retry-review | abort`
-        : ""
-      if (interventionType === "invalid_output") {
-        notifyInvalidOutput(role, provider, `${reason}${resumeCmd}`, undefined, paneId, turnId)
-      } else {
-        notifyNeedsInput(role, provider, `${reason}${resumeCmd}`, undefined, paneId, turnId)
-      }
-    } else {
-      notifyNeedsCheck(error.checkpointPath)
-    }
-    process.exitCode = 2
-    return
-  }
-
   // Agent 失败：workflow 失败，返回退出码 1 并发送错误通知
   if (error instanceof AgentFailError) {
     console.error(`\n[Workflow] ${error.message}`)

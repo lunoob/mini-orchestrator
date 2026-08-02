@@ -15,7 +15,7 @@ import type { IssueConfig } from "../types.js"
 import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
 import { render } from "../lib/utils.js"
 import { notifyIssueComplete } from "../notify/index.js"
-import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
+import { handleIntervention, defaultImplementAskDeps } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -72,20 +72,9 @@ const runSingleSpecCycle = async (
       sh,
     )
 
-    // P1-1: 统一处理 needs_input 和 invalid_output，传入 needsCheckMode
-    const implementCtx: InterventionCheckpointContext = {
-      configPath, projectDir: runtime.config.projectDir,
-      issues: runtime.config.issues, currentIssueIndex: issueIndex,
-      round: 1, maxReviewRounds: runtime.config.maxReviewRounds,
-      phase: "implement",
-      implementerSession: sh,
-      baseSha: runtime.baseSha, hasGit: runtime.hasGit,
-      reuseCurrentPane: false,
-    }
-
     const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
 
-    // P1-1: 先检查 monitor 级状态，再解析输出（agent 原生提问/失败时 finalText 可能为空/非 JSON）
+    // 先检查 monitor 级状态，再解析输出（agent 原生提问/失败时 finalText 可能为空/非 JSON）
     if (monitorStatus === "needs_input") {
       const reason = question ?? "需要人工确认"
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
@@ -93,7 +82,7 @@ const runSingleSpecCycle = async (
       runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
       await handleIntervention(
         "implementer", runtime.implementerPane, finalText, "implement", sh,
-        depsWithBus, reason, false, runtime.needsCheckMode, implementCtx,
+        depsWithBus, reason, false,
       )
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -115,7 +104,7 @@ const runSingleSpecCycle = async (
         runtime.eventBus.publish({ type: "pause", reason: `implementer protocol_error: ${reason}` })
         await handleIntervention(
           "implementer", runtime.implementerPane, finalText, "implement", sh,
-          depsWithBus, reason, true, runtime.needsCheckMode, implementCtx,
+          depsWithBus, reason, true,
         )
         runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
         runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -126,7 +115,7 @@ const runSingleSpecCycle = async (
         runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
         await handleIntervention(
           "implementer", runtime.implementerPane, finalText, "implement", sh,
-          depsWithBus, reason, false, runtime.needsCheckMode, implementCtx,
+          depsWithBus, reason, false,
         )
         runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
         runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -144,7 +133,7 @@ const runSingleSpecCycle = async (
   await markIssueInReview(configPath, issueIndex, issues)
   runtime.reviewerSession = await bootstrapSession(runtime.config.reviewer)
 
-  await runReviewLoop(runtime, configPath, 1, false, specSessionDir, specPath, issueIndex, issues)
+  await runReviewLoop(runtime, 1, specSessionDir, specPath)
 }
 
 export const runIssueQueueFromIndex = async (

@@ -33,26 +33,6 @@ export const defaultImplementAskDeps = (): ImplementAskDeps => ({
 
 const CONTINUATION_PROMPT = "Based on the user's response above, continue with the previous task. Output the outcome as a JSON object with the required schema."
 
-/** checkpoint 上下文：由调用方提供真实 workflow 数据 */
-export type InterventionCheckpointContext = {
-  configPath: string
-  projectDir: string
-  issues: Array<{ title: string; specPath: string }>
-  currentIssueIndex: number
-  round: number
-  maxReviewRounds: number
-  phase: string
-  implementerSession?: AgentSessionHandle
-  reviewerSession?: AgentSessionHandle
-  baseSha: string | undefined
-  hasGit: boolean
-  reuseCurrentPane: boolean
-  /** post-check 阶段的 review 状态，恢复时决定后续流程 */
-  reviewStatus?: string
-  /** 触发 intervention 的原始 reviewer 输出（post-check 阶段时保留） */
-  interventionReviewOutput?: string
-}
-
 /**
  * 统一 intervention handler。
  *
@@ -64,8 +44,6 @@ export type InterventionCheckpointContext = {
  * @param deps 依赖注入
  * @param initialQuestion 原生提问文本（monitor 提供）
  * @param isInvalidOutput 是否为 invalid_output
- * @param needsCheckMode LLM/terminal 模式
- * @param checkpointCtx LLM 模式下的 checkpoint 上下文（调用方提供真实数据）
  */
 export const handleIntervention = async (
   role: AgentRole,
@@ -76,72 +54,8 @@ export const handleIntervention = async (
   deps: ImplementAskDeps = defaultImplementAskDeps(),
   initialQuestion?: string,
   isInvalidOutput = false,
-  needsCheckMode: "interactive" | "llm" = "interactive",
-  checkpointCtx?: InterventionCheckpointContext,
 ): Promise<string> => {
   const label = role === "implementer" ? "Implementer" : "Reviewer"
-
-  // LLM 模式：写 checkpoint 后退出
-  if (needsCheckMode === "llm") {
-    const ctx = checkpointCtx ?? {
-      configPath: "", projectDir: "", issues: [], currentIssueIndex: 0,
-      round: 1, maxReviewRounds:8, phase: context,
-      baseSha: undefined, hasGit: false, reuseCurrentPane: false,
-    }
-    // P1-3: 从 output 中提取结构化提问配置
-    const parsedForConfig = parseOutcome(output, role)
-    const requestConfig = !isProtocolError(parsedForConfig) && parsedForConfig.outcome === "needs_input"
-      ? parsedForConfig.request : undefined
-    const { writeNeedsCheckCheckpoint } = await import("../review/checkpoint.js")
-    const checkpointPath = await writeNeedsCheckCheckpoint(
-      `/tmp/mini-orch-intervention-${Date.now()}`,
-      {
-        baseSha: ctx.baseSha,
-        cannotVerifySummary: isInvalidOutput ? output.slice(0, 500) : null,
-        configPath: ctx.configPath,
-        hasGit: ctx.hasGit,
-        implementerPane: role === "implementer" ? paneId : "",
-        implementerSession: ctx.implementerSession ?? (role === "implementer" ? sessionHandle : undefined),
-        maxReviewRounds: ctx.maxReviewRounds,
-        projectDir: ctx.projectDir,
-        reviewOutput: output,
-        reviewerPane: role === "reviewer" ? paneId : "",
-        reviewerSession: ctx.reviewerSession ?? (role === "reviewer" ? sessionHandle : undefined),
-        reuseCurrentPane: ctx.reuseCurrentPane,
-        round: ctx.round,
-        currentIssueIndex: ctx.currentIssueIndex,
-        issues: ctx.issues,
-        interventionType: isInvalidOutput ? "invalid_output" : "needs_input",
-        interventionRole: role,
-        interventionQuestion: initialQuestion ?? requestConfig?.question,
-        interventionRequestConfig: requestConfig,
-        /** 触发阶段描述 */
-        interventionPhase: ctx.phase,
-        reviewStatus: ctx.reviewStatus,
-        interventionReviewOutput: ctx.interventionReviewOutput,
-      },
-    )
-    // 通知上下文传递给 NeedsCheckPauseError，由主入口统一发送
-    const reason = isInvalidOutput
-      ? (initialQuestion ?? "输出缺少合法 outcome")
-      : (initialQuestion ?? requestConfig?.question ?? "需要人工确认")
-    const notificationContext = {
-      role,
-      provider: sessionHandle.provider,
-      paneId,
-      reason,
-      turnId: String(sessionHandle.offset),
-      interventionType: (isInvalidOutput ? "invalid_output" : "needs_input") as "invalid_output" | "needs_input",
-      checkpointPath,
-    }
-    deps.log(`[Intervention] LLM 模式：已保存 checkpoint 到 ${checkpointPath}`)
-    deps.log(`ROLE: ${role}  TYPE: ${isInvalidOutput ? "invalid_output" : "needs_input"}  PHASE: ${ctx.phase}`)
-    if (initialQuestion) deps.log(`QUESTION: ${initialQuestion}`)
-    deps.log(`STATUS: ORCHESTRATOR_NEEDS_CHECK`)
-    deps.log(`CHECKPOINT: ${checkpointPath}`)
-    const { NeedsCheckPauseError } = await import("../review/needs-check.js")
-    throw new NeedsCheckPauseError(checkpointPath, notificationContext)
-  }
 
   // 使用 eventBus 面板交互（必须可用，无 readline fallback）
   const promptUser = async (

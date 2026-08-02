@@ -1,5 +1,4 @@
-import { resolveNeedsCheckDecision } from "../review/needs-check.js"
-import type { IssueConfig } from "../types.js"
+import { promptNeedsCheckInteractive } from "../review/needs-check.js"
 import {
   bootstrapSession,
   sendTaskAndMonitor,
@@ -12,12 +11,11 @@ import {
   render,
   stripAgentOutcome,
 } from "../lib/utils.js"
-import { isProtocolError, parseOutcome, type AgentOutcome } from "../lib/outcome-parser.js"
+import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
 import { notifyNeedsInput } from "../notify/index.js"
-import { handleIntervention, defaultImplementAskDeps, type InterventionCheckpointContext } from "./implement-ask.js"
+import { handleIntervention, defaultImplementAskDeps } from "./implement-ask.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
-import { buildCheckpointInput, type NeedsCheckOutcome, type PostReviewStatus, type ReviewLoopOptions, type WorkflowRuntime } from "./types.js"
-import type { WorkflowPhase } from "./events.js"
+import type { NeedsCheckOutcome, PostReviewStatus, ReviewLoopOptions, WorkflowRuntime } from "./types.js"
 
 /**
  * 统一处理 sendTaskAndMonitor 返回结果。
@@ -30,12 +28,9 @@ const handleMonitorResult = async (
   question: string | undefined,
   context: string,
   session: AgentSessionHandle,
-  needsCheckMode: "interactive" | "llm" = "interactive",
-  checkpointCtx?: InterventionCheckpointContext,
   eventBus?: import("./events.js").WorkflowEventBus,
 ): Promise<string> => {
   const result = parseOutcome(finalText, role)
-  const ctx = checkpointCtx ? { ...checkpointCtx, phase: checkpointCtx.phase || context } : undefined
 
   const agentKey = role === "implementer" ? "implementer" : "reviewer"
 
@@ -58,7 +53,7 @@ const handleMonitorResult = async (
   // monitor 级 needs_input（原生提问）→ 启动 intervention
   if (status === "needs_input") {
     publishInterventionEvents(question ?? "需要确认")
-    const intrResult1 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false, needsCheckMode, ctx)
+    const intrResult1 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, question, false)
     publishResumeEvents()
     return intrResult1
   }
@@ -81,7 +76,7 @@ const handleMonitorResult = async (
       eventBus.publish({ type: "invalid_output", agent: agentKey, provider: session.provider, reason })
       eventBus.publish({ type: "pause", reason: `${role} invalid_output: ${reason}` })
     }
-    const intrResult = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, true, needsCheckMode, ctx)
+    const intrResult = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, true)
     publishResumeEvents()
     return intrResult
   }
@@ -101,7 +96,7 @@ const handleMonitorResult = async (
     // P1-3: reviewer needs_input 也要启动 intervention，传递结构化选项
     const reason = outcome.request.question
     publishInterventionEvents(reason)
-    const intrResult2 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, false, needsCheckMode, ctx)
+    const intrResult2 = await handleIntervention(role, paneId, finalText, context, session, depsWithBus, reason, false)
     publishResumeEvents()
     return intrResult2
   }
@@ -128,22 +123,6 @@ const ensureImplementer = async (runtime: WorkflowRuntime): Promise<AgentSession
   return runtime.implementerSession
 }
 
-/** 从 runtime 构造 checkpoint 上下文 */
-const mkCtx = (runtime: WorkflowRuntime, round: number, phase: string): InterventionCheckpointContext => ({
-  configPath: runtime.configPath,
-  projectDir: runtime.config.projectDir,
-  issues: runtime.config.issues,
-  currentIssueIndex: runtime.issueIndex,
-  round,
-  maxReviewRounds: runtime.config.maxReviewRounds,
-  phase,
-  implementerSession: runtime.implementerSession,
-  reviewerSession: runtime.reviewerSession,
-  baseSha: runtime.baseSha,
-  hasGit: runtime.hasGit,
-  reuseCurrentPane: false,
-})
-
 export const sendControllerRevise = async (
   runtime: WorkflowRuntime, round: number, controllerNotes: string, reviewOutput: string,
 ) => {
@@ -162,8 +141,7 @@ export const sendControllerRevise = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `controller revise round ${round}`, session, runtime.needsCheckMode, mkCtx(runtime, round, "controller-revise"),
-    runtime.eventBus,
+    `controller revise round ${round}`, session, runtime.eventBus,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -199,8 +177,7 @@ const conductReview = async (
 
   const final = await handleMonitorResult(
     "reviewer", runtime.reviewerPane, finalText, status, question,
-    `review round ${round}`, runtime.reviewerSession, runtime.needsCheckMode, mkCtx(runtime, round, "review"),
-    runtime.eventBus,
+    `review round ${round}`, runtime.reviewerSession, runtime.eventBus,
   )
 
   const parseResult = parseOutcome(final, "reviewer")
@@ -232,13 +209,12 @@ const outcomeToReviewStatus = (o: ReturnType<typeof parseOutcome>): string => {
 }
 
 const handleNeedsCheck = async (
-  runtime: WorkflowRuntime, configPath: string, round: number, reviewOutput: string,
-  outcome: ReturnType<typeof parseOutcome>, reuseCurrentPane: boolean,
-  sessionDir: string, specPath: string, issueIndex: number, issues: IssueConfig[],
+  runtime: WorkflowRuntime, round: number, reviewOutput: string,
+  outcome: ReturnType<typeof parseOutcome>,
 ): Promise<NeedsCheckOutcome> => {
   const statusValue = outcomeToReviewStatus(outcome)
 
-  if (statusValue === "REVIEW_NEEDS_CHECK" && runtime.reviewerSession && runtime.needsCheckMode === "interactive") {
+  if (statusValue === "REVIEW_NEEDS_CHECK" && runtime.reviewerSession) {
     notifyNeedsInput(
       "reviewer", runtime.reviewerSession.provider,
       "Review 需要人工核查",
@@ -246,17 +222,6 @@ const handleNeedsCheck = async (
       String(runtime.reviewerSession.offset),
     )
   }
-
-  const notificationContext = statusValue === "REVIEW_NEEDS_CHECK" && runtime.reviewerSession
-    ? {
-        role: "reviewer",
-        provider: runtime.reviewerSession.provider,
-        paneId: runtime.reviewerPane,
-        reason: "Review 需要人工核查",
-        turnId: String(runtime.reviewerSession.offset),
-        interventionType: "needs_input" as const,
-      }
-    : undefined
 
   // 从 outcome 中提取 cannotVerifySummary（如有）
   const cvSummary = !isProtocolError(outcome) && outcome.outcome === "completed" && "review" in outcome
@@ -275,16 +240,8 @@ const handleNeedsCheck = async (
   const reviewerQuestion = !isProtocolError(outcome) && outcome.outcome === "needs_input"
     ? outcome.request.question : undefined
 
-  const decision = await resolveNeedsCheckDecision(
-    runtime.args, runtime.needsCheckMode, round,
-    verdict,
-    reviewOutput,
-    buildCheckpointInput(runtime, configPath, round, reviewOutput, verdict,
-      reuseCurrentPane, specPath, issueIndex, issues),
-    sessionDir,
-    notificationContext,
-    runtime.eventBus,
-    reviewerQuestion,
+  const decision = await promptNeedsCheckInteractive(
+    round, verdict, reviewOutput, runtime.eventBus, reviewerQuestion,
   )
 
   switch (decision.action) {
@@ -309,7 +266,6 @@ const handleNeedsCheck = async (
 
 export const sendPostReviewCheck = async (
   runtime: WorkflowRuntime, round: number, reviewStatus: PostReviewStatus,
-  reviewerOutput?: string,
 ) => {
   const session = await ensureImplementer(runtime)
   console.log(`[PostCheck] Review ${reviewStatus} — verifying checks.`)
@@ -325,9 +281,7 @@ export const sendPostReviewCheck = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `post-review check round ${round}`, session, runtime.needsCheckMode,
-    { ...mkCtx(runtime, round, "post-check"), reviewStatus, interventionReviewOutput: reviewerOutput },
-    runtime.eventBus,
+    `post-review check round ${round}`, session, runtime.eventBus,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -348,17 +302,15 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `revise round ${round}`, session, runtime.needsCheckMode, mkCtx(runtime, round, "revise"),
-    runtime.eventBus,
+    `revise round ${round}`, session, runtime.eventBus,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
 }
 
 export const runReviewLoop = async (
-  runtime: WorkflowRuntime, configPath: string, startRound: number,
-  reuseCurrentPane: boolean, sessionDir: string, specPath: string,
-  issueIndex: number, issues: IssueConfig[], initialOptions?: ReviewLoopOptions,
+  runtime: WorkflowRuntime, startRound: number, sessionDir: string, specPath: string,
+  initialOptions?: ReviewLoopOptions,
 ) => {
   runtime.eventBus.publish({ type: "phase_change", phase: "review" })
 
@@ -380,18 +332,18 @@ export const runReviewLoop = async (
 
       // completed + REVIEW_PASS → done
       if (!isProtocolError(parseResult) && parseResult.outcome === "completed" && "review" in parseResult && parseResult.review?.verdict === "pass") {
-        await sendPostReviewCheck(runtime, round, "REVIEW_PASS", reviewOutput)
+        await sendPostReviewCheck(runtime, round, "REVIEW_PASS")
         console.log(`\n[Review] Workflow finished: review passed in round ${round}.`)
         return
       }
 
       // completed + needs_check → 人工核查（复用 handleNeedsCheck 流程）
       if (!isProtocolError(parseResult) && parseResult.outcome === "completed" && "review" in parseResult && parseResult.review?.verdict === "needs_check") {
-        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK", reviewOutput)
+        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK")
         runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
         runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason: "Review 需要人工核查" })
         runtime.eventBus.publish({ type: "pause", reason: "reviewer needs_check" })
-        const decision = await handleNeedsCheck(runtime, configPath, round, reviewOutput, parseResult, reuseCurrentPane, sessionDir, specPath, issueIndex, issues)
+        const decision = await handleNeedsCheck(runtime, round, reviewOutput, parseResult)
         if (decision.type === "approved") return
         if (decision.type === "continue_round") break
         activeLoopOptions = { controllerReviewNotes: decision.controllerNotes, lastReviewOutput: decision.lastReviewOutput }
@@ -401,11 +353,11 @@ export const runReviewLoop = async (
 
       // needs_input → needs-check
       if (!isProtocolError(parseResult) && parseResult.outcome === "needs_input") {
-        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK", reviewOutput)
+        await sendPostReviewCheck(runtime, round, "REVIEW_NEEDS_CHECK")
         runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "needs_input" })
         runtime.eventBus.publish({ type: "needs_input", agent: "reviewer", provider: runtime.reviewerSession!.provider, reason: "Review 需要人工核查" })
         runtime.eventBus.publish({ type: "pause", reason: "reviewer needs_input: REVIEW_NEEDS_CHECK" })
-        const decision = await handleNeedsCheck(runtime, configPath, round, reviewOutput, parseResult, reuseCurrentPane, sessionDir, specPath, issueIndex, issues)
+        const decision = await handleNeedsCheck(runtime, round, reviewOutput, parseResult)
         if (decision.type === "approved") return
         if (decision.type === "continue_round") break
         activeLoopOptions = { controllerReviewNotes: decision.controllerNotes, lastReviewOutput: decision.lastReviewOutput }

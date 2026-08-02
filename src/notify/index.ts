@@ -82,14 +82,6 @@ export const notifyTestStatusComplete = () => {
   )
 }
 
-export const notifyNeedsCheck = (checkpointPath: string) => {
-  notify(
-    "编排器",
-    `Reviewer 无法完全验证，请在主对话中处理。\nCHECKPOINT: ${checkpointPath}`,
-    "warning",
-  )
-}
-
 export const notifyImplementAsk = () => {
   notify(
     "编排器",

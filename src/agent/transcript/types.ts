@@ -31,7 +31,7 @@ export type AgentRole = "implementer" | "reviewer"
 /** Transcript monitor 的监听器回调 */
 export type TranscriptListener = (event: TranscriptEvent) => void
 
-/** 暂停/恢复上下文，用于 terminal 模式暂停和 LLM 模式 checkpoint */
+/** 暂停/恢复上下文，用于 terminal 模式暂停 */
 export type PauseContext = {
   role: AgentRole
   provider: string
