@@ -97,7 +97,7 @@ export const createBlessedUI = (
     tags: false,
     style: {
       fg: "white",
-      bg: "gray",
+      bg: "#42454b",
     },
   })
 
@@ -359,7 +359,18 @@ export const createBlessedUI = (
     }
   }
 
-  const sigintHandler = () => { exitHandler(); process.exit(130) }
+  // 快速按两下 Ctrl+C 才退出：记录首次按下时间，1 秒内再次按下才触发
+  let lastSigintAt = 0
+  const SIGINT_DOUBLE_PRESS_MS = 1_000
+  const sigintHandler = () => {
+    const now = Date.now()
+    if (now - lastSigintAt > SIGINT_DOUBLE_PRESS_MS) {
+      lastSigintAt = now
+      return
+    }
+    exitHandler()
+    process.exit(130)
+  }
   const sigtermHandler = () => { exitHandler(); process.exit(143) }
   const uncaughtHandler = (err: Error) => {
     // 先将异常记录到日志历史，再 destroy + flush，确保信息在普通缓冲区可见
@@ -367,6 +378,9 @@ export const createBlessedUI = (
     exitHandler()
     process.exit(1)
   }
+
+  // blessed 将终端置于 raw 模式，Ctrl+C 不会产生 SIGINT 信号，而是 keypress 事件，需显式绑定
+  screen.key(["C-c"], sigintHandler)
 
   process.on("SIGINT", sigintHandler)
   process.on("SIGTERM", sigtermHandler)

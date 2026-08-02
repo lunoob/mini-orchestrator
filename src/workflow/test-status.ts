@@ -44,8 +44,8 @@ export const buildTestStatusPrompt = (outputFormat: string) =>
 export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBus) => {
   const projectDir = args.projectDir ?? process.cwd()
   const agent = resolveAgentConfig({
-    agent: "cursor",
-    model: "composer-2.5",
+    agent: "codex",
+    model: "gpt-5.6-luna",
     name: "test-status",
   })
 

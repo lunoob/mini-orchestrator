@@ -32,11 +32,11 @@ describe("getStringDisplayWidth", () => {
 
   it("returns 2 for each CJK character", () => {
     expect(getStringDisplayWidth("中文")).toBe(4)
-    expect(getStringDisplayWidth("执行时间")).toBe(8)
+    expect(getStringDisplayWidth("Duration")).toBe(8)
   })
 
   it("handles mixed ASCII and CJK", () => {
-    expect(getStringDisplayWidth("执行时间：00:00:00")).toBe(18)
+    expect(getStringDisplayWidth("Duration: 00:00:00")).toBe(18)
     expect(getStringDisplayWidth("IMP:working")).toBe(11)
   })
 
@@ -77,21 +77,21 @@ describe("formatStatusLine", () => {
     const snap = createSnapshot({ elapsedMs: 3661000 }) // 1h 1m 1s
     const line = formatStatusLine(snap, 80)
 
-    expect(line).toContain("执行时间：01:01:01")
+    expect(line).toContain("Duration: 01:01:01")
   })
 
   it("formats elapsed time with zero values", () => {
     const snap = createSnapshot({ elapsedMs: 0 })
     const line = formatStatusLine(snap, 80)
 
-    expect(line).toContain("执行时间：00:00:00")
+    expect(line).toContain("Duration: 00:00:00")
   })
 
   it("formats elapsed time at 65 seconds", () => {
     const snap = createSnapshot({ elapsedMs: 65000 })
     const line = formatStatusLine(snap, 80)
 
-    expect(line).toContain("执行时间：00:01:05")
+    expect(line).toContain("Duration: 00:01:05")
   })
 
   it("formats implementer status", () => {

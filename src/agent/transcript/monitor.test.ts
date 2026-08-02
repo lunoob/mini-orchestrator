@@ -119,12 +119,12 @@ describe("createTranscriptMonitor", () => {
   it("handles Codex provider events", async () => {
     const filePath = tmpFile()
     const startedLine = JSON.stringify({
-      event_msg: { payload: { type: "task_started" } },
+      type: "event_msg",
+      payload: { type: "task_started" },
     })
     const completedLine = JSON.stringify({
-      event_msg: {
-        payload: { type: "task_complete", last_agent_message: "STATUS: IMPLEMENT_DONE\nDone." },
-      },
+      type: "event_msg",
+      payload: { type: "task_complete", last_agent_message: "STATUS: IMPLEMENT_DONE\nDone." },
     })
 
     await writeJsonl(filePath, [startedLine])

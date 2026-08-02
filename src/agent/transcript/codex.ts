@@ -17,10 +17,9 @@ export const createCodexAdapter = () => {
     if (typeof line !== "object" || line === null) return undefined
 
     const obj = line as Record<string, unknown>
-    const eventMsg = obj.event_msg as Record<string, unknown> | undefined
-    if (!eventMsg) return undefined
+    if (obj.type !== "event_msg") return undefined
 
-    const payload = eventMsg.payload as Record<string, unknown> | undefined
+    const payload = obj.payload as Record<string, unknown> | undefined
     if (!payload) return undefined
 
     const payloadType = payload.type as string | undefined

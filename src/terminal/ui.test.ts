@@ -226,10 +226,10 @@ describe("TerminalUI", () => {
       const eventBus = createEventBus()
       const ui = createBlessedUI(eventBus, blessed)
 
-      expect(ui.formatElapsed(0)).toBe("执行时间：00:00:00")
-      expect(ui.formatElapsed(65000)).toBe("执行时间：00:01:05")
-      expect(ui.formatElapsed(3661000)).toBe("执行时间：01:01:01")
-      expect(ui.formatElapsed(3600000)).toBe("执行时间：01:00:00")
+      expect(ui.formatElapsed(0)).toBe("Duration: 00:00:00")
+      expect(ui.formatElapsed(65000)).toBe("Duration: 00:01:05")
+      expect(ui.formatElapsed(3661000)).toBe("Duration: 01:01:01")
+      expect(ui.formatElapsed(3600000)).toBe("Duration: 01:00:00")
     })
 
     it("renders compact status when terminal is wide enough", () => {
@@ -258,7 +258,7 @@ describe("TerminalUI", () => {
       expect(content).toContain("Auth")
       expect(content).toContain("implement")
       expect(content).toContain("R1/8")
-      expect(content).toContain("执行时间：00:01:05")
+      expect(content).toContain("Duration: 00:01:05")
     })
 
     it("renders wrapped status when terminal is narrow", () => {
