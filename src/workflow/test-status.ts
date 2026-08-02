@@ -44,9 +44,9 @@ export const buildTestStatusPrompt = (outputFormat: string) =>
 export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBus) => {
   const projectDir = args.projectDir ?? process.cwd()
   const agent = resolveAgentConfig({
-    agent: "claude",
-    model: "default",
-    name: "test-claude",
+    agent: "cursor",
+    model: "composer-2.5",
+    name: "test-status",
   })
 
   // 发布初始状态事件

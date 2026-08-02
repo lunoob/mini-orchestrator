@@ -97,7 +97,7 @@ export const createBlessedUI = (
     tags: false,
     style: {
       fg: "white",
-      bg: "blue",
+      bg: "gray",
     },
   })
 
