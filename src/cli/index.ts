@@ -6,8 +6,8 @@ export const wantsHelp = (argv: string[]) => argv.includes("--help") || argv.inc
 
 export const printHelp = () => {
   console.log(`[CLI] Usage:
-  mini-orch --config <path> [options]
-  mini-orch --resume-from <path> --needs-check-action <action> [options]
+  --config <path> [options]
+  --resume-from <path> --needs-check-action <action> [options]
 
 在 Herdr pane 内串起 implementer 与 reviewer agent 工作流。
 
@@ -31,13 +31,13 @@ Examples:
   pnpm start -- --testStatus
   pnpm start -- --config workflow.json
   pnpm start -- --config workflow.json --projectDir . --maxReviewRounds 6
-  mini-orch --resume-from .orchestrator/needs-check-round-1-*.json \\
+  --resume-from .orchestrator/needs-check-round-1-*.json \\
     --needs-check-action retry-review --needs-check-notes "已本地验证通过"
 
 Skill commands:
-  mini-orch skill install [options]
-  mini-orch skill uninstall [options]
-  mini-orch skill list
+  skill install [options]
+  skill uninstall [options]
+  skill list
 
 Environment:
   HERDR_ENV=1               必须在 Herdr pane 内运行（--help 除外）

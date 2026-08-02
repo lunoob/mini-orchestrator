@@ -7,12 +7,13 @@ describe("printHelp", () => {
     vi.restoreAllMocks()
   })
 
-  it("shows mini-orch as the executable command", () => {
+  it("does not show an executable command prefix", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
 
     printHelp()
 
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("mini-orch --config"))
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("--config <path>"))
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("mini-orch"))
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("start-orchestrator"))
   })
 })

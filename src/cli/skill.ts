@@ -29,9 +29,9 @@ export const parseSkillAction = (args: string[]): SkillAction | undefined => {
 const showUsage = () => {
   console.log(`[Skill]
 用法:
-  mini-orch skill install                交互式安装 skill
-  mini-orch skill uninstall              交互式卸载 skill
-  mini-orch skill list                   查看可用 skill
+  skill install                交互式安装 skill
+  skill uninstall              交互式卸载 skill
+  skill list                   查看可用 skill
 
 选项:
   --mode symlink|copy   安装模式（默认 symlink）
