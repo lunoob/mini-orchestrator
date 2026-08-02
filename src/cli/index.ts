@@ -27,13 +27,6 @@ Options:
 CLI 参数优先级高于 workflow 配置文件中的同名字段。
 resume 时可从 checkpoint 读取 configPath，因此可省略 --config。
 
-Examples:
-  pnpm start -- --testStatus
-  pnpm start -- --config workflow.json
-  pnpm start -- --config workflow.json --projectDir . --maxReviewRounds 6
-  --resume-from .orchestrator/needs-check-round-1-*.json \\
-    --needs-check-action retry-review --needs-check-notes "已本地验证通过"
-
 Skill commands:
   skill install [options]
   skill uninstall [options]

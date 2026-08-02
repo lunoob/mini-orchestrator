@@ -1,6 +1,7 @@
 import { resolveNeedsCheckDecision } from "../review/needs-check.js"
 import type { IssueConfig } from "../types.js"
 import {
+  bootstrapSession,
   sendTaskAndMonitor,
   startAgentResumed,
 } from "../agent/index.js"
@@ -111,6 +112,22 @@ const handleMonitorResult = async (
   return finalText
 }
 
+/** 按需启动 implementer：仅当 review 需要它（revise / post-check）时才 bootstrap 并创建 pane，返回其 session */
+const ensureImplementer = async (runtime: WorkflowRuntime): Promise<AgentSessionHandle> => {
+  if (runtime.implementerPane) return runtime.implementerSession!
+  if (!runtime.implementerSession) {
+    runtime.implementerSession = await bootstrapSession(runtime.config.implementer)
+  }
+  runtime.implementerPane = await startAgentResumed(
+    runtime.config.projectDir,
+    runtime.config.implementer,
+    runtime.implementerSession.resumeId,
+    { ensureUniqueName: true },
+  )
+  console.log(`[Review] Started implementer on demand for repair: ${runtime.implementerPane}`)
+  return runtime.implementerSession
+}
+
 /** 从 runtime 构造 checkpoint 上下文 */
 const mkCtx = (runtime: WorkflowRuntime, round: number, phase: string): InterventionCheckpointContext => ({
   configPath: runtime.configPath,
@@ -130,7 +147,7 @@ const mkCtx = (runtime: WorkflowRuntime, round: number, phase: string): Interven
 export const sendControllerRevise = async (
   runtime: WorkflowRuntime, round: number, controllerNotes: string, reviewOutput: string,
 ) => {
-  if (!runtime.implementerSession) throw new Error("[Controller] Missing implementer session")
+  const session = await ensureImplementer(runtime)
 
   runtime.eventBus.publish({ type: "phase_change", phase: "controller-revise" })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
@@ -140,12 +157,12 @@ export const sendControllerRevise = async (
     render(runtime.prompts.controllerImplementer, {
       controllerNotes, reviewOutput: stripAgentOutcome(reviewOutput), round: String(round),
     }),
-    runtime.implementerSession,
+    session,
   )
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `controller revise round ${round}`, runtime.implementerSession, runtime.needsCheckMode, mkCtx(runtime, round, "controller-revise"),
+    `controller revise round ${round}`, session, runtime.needsCheckMode, mkCtx(runtime, round, "controller-revise"),
     runtime.eventBus,
   )
 
@@ -294,7 +311,7 @@ export const sendPostReviewCheck = async (
   runtime: WorkflowRuntime, round: number, reviewStatus: PostReviewStatus,
   reviewerOutput?: string,
 ) => {
-  if (!runtime.implementerSession) return
+  const session = await ensureImplementer(runtime)
   console.log(`[PostCheck] Review ${reviewStatus} — verifying checks.`)
 
   runtime.eventBus.publish({ type: "phase_change", phase: "post-check" })
@@ -303,12 +320,12 @@ export const sendPostReviewCheck = async (
   const { finalText, status, question } = await sendTaskAndMonitor(
     runtime.implementerPane,
     render(runtime.prompts.postReviewCheck, { reviewStatus, round: String(round) }),
-    runtime.implementerSession,
+    session,
   )
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `post-review check round ${round}`, runtime.implementerSession, runtime.needsCheckMode,
+    `post-review check round ${round}`, session, runtime.needsCheckMode,
     { ...mkCtx(runtime, round, "post-check"), reviewStatus, interventionReviewOutput: reviewerOutput },
     runtime.eventBus,
   )
@@ -317,7 +334,7 @@ export const sendPostReviewCheck = async (
 }
 
 export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: number, reviewOutput: string) => {
-  if (!runtime.implementerSession) throw new Error("[Revise] Missing implementer session")
+  const session = await ensureImplementer(runtime)
   console.log("[Revise] Review failed — sending back to implementer.")
 
   runtime.eventBus.publish({ type: "phase_change", phase: "revise" })
@@ -326,12 +343,12 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
   const { finalText, status, question } = await sendTaskAndMonitor(
     runtime.implementerPane,
     render(runtime.prompts.revise, { reviewOutput: stripAgentOutcome(reviewOutput), round: String(round) }),
-    runtime.implementerSession,
+    session,
   )
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `revise round ${round}`, runtime.implementerSession, runtime.needsCheckMode, mkCtx(runtime, round, "revise"),
+    `revise round ${round}`, session, runtime.needsCheckMode, mkCtx(runtime, round, "revise"),
     runtime.eventBus,
   )
 

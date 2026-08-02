@@ -26,6 +26,7 @@ export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
   index < issueCount - 1
 
 const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
+  if (runtime.implementerPane) return
   if (!runtime.implementerSession) {
     runtime.implementerSession = await bootstrapSession(runtime.config.implementer)
   }
@@ -55,7 +56,7 @@ const runSingleSpecCycle = async (
 
   if (shouldSkipImplement(issue)) {
     console.log(`[Implement] Skipping (state=review): ${issue.title}`)
-    await ensureImplementerSession(runtime)
+    // 不预启动 implementer，review 需要修复时再按需启动
   } else {
     await ensureImplementerSession(runtime)
     const sh = runtime.implementerSession!
