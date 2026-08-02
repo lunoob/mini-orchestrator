@@ -7,7 +7,7 @@ const processLine = createCursorAdapter().processLine
 describe("Cursor adapter", () => {
   it("emits working (no text) for assistant message", () => {
     const line = {
-      type: "assistant",
+      role: "assistant",
       message: { content: [{ type: "text", text: "Working..." }] },
     }
     const result = processLine(line)
@@ -18,7 +18,7 @@ describe("Cursor adapter", () => {
 
   it("emits needs_input for AskQuestion tool", () => {
     const line = {
-      type: "assistant",
+      role: "assistant",
       message: {
         content: [{
           type: "tool_use", name: "AskQuestion",
@@ -35,7 +35,7 @@ describe("Cursor adapter", () => {
   it("emits completed with text for turn_ended success", () => {
     const adapter = createCursorAdapter()
     adapter.processLine({
-      type: "assistant", message: { content: [{ type: "text", text: "Result" }] },
+      role: "assistant", message: { content: [{ type: "text", text: "Result" }] },
     })
     const result = adapter.processLine({ type: "turn_ended", status: "success" })
     expect(result!.type).toBe("completed")
@@ -49,6 +49,6 @@ describe("Cursor adapter", () => {
   })
 
   it("ignores non-assistant non-turn_ended lines", () => {
-    expect(processLine({ type: "user" })).toBeUndefined()
+    expect(processLine({ role: "user" })).toBeUndefined()
   })
 })

@@ -23,7 +23,7 @@ export const createCursorAdapter = () => {
       return undefined
     }
 
-    // assistant 消息（JSONL 中使用 role 字段）
+    // assistant 消息（Cursor on-disk JSONL 顶层使用 role 字段，终态行才用 type）
     if (obj.role !== "assistant") return undefined
 
     const message = obj.message as Record<string, unknown> | undefined

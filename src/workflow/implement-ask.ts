@@ -1,7 +1,7 @@
 import type { AgentRole, AgentSessionHandle } from "../agent/transcript/types.js"
 import { sendTask, waitForAgentWithMonitor } from "../agent/index.js"
 import { isProtocolError, parseOutcome, type AgentOutcome } from "../lib/outcome-parser.js"
-import { notifyImplementAsk, notifyInvalidOutput, notifyNeedsInput, resetNotifyDedup } from "../notify/index.js"
+import { notifyInvalidOutput, notifyNeedsInput, resetNotifyDedup } from "../notify/index.js"
 import type { WorkflowEventBus } from "./events.js"
 
 export class ImplementAskAbortError extends Error {

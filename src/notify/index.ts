@@ -82,14 +82,6 @@ export const notifyTestStatusComplete = () => {
   )
 }
 
-export const notifyImplementAsk = () => {
-  notify(
-    "编排器",
-    "Implementer 有问题需要确认。",
-    "warning",
-  )
-}
-
 export const notifyError = (errorMessage: string) => {
   const shortMsg = errorMessage.length > 200
     ? `${errorMessage.slice(0, 197)}...`
