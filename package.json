@@ -39,13 +39,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "release": "release-it",
     "prepublishOnly": "npm run test && npm run typecheck && npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "release-it": "^21.0.1"
   },
   "dependencies": {
     "@types/blessed": "^0.1.27",

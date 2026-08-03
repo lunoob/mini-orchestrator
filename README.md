@@ -34,6 +34,18 @@ npm install -g mini-orch
 mini-orch --help
 ```
 
+## 发布
+
+发布命令只允许在 `main` 分支执行：
+
+```bash
+GITHUB_TOKEN=<your-github-token> pnpm release
+```
+
+发布时交互选择 `patch`、`minor` 或 `major`。流程会自动完成版本号更新、测试与类型检查、release commit、`vX.Y.Z` tag、npm 发布、Git push，以及 GitHub Release Notes 生成。
+
+执行前需要完成 npm 登录，并确保 `GITHUB_TOKEN` 具备创建 GitHub Release 和推送 tag 的权限。首次发布前建议先将当前 `0.1.7` 建立为 GitHub Release 基线，后续日志会按相邻 tag 自动生成。
+
 ## 安装 Skill
 
 查看可用 skill：
