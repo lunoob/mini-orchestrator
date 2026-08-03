@@ -9,10 +9,12 @@ const releaseConfig = JSON.parse(readFileSync(path.join(root, ".release-it.json"
 describe("release configuration", () => {
   it("exposes the pnpm release entrypoint", () => {
     expect(packageJson.scripts.release).toBe("tsx scripts/release.ts")
+    expect(packageJson.scripts["release:git"]).toBe("tsx scripts/release-git.ts")
+    expect(packageJson.scripts["release:github"]).toBe("tsx scripts/release-github.ts")
   })
 
-  it("publishes npm and creates a GitHub release with generated notes", () => {
-    expect(releaseConfig.npm).toMatchObject({ publish: true })
+  it("keeps npm publishing separate from the GitHub release", () => {
+    expect(releaseConfig.npm).toMatchObject({ publish: false })
     expect(releaseConfig.github).toMatchObject({
       release: true,
       autoGenerate: true,

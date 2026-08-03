@@ -40,6 +40,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "release": "tsx scripts/release.ts",
+    "release:git": "tsx scripts/release-git.ts",
+    "release:github": "tsx scripts/release-github.ts",
     "prepublishOnly": "npm run test && npm run typecheck && npm run build"
   },
   "devDependencies": {

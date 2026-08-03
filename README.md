@@ -36,7 +36,7 @@ mini-orch --help
 
 ## 发布
 
-发布命令只允许在 `main` 分支执行：
+完整发布命令只允许在 `main` 分支执行：
 
 先复制 `.env.example` 为 `.env`，填入 GitHub token：
 
@@ -44,15 +44,31 @@ mini-orch --help
 cp .env.example .env
 ```
 
-然后执行：
+单独发布 npm 包可以直接执行：
+
+```bash
+pnpm publish
+```
+
+完整发布执行：
 
 ```bash
 pnpm release
 ```
 
-发布时交互选择 `patch`、`minor` 或 `major`。流程会自动完成版本号更新、测试与类型检查、release commit、`vX.Y.Z` tag、npm 发布、Git push，以及 GitHub Release Notes 生成。
+发布时交互选择 `patch`、`minor` 或 `major`。完整流程会依次完成版本号更新、npm 发布、release commit、`vX.Y.Z` tag、Git push，以及 GitHub Release Notes 生成；只有 npm 发布成功后才会创建 commit 和 tag。
 
-执行前需要完成 npm 登录，并确保 `.env` 中的 `GITHUB_TOKEN` 具备创建 GitHub Release 和推送 tag 的权限。shell 中已存在的 `GITHUB_TOKEN` 会优先于 `.env`。首次发布前建议先将当前 `0.1.7` 建立为 GitHub Release 基线，后续日志会按相邻 tag 自动生成。
+各阶段也可以单独重试：
+
+```bash
+pnpm publish                 # 只发布 npm
+pnpm run release:git         # npm 成功后，创建 commit、tag 并 push
+pnpm run release:github      # tag 已存在且已 push 后，只创建 GitHub Release
+```
+
+如果 npm 发布失败，修复问题后重试 `pnpm publish`；如果 GitHub Release 创建失败，只需重试 `pnpm run release:github`，不会再次发布 npm。
+
+完整发布和 GitHub Release 重试需要完成 npm 登录，并确保 `.env` 中的 `GITHUB_TOKEN` 具备创建 GitHub Release 的权限；shell 中已存在的 `GITHUB_TOKEN` 会优先于 `.env`。单独执行 `pnpm publish` 只需要 npm 登录。首次发布前建议先将当前 `0.1.7` 建立为 GitHub Release 基线，后续日志会按相邻 tag 自动生成。
 
 ## 安装 Skill
 
