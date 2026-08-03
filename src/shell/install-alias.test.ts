@@ -20,6 +20,7 @@ describe("buildAliasBlock", () => {
 
     expect(block).toContain(ALIAS_MARKER_START)
     expect(block).toContain(ALIAS_MARKER_END)
+    expect(block).toContain(`alias local-mini-orch='npx tsx ${MAIN_TS_PATH}'`)
     expect(block).toContain(`alias ${ALIAS_NAME}=`)
     expect(block).toContain(MAIN_TS_PATH)
     expect(block).not.toContain("--config")
