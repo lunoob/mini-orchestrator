@@ -57,9 +57,11 @@ export const createBlessedUI = (
   eventBus: WorkflowEventBus,
   blessed: typeof import("blessed"),
 ): TerminalUI => {
-  let timerRunning = false
-  let elapsedMs = 0
-  let timerStart = 0
+  const initialSnapshot = eventBus.getSnapshot()
+  let timerRunning = true
+  let elapsedMs = initialSnapshot.elapsedMs
+  let timerStart = initialSnapshot.startedAt
+  let timerInterval: ReturnType<typeof setInterval> | undefined
   let unsubscribe: (() => void) | null = null
   const logHistory: Array<{ text: string; stream: "stdout" | "stderr" }> = []
 
@@ -172,18 +174,28 @@ export const createBlessedUI = (
     })
   }
 
+  const clearTimerInterval = () => {
+    if (timerInterval !== undefined) {
+      clearInterval(timerInterval)
+      timerInterval = undefined
+    }
+  }
+
   // 停止计时（内部辅助）
   const freezeTimer = () => {
-    if (timerRunning) {
-      timerRunning = false
-      elapsedMs = Date.now() - timerStart
-      clearInterval(timerInterval)
+    if (!timerRunning) {
+      clearTimerInterval()
+      return
     }
+
+    timerRunning = false
+    elapsedMs = Date.now() - timerStart
+    clearTimerInterval()
   }
 
   // 更新状态面板
   const updateStatusBox = (snap: WorkflowSnapshot) => {
-    // 仅在 workflow 真正结束（completed/failed）时冻结计时
+    // 命令计时仅在 workflow 真正结束（completed/failed）时冻结
     // paused 和 needs_input 期间继续累计等待时间
     if (snap.terminalState === "completed" || snap.terminalState === "failed") {
       freezeTimer()
@@ -202,12 +214,7 @@ export const createBlessedUI = (
   }
 
   // 订阅事件
-  unsubscribe = eventBus.subscribe((event) => {
-    // workflow 实际开始执行时启动计时器
-    if (event.type === "workflow_started" && !timerRunning) {
-      timerStart = event.startedAt
-      timerRunning = true
-    }
+  unsubscribe = eventBus.subscribe(() => {
     const snap = eventBus.getSnapshot()
     updateStatusBox(snap)
   })
@@ -248,7 +255,8 @@ export const createBlessedUI = (
   const exitHandler = () => {
     if (tornDown) return
     tornDown = true
-    clearInterval(timerInterval)
+    freezeTimer()
+    clearTimerInterval()
     timerRunning = false
     if (unsubscribe) { unsubscribe(); unsubscribe = null }
     process.removeListener("SIGINT", sigintHandler)
@@ -290,13 +298,13 @@ export const createBlessedUI = (
   process.on("uncaughtException", uncaughtHandler)
 
   // 定时器更新
-  const timerInterval = setInterval(() => {
-    if (timerRunning) {
+  if (timerRunning) {
+    timerInterval = setInterval(() => {
       elapsedMs = Date.now() - timerStart
       const snap = eventBus.getSnapshot()
       updateStatusBox(snap)
-    }
-  }, 1000)
+    }, 1000)
+  }
 
   return {
     getLogSink: () => sink,
@@ -305,9 +313,7 @@ export const createBlessedUI = (
     isTimerRunning: () => timerRunning,
     getElapsedMs: () => elapsedMs,
     stopTimer: () => {
-      timerRunning = false
-      elapsedMs = Date.now() - timerStart
-      clearInterval(timerInterval)
+      freezeTimer()
     },
     teardown: () => {
       exitHandler()

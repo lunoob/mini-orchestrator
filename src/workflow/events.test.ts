@@ -7,6 +7,16 @@ import {
 } from "./events.js"
 
 describe("createWorkflowEventBus", () => {
+  it("uses the command start time as the immutable timer origin", () => {
+    const commandStartedAt = Date.now() - 1_000
+    const bus = createWorkflowEventBus(commandStartedAt)
+
+    expect(bus.getSnapshot().startedAt).toBe(commandStartedAt)
+
+    bus.publish({ type: "phase_change", phase: "implement" })
+    expect(bus.getSnapshot().startedAt).toBe(commandStartedAt)
+  })
+
   it("returns initial snapshot with default values", () => {
     const bus = createWorkflowEventBus()
     const snap = bus.getSnapshot()
@@ -208,6 +218,25 @@ describe("createWorkflowEventBus", () => {
 
     expect(snap2.elapsedMs).toBeGreaterThanOrEqual(snap1.elapsedMs)
     expect(snap2.elapsedMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it("freezes elapsedMs after a terminal event", () => {
+    const startedAt = 1_000
+    vi.useFakeTimers()
+    vi.setSystemTime(startedAt)
+
+    try {
+      const bus = createWorkflowEventBus(startedAt)
+      vi.setSystemTime(startedAt + 250)
+      bus.publish({ type: "complete" })
+
+      const completedElapsed = bus.getSnapshot().elapsedMs
+      vi.setSystemTime(startedAt + 5_000)
+
+      expect(bus.getSnapshot().elapsedMs).toBe(completedElapsed)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("preserves event ordering", async () => {

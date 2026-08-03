@@ -47,6 +47,12 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
   const agent = resolveAgentConfig({
     agent: "codex",
     model: "gpt-5.6-luna",
+
+    // agent: "claude",
+    // model: "haiku",
+
+    // agent: "cursor",
+    // model: "composer-2.5",
     name: "test-status",
   })
 
@@ -82,7 +88,6 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
     })
     started = true
 
-    eventBus?.publish({ type: "workflow_started", startedAt: Date.now() })
     eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
 
     const outputFormat = await loadImplementOutputFormat()

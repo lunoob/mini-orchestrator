@@ -34,6 +34,7 @@ const proxyConsoleToSink = (sink: LogSink): (() => void) => {
 }
 
 export const main = async () => {
+  const commandStartedAt = Date.now()
   const argv = process.argv.slice(2)
 
   if (argv[0] === "skill") {
@@ -58,7 +59,7 @@ export const main = async () => {
 
   // 创建共享事件总线和 terminal UI
   const useBlessedUI = isInteractiveTTY()
-  const eventBus = createWorkflowEventBus()
+  const eventBus = createWorkflowEventBus(commandStartedAt)
   const ui = useBlessedUI
     ? await createTerminalUI(eventBus)
     : (await import("./terminal/ui.js")).createPlainTextUI(eventBus)
@@ -82,6 +83,7 @@ export const main = async () => {
       restoreConsole?.()
     }
   } finally {
+    ui.stopTimer()
     ui.teardown()
   }
 }

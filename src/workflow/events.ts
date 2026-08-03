@@ -53,13 +53,6 @@ export type FailEvent = {
   reason: string
 }
 
-/** Workflow 实际开始执行时发布，供 UI 对齐计时起点 */
-export type WorkflowStartedEvent = {
-  type: "workflow_started"
-  /** Workflow 实际开始时间戳 */
-  startedAt: number
-}
-
 /** 用户在 terminal 面板中的交互操作 */
 export type UserActionEvent = {
   type: "user_action"
@@ -94,7 +87,6 @@ export type WorkflowEvent =
   | CompleteEvent
   | FailEvent
   | UserActionEvent
-  | WorkflowStartedEvent
 
 // ── 快照类型 ──
 
@@ -170,7 +162,7 @@ export type WorkflowEventBus = {
   setInteractionHandler: (handler: ((request: InteractionRequest) => Promise<InteractionResult>) | null) => void
 }
 
-const initialSnapshot = (): WorkflowSnapshot => ({
+const initialSnapshot = (startedAt: number): WorkflowSnapshot => ({
   issueIndex: 0,
   issueCount: 0,
   issueTitle: "",
@@ -182,7 +174,7 @@ const initialSnapshot = (): WorkflowSnapshot => ({
   elapsedMs: 0,
   needsInput: null,
   terminalState: null,
-  startedAt: Date.now(),
+  startedAt,
 })
 
 /** 将 AgentStatus 映射为展示状态 */
@@ -204,12 +196,16 @@ const mapAgentStatus = (status: string): AgentDisplayStatus => {
  * - getSnapshot() 返回当前快照副本
  * - 事件不携带 Blessed 类型
  */
-export const createWorkflowEventBus = (): WorkflowEventBus => {
-  let snapshot = initialSnapshot()
+export const createWorkflowEventBus = (startedAt = Date.now()): WorkflowEventBus => {
+  let snapshot = initialSnapshot(startedAt)
+  let finishedAt: number | undefined
   const subscribers = new Set<WorkflowEventSubscriber>()
   let interactionHandler: ((request: InteractionRequest) => Promise<InteractionResult>) | null = null
+  const getElapsedMs = () => (finishedAt ?? Date.now()) - snapshot.startedAt
 
   const applyToSnapshot = (event: WorkflowEvent) => {
+    const now = Date.now()
+
     switch (event.type) {
       case "issue_change":
         snapshot = {
@@ -263,19 +259,17 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
 
       case "complete":
         snapshot = { ...snapshot, terminalState: "completed" }
+        finishedAt ??= now
         break
 
       case "fail":
         snapshot = { ...snapshot, terminalState: "failed" }
+        finishedAt ??= now
         break
 
-      case "workflow_started":
-        // 以 workflow 实际开始时间作为计时起点，替代 eventBus 创建时间
-        snapshot = { ...snapshot, startedAt: event.startedAt }
-        break
     }
 
-    snapshot = { ...snapshot, elapsedMs: Date.now() - snapshot.startedAt }
+    snapshot = { ...snapshot, elapsedMs: (finishedAt ?? now) - snapshot.startedAt }
   }
 
   return {
@@ -304,10 +298,11 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
       return () => { subscribers.delete(subscriber) }
     },
 
-    getSnapshot: () => ({ ...snapshot, elapsedMs: Date.now() - snapshot.startedAt }),
+    getSnapshot: () => ({ ...snapshot, elapsedMs: getElapsedMs() }),
 
     reset: () => {
-      snapshot = initialSnapshot()
+      finishedAt = undefined
+      snapshot = initialSnapshot(startedAt)
     },
 
     requestInteraction: (request) => {
