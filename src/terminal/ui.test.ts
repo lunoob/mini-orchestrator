@@ -77,7 +77,6 @@ const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnap
   reviewerStatus: "idle",
   elapsedMs: 65000,
   needsInput: null,
-  invalidOutput: null,
   terminalState: null,
   startedAt: Date.now() - 65000,
   ...overrides,
@@ -299,29 +298,6 @@ describe("TerminalUI", () => {
       const content = statusBox.setContent.mock.calls[lastCall][0] as string
       expect(content).toContain("implementer")
       expect(content).toContain("Which database?")
-    })
-
-    it("handles invalid_output state", () => {
-      const blessed = createMockBlessed()
-      const statusBox = { setContent: vi.fn(), height: 1 }
-      blessed.box.mockReturnValue(statusBox)
-
-      const eventBus = createEventBus()
-      const ui = createBlessedUI(eventBus, blessed)
-
-      ui.updateStatus(createSnapshot({
-        reviewerStatus: "invalid_output",
-        invalidOutput: {
-          agent: "reviewer",
-          provider: "codex",
-          reason: "Missing STATUS",
-        },
-      }))
-
-      const lastCall = statusBox.setContent.mock.calls.length - 1
-      const content = statusBox.setContent.mock.calls[lastCall][0] as string
-      expect(content).toContain("reviewer")
-      expect(content).toContain("Missing STATUS")
     })
 
     it("shows terminal state when workflow completes", () => {

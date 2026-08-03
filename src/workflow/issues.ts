@@ -9,13 +9,14 @@ import {
   stopAgent,
 } from "../agent/index.js"
 import type { OutputCallback } from "../agent/index.js"
+import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { createSession } from "../agent/session.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
-import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
 import { render } from "../lib/utils.js"
+import { parseStatus } from "../lib/status-parser.js"
 import { notifyIssueComplete } from "../notify/index.js"
-import { handleIntervention, defaultImplementAskDeps } from "./implement-ask.js"
+import { handleNeedsInputGate, ensureStatusRetry, defaultImplementAskDeps, type ImplementAskDeps } from "./implement-ask.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -37,6 +38,78 @@ const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
     { ensureUniqueName: true },
   )
   // 不再等待 Herdr 状态：Agent 启动后直接发 task，monitor 以 JSONL 首次事件确认为准
+}
+
+/**
+ * 处理 implementer 的 STATUS 输出直到终态（IMPLEMENT_DONE / 抛错）。
+ *
+ * - IMPLEMENT_ASK → 门卫；用户 yes 后重新解析，可能再次 ASK/FAILED → 循环
+ * - IMPLEMENT_FAILED → 终止 workflow
+ * - 无 STATUS → 重试补标记
+ */
+const settleImplementer = async (
+  runtime: WorkflowRuntime,
+  initialOutput: string,
+  initialStatus: string,
+  sh: AgentSessionHandle,
+  depsWithBus: ImplementAskDeps,
+  issue: IssueConfig,
+) => {
+  let currentOutput = initialOutput
+  let currentStatus = initialStatus
+
+  while (true) {
+    const parsed = parseStatus(currentOutput, "implementer")
+
+    // 原生提问（monitor 级）→ 通用门卫，再次展示 yes/no
+    if (currentStatus === "needs_input") {
+      const reason = "Agent 需要人工处理"
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
+      runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
+      runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
+      const gated = await handleNeedsInputGate(
+        "implementer", runtime.implementerPane, "implement", sh,
+        depsWithBus, reason,
+      )
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+      currentOutput = gated.finalText
+      currentStatus = gated.status
+      continue
+    }
+
+    if (parsed.status === "IMPLEMENT_ASK") {
+      const reason = "Agent 需要人工处理"
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
+      runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
+      runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
+      const gated = await handleNeedsInputGate(
+        "implementer", runtime.implementerPane, "implement", sh,
+        depsWithBus, reason,
+      )
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+      currentOutput = gated.finalText
+      currentStatus = gated.status
+      continue
+    }
+
+    if (parsed.status === "IMPLEMENT_FAILED") {
+      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
+      runtime.eventBus.publish({ type: "fail", reason: "Implementer reported IMPLEMENT_FAILED" })
+      throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
+    }
+
+    if (!parsed.status) {
+      // 无 STATUS 标记 → 重试补标记；补标记后可能又 needs_input，循环处理
+      const retried = await ensureStatusRetry("implementer", runtime.implementerPane, currentOutput, "implement", sh, depsWithBus)
+      currentOutput = retried.finalText
+      currentStatus = retried.status
+      continue
+    }
+
+    // IMPLEMENT_DONE → 完成
+    runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+    return
+  }
 }
 
 const runSingleSpecCycle = async (
@@ -74,59 +147,24 @@ const runSingleSpecCycle = async (
 
     const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
 
-    // 先检查 monitor 级状态，再解析输出（agent 原生提问/失败时 finalText 可能为空/非 JSON）
-    if (monitorStatus === "needs_input") {
+    // 先检查 monitor 级状态，再解析 STATUS 标记
+    if (monitorStatus === "needs_input" || monitorStatus === "failed") {
+      if (monitorStatus === "failed") {
+        // P2-4: 优先使用 lastEvent.reason（Claude/Codex 失败原因），其次 question，最后兜底
+        const failReason = failReasonFromMonitor ?? question ?? "unknown error"
+        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
+        runtime.eventBus.publish({ type: "fail", reason: `Implementer failed: ${failReason}` })
+        throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
+      }
+      // monitor 级 needs_input（原生提问）→ 门卫 + settle 循环
       const reason = question ?? "需要人工确认"
       runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
       runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
       runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
-      await handleIntervention(
-        "implementer", runtime.implementerPane, finalText, "implement", sh,
-        depsWithBus, reason, false,
-      )
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-    } else if (monitorStatus === "failed") {
-      // P2-4: 优先使用 lastEvent.reason（Claude/Codex 失败原因），其次 question，最后兜底
-      const failReason = failReasonFromMonitor ?? question ?? "unknown error"
-      runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
-      runtime.eventBus.publish({ type: "fail", reason: `Implementer failed: ${failReason}` })
-      throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
+      await settleImplementer(runtime, finalText, monitorStatus, sh, depsWithBus, issue)
     } else {
-      // monitor 状态正常，解析输出
-      const result = parseOutcome(finalText, "implementer")
-
-      if (isProtocolError(result)) {
-        // 协议错误 → intervention（不终止流程）
-        const reason = result.reason
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "invalid_output" })
-        runtime.eventBus.publish({ type: "invalid_output", agent: "implementer", provider: sh.provider, reason })
-        runtime.eventBus.publish({ type: "pause", reason: `implementer protocol_error: ${reason}` })
-        await handleIntervention(
-          "implementer", runtime.implementerPane, finalText, "implement", sh,
-          depsWithBus, reason, true,
-        )
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-      } else if (result.outcome === "needs_input") {
-        const reason = result.request.question
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "needs_input" })
-        runtime.eventBus.publish({ type: "needs_input", agent: "implementer", provider: sh.provider, reason })
-        runtime.eventBus.publish({ type: "pause", reason: `implementer needs_input: ${reason}` })
-        await handleIntervention(
-          "implementer", runtime.implementerPane, finalText, "implement", sh,
-          depsWithBus, reason, false,
-        )
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-      } else if (result.outcome === "failed") {
-        const failReason = result.failure.message
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "failed" })
-        runtime.eventBus.publish({ type: "fail", reason: `Implementer failed: ${failReason}` })
-        throw new Error(`[Implement] Implementer failed for issue "${issue.title}". Stopping workflow.`)
-      } else {
-        runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-      }
+      // monitor 状态正常，解析 STATUS 标记
+      await settleImplementer(runtime, finalText, monitorStatus, sh, depsWithBus, issue)
     }
   }
 

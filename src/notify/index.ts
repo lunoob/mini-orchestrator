@@ -94,7 +94,7 @@ export const notifyError = (errorMessage: string) => {
   )
 }
 
-// ── needs_input / invalid_output 通知 + 去重 ──
+// ── needs_input 通知 + 去重 ──
 
 /** 通知去重器：按 key 确保同一 agent 同一 turn 只通知一次 */
 export type NotifyDedup = {
@@ -143,25 +143,6 @@ export const notifyNeedsInput = (
       "编排器",
       `[${role}/${provider}]${paneInfo} 需要人工输入: ${reason}`,
       "warning",
-    )
-  })
-}
-
-export const notifyInvalidOutput = (
-  role: string,
-  provider: string,
-  reason: string,
-  resumeId?: string,
-  paneId?: string,
-  turnId?: string,
-) => {
-  const key = `invalid_output:${role}:${provider}:${resumeId ?? "unknown"}:${turnId ?? "0"}`
-  globalDedup.notifyOnce(key, () => {
-    const paneInfo = paneId ? ` (pane: ${paneId})` : ""
-    notify(
-      "编排器",
-      `[${role}/${provider}]${paneInfo} 输出无效: ${reason}`,
-      "error",
     )
   })
 }

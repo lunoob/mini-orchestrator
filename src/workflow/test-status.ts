@@ -14,8 +14,9 @@ import {
 } from "../agent/index.js"
 import type { OutputCallback } from "../agent/index.js"
 import { resolveAgentConfig } from "../config/agents.js"
-import { isProtocolError, parseOutcome } from "../lib/outcome-parser.js"
-import { printSection, stripAgentOutcome } from "../lib/utils.js"
+import { parseStatus } from "../lib/status-parser.js"
+import { printSection, stripStatus } from "../lib/utils.js"
+import { CONTINUATION_PROMPT } from "./implement-ask.js"
 import type { ParsedArgs } from "../types.js"
 import type { WorkflowEventBus } from "./events.js"
 
@@ -95,24 +96,19 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
     let currentQuestion: string | undefined = firstResult.question
 
     while (true) {
-      // 优先 monitor 状态，再通过 AgentOutcome 判断
-      const tempResult = parseOutcome(currentOutput, "implementer")
-      const outcomeOutcome = isProtocolError(tempResult) ? "failed" : tempResult.outcome
+      // 优先 monitor 状态，再通过 STATUS 标记判断
+      const parsed = parseStatus(currentOutput, "implementer")
       const effectiveStatus = currentMonitorStatus === "failed" ? "failed"
         : currentMonitorStatus === "needs_input" ? "needs_input"
-        : outcomeOutcome === "completed" ? "done"
-        : outcomeOutcome === "needs_input" ? "needs_input"
-        : outcomeOutcome === "failed" ? "failed"
+        : parsed.status === "IMPLEMENT_DONE" ? "done"
+        : parsed.status === "IMPLEMENT_ASK" ? "needs_input"
+        : parsed.status === "IMPLEMENT_FAILED" ? "failed"
         : "unknown"
 
-      console.log(`[TestStatus] Status: ${effectiveStatus} (monitor=${currentMonitorStatus}, outcome=${outcomeOutcome})`)
-      printSection("TestStatus Output", stripAgentOutcome(currentOutput))
+      console.log(`[TestStatus] Status: ${effectiveStatus} (monitor=${currentMonitorStatus}, status=${parsed.status})`)
+      printSection("TestStatus Output", stripStatus(currentOutput, "implementer"))
 
       if (effectiveStatus === "done") {
-        // 用户手动注释的
-        // eventBus?.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
-        // eventBus?.publish({ type: "complete" })
-        // failPublished = false
         console.log("[TestStatus] Agent completed idle cycle successfully")
         break
       }
@@ -131,27 +127,22 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
           throw new Error("[TestStatus] Agent needs_input (no panel available)")
         }
 
-        // 面板展示问题，收集用户回答
+        // 面板展示 yes/no 门卫
         const result = await eventBus.requestInteraction({
-          prompt: `Agent 提问: ${reason}\n请在 pane 中处理后选择继续，或输入回答文本`,
+          prompt: `Agent 提问: ${reason}\n请在 pane 中处理后选择是否继续`,
           agent: "implementer",
-          actions: ["continue", "abort"],
-          textOptional: true,
-          textInputPlaceholder: "回答（可选，将发送给 Agent）",
+          actions: ["yes", "no"],
         })
 
-        if (result.action === "abort") {
+        if (result.action !== "yes") {
           throw new Error("[TestStatus] User aborted after needs_input")
         }
 
-        // 用户选择继续：发送回答（若有）+ continuation prompt，继续监控
+        // 用户选择继续：发 continuation prompt，继续监控
         eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
         console.log("[TestStatus] User chose to continue, sending continuation prompt...")
 
-        const userMsg: Record<string, unknown> = { type: "user_response" }
-        if (result.text) userMsg.text = result.text
-        const continuationText = `${JSON.stringify(userMsg)}\nBased on the user's response above, continue with the previous task. Output the outcome as a JSON object with the required schema.`
-        await sendTask(paneId, continuationText)
+        await sendTask(paneId, CONTINUATION_PROMPT)
 
         const continuation = await waitForAgentWithMonitor(sessionHandle)
         sessionHandle.offset = continuation.finalOffset

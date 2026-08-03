@@ -21,7 +21,6 @@ describe("createWorkflowEventBus", () => {
     expect(snap.reviewerStatus).toBe("idle")
     expect(snap.terminalState).toBeNull()
     expect(snap.needsInput).toBeNull()
-    expect(snap.invalidOutput).toBeNull()
     expect(snap.startedAt).toBeLessThanOrEqual(Date.now())
   })
 
@@ -127,26 +126,6 @@ describe("createWorkflowEventBus", () => {
 
     bus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
     expect(bus.getSnapshot().needsInput).toBeNull()
-  })
-
-  it("updates snapshot on invalid_output and clears on resume", () => {
-    const bus = createWorkflowEventBus()
-
-    bus.publish({
-      type: "invalid_output",
-      agent: "reviewer",
-      provider: "codex",
-      reason: "Missing STATUS",
-    })
-
-    expect(bus.getSnapshot().invalidOutput).toEqual({
-      agent: "reviewer",
-      provider: "codex",
-      reason: "Missing STATUS",
-    })
-
-    bus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
-    expect(bus.getSnapshot().invalidOutput).toBeNull()
   })
 
   it("updates snapshot terminalState on complete/fail/pause", () => {
@@ -350,34 +329,6 @@ describe("WorkflowEventBus integration", () => {
     expect(bus.getSnapshot().implementerStatus).toBe("working")
   })
 
-  it("publishes invalid_output event with correct snapshot update", async () => {
-    const bus = createWorkflowEventBus()
-    const received: WorkflowEvent[] = []
-    bus.subscribe((e) => { received.push(e) })
-
-    bus.publish({ type: "phase_change", phase: "review" })
-    bus.publish({ type: "review_round_change", round: 2, maxRounds: 8 })
-    bus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
-    // agent_state_change 设置状态，invalid_output 设置详情
-    bus.publish({ type: "agent_state_change", agent: "reviewer", status: "invalid_output" })
-    bus.publish({
-      type: "invalid_output",
-      agent: "reviewer",
-      provider: "codex",
-      reason: "Missing STATUS marker",
-    })
-
-    await new Promise((r) => setTimeout(r, 20))
-
-    const snap = bus.getSnapshot()
-    expect(snap.reviewerStatus).toBe("invalid_output")
-    expect(snap.invalidOutput).toEqual({
-      agent: "reviewer",
-      provider: "codex",
-      reason: "Missing STATUS marker",
-    })
-  })
-
   it("handles review loop with multiple rounds", async () => {
     const bus = createWorkflowEventBus()
     const received: WorkflowEvent[] = []
@@ -437,7 +388,6 @@ describe("WorkflowSnapshot", () => {
       "reviewerStatus",
       "elapsedMs",
       "needsInput",
-      "invalidOutput",
       "terminalState",
       "startedAt",
     ]

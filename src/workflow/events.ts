@@ -39,13 +39,6 @@ export type NeedsInputEvent = {
   reason: string
 }
 
-export type InvalidOutputEvent = {
-  type: "invalid_output"
-  agent: "implementer" | "reviewer"
-  provider: string
-  reason: string
-}
-
 export type PauseEvent = {
   type: "pause"
   reason: string
@@ -77,38 +70,18 @@ export type UserActionEvent = {
 }
 
 /**
- * 结构化交互请求。
+ * 交互请求。
  *
  * 由 workflow 发起，terminal UI 展示并收集用户输入。
  */
-export type RequestOptionItem = {
-  id: string
-  label: string
-  description?: string
-}
-
 export type InteractionRequest = {
   prompt: string
   actions?: string[]
   agent: "implementer" | "reviewer"
-  textRequiredFor?: string[]
-  textOptional?: boolean
-  textInputPlaceholder?: string
-  /** 结构化选项（含描述） */
-  requestOptions?: RequestOptionItem[]
-  /** 推荐项 ID */
-  recommendation?: string
-  /** 是否允许自由输入 */
-  allowFreeform?: boolean
-  /** 文本输入提示 */
-  inputHint?: string
 }
 
 export type InteractionResult = {
   action: string
-  text?: string
-  /** 选中的结构化选项 ID */
-  optionId?: string
 }
 
 export type WorkflowEvent =
@@ -117,7 +90,6 @@ export type WorkflowEvent =
   | ReviewRoundChangeEvent
   | AgentStateChangeEvent
   | NeedsInputEvent
-  | InvalidOutputEvent
   | PauseEvent
   | CompleteEvent
   | FailEvent
@@ -127,20 +99,13 @@ export type WorkflowEvent =
 // ── 快照类型 ──
 
 /** Agent 在快照中的展示状态 */
-export type AgentDisplayStatus = "idle" | "working" | "completed" | "failed" | "needs_input" | "invalid_output"
+export type AgentDisplayStatus = "idle" | "working" | "completed" | "failed" | "needs_input"
 
 /** Workflow 阶段 */
 export type WorkflowPhase = "idle" | "implement" | "review" | "revise" | "post-check" | "controller-revise"
 
 /** 需要人工输入的详情 */
 export type NeedsInputDetail = {
-  agent: "implementer" | "reviewer"
-  provider: string
-  reason: string
-}
-
-/** 无效输出的详情 */
-export type InvalidOutputDetail = {
   agent: "implementer" | "reviewer"
   provider: string
   reason: string
@@ -171,8 +136,6 @@ export type WorkflowSnapshot = {
   elapsedMs: number
   /** 需要人工输入详情（null = 无） */
   needsInput: NeedsInputDetail | null
-  /** 无效输出详情（null = 无） */
-  invalidOutput: InvalidOutputDetail | null
   /** workflow 终态（null = 进行中） */
   terminalState: "completed" | "failed" | "paused" | null
   /** workflow 开始时间戳 */
@@ -218,7 +181,6 @@ const initialSnapshot = (): WorkflowSnapshot => ({
   reviewerStatus: "idle",
   elapsedMs: 0,
   needsInput: null,
-  invalidOutput: null,
   terminalState: null,
   startedAt: Date.now(),
 })
@@ -230,7 +192,6 @@ const mapAgentStatus = (status: string): AgentDisplayStatus => {
     case "completed": return "completed"
     case "failed": return "failed"
     case "needs_input": return "needs_input"
-    case "invalid_output": return "invalid_output"
     default: return "idle"
   }
 }
@@ -277,9 +238,9 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
         snapshot = {
           ...snapshot,
           [key]: status,
-          // agent 重新开始工作时清除 needsInput/invalidOutput，并恢复 paused 状态
+          // agent 重新开始工作时清除 needsInput，并恢复 paused 状态
           ...(event.status === "working"
-            ? { needsInput: null, invalidOutput: null, terminalState: null }
+            ? { needsInput: null, terminalState: null }
             : {}),
         }
         break
@@ -289,17 +250,6 @@ export const createWorkflowEventBus = (): WorkflowEventBus => {
         snapshot = {
           ...snapshot,
           needsInput: {
-            agent: event.agent,
-            provider: event.provider,
-            reason: event.reason,
-          },
-        }
-        break
-
-      case "invalid_output":
-        snapshot = {
-          ...snapshot,
-          invalidOutput: {
             agent: event.agent,
             provider: event.provider,
             reason: event.reason,

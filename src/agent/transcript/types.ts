@@ -1,5 +1,5 @@
 /** 统一 Agent 状态 */
-export type AgentStatus = "working" | "completed" | "failed" | "needs_input" | "invalid_output"
+export type AgentStatus = "working" | "completed" | "failed" | "needs_input"
 
 /** JSONL 事件：adapter 处理每一行 JSONL 后产出的事件 */
 export type TranscriptEvent = {
@@ -9,7 +9,7 @@ export type TranscriptEvent = {
   text?: string
   /** needs_input 时的提问详情 */
   question?: string
-  /** invalid_output 时的原因描述 */
+  /** failed 时的原因描述 */
   reason?: string
 }
 

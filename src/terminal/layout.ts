@@ -123,14 +123,6 @@ export const formatStatusLine = (snap: WorkflowSnapshot, _cols: number): string 
     }
   }
 
-  // Invalid output details
-  if (snap.invalidOutput) {
-    const reasonLines = snap.invalidOutput.reason.split("\n")
-    for (const line of reasonLines) {
-      parts.push(`${snap.invalidOutput.agent}(${snap.invalidOutput.provider}): ${line}`)
-    }
-  }
-
   return parts.join(" | ")
 }
 
@@ -213,7 +205,7 @@ const wrapText = (text: string, maxWidth: number): string[] => {
   return lines
 }
 
-/** 格式化交互请求（prompt + 结构化选项） */
+/** 格式化交互请求（prompt + 按钮选项） */
 export const formatInteractionRequest = (req: InteractionRequest): string[] => {
   const lines: string[] = []
 
@@ -221,26 +213,9 @@ export const formatInteractionRequest = (req: InteractionRequest): string[] => {
     lines.push(line)
   }
 
-  // 渲染结构化选项（带数字键 + label + description）
-  if (req.requestOptions && req.requestOptions.length > 0) {
-    lines.push("")
-    req.requestOptions.forEach((opt, i) => {
-      const marker = req.recommendation === opt.id ? " ★" : ""
-      const desc = opt.description ? ` — ${opt.description}` : ""
-      lines.push(`  [${i + 1}] ${opt.label}${marker}${desc}`)
-    })
-    if (req.allowFreeform) {
-      const idx = req.requestOptions!.length + 1
-      lines.push(`  [${idx}] 其他（自由输入）`)
-    }
-    lines.push("")
-  } else if (req.actions && req.actions.length > 0) {
+  if (req.actions && req.actions.length > 0) {
     const actionParts = req.actions.map((a, i) => `[${i + 1}]${a}`)
     lines.push(actionParts.join(" "))
-  }
-
-  if (req.textRequiredFor || req.textOptional) {
-    lines.push(req.textInputPlaceholder ?? "输入文本后按 Enter 提交")
   }
 
   return lines

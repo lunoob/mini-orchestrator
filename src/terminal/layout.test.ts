@@ -14,7 +14,6 @@ const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnap
   reviewerStatus: "idle",
   elapsedMs: 65000,
   needsInput: null,
-  invalidOutput: null,
   terminalState: null,
   startedAt: Date.now() - 65000,
   ...overrides,
@@ -123,21 +122,6 @@ describe("formatStatusLine", () => {
     expect(line).toContain("Which database?")
   })
 
-  it("includes invalid_output info when present", () => {
-    const snap = createSnapshot({
-      reviewerStatus: "invalid_output",
-      invalidOutput: {
-        agent: "reviewer",
-        provider: "codex",
-        reason: "Missing STATUS",
-      },
-    })
-    const line = formatStatusLine(snap, 80)
-
-    expect(line).toContain("reviewer")
-    expect(line).toContain("Missing STATUS")
-  })
-
   it("splits multi-line reason into separate segments", () => {
     const snap = createSnapshot({
       implementerStatus: "needs_input",
@@ -232,21 +216,6 @@ describe("calculateLayout", () => {
 
     // Multi-line reason should produce more panel lines
     expect(multiLayout.panelHeight).toBeGreaterThan(singleLayout.panelHeight)
-  })
-
-  it("adjusts panel height for invalid_output details", () => {
-    const snap = createSnapshot({
-      reviewerStatus: "invalid_output",
-      invalidOutput: {
-        agent: "reviewer",
-        provider: "codex",
-        reason: "Missing STATUS",
-      },
-    })
-    const layout = calculateLayout(snap, 80, 24)
-
-    const normalLayout = calculateLayout(createSnapshot(), 80, 24)
-    expect(layout.panelHeight).toBeGreaterThanOrEqual(normalLayout.panelHeight)
   })
 
   it("handles very narrow terminal", () => {

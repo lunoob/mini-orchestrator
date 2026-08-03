@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest"
 import {
   buildNotificationCommand,
   createNotifyDedup,
-  notifyInvalidOutput,
   notifyNeedsInput,
   resetNotifyDedup,
 } from "./index.js"
@@ -79,10 +78,4 @@ describe("notify dedup", () => {
     expect(() => notifyNeedsInput("implementer", "claude", "test reason")).not.toThrow()
   })
 
-  it("global notifyInvalidOutput respects dedup", () => {
-    resetNotifyDedup()
-
-    expect(() => notifyInvalidOutput("reviewer", "codex", "invalid status")).not.toThrow()
-    expect(() => notifyInvalidOutput("reviewer", "codex", "invalid status")).not.toThrow()
-  })
 })

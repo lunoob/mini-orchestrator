@@ -148,20 +148,9 @@ export const createBlessedUI = (
   // 交互处理：注册 interaction handler 供 workflow 的 requestInteraction 使用
   let pendingResolve: ((result: InteractionResult) => void) | null = null
   let currentRequest: InteractionRequest | null = null
-  let textInputMode = false
-  let textInputValue = ""
-  let selectedAction: string | null = null
 
   eventBus.setInteractionHandler((request) => {
     currentRequest = request
-    textInputValue = ""
-    selectedAction = null
-    // 无按钮时自动进入文本输入模式
-    const hasActions = request.actions && request.actions.length > 0
-    textInputMode = !hasActions
-    if (!hasActions) {
-      selectedAction = "submit"
-    }
     // 立即刷新面板以显示交互请求
     const snap = eventBus.getSnapshot()
     updateStatusBox(snap)
@@ -173,84 +162,15 @@ export const createBlessedUI = (
   // 数字键选择选项
   for (let i = 1; i <= 9; i++) {
     screen.key([String(i)], () => {
-      if (textInputMode) return
       if (!pendingResolve || !currentRequest?.actions) return
       if (i > currentRequest.actions.length) return
 
       const action = currentRequest.actions[i - 1]
-      // "other" 选项或必填文本选项 → 进入文本输入模式
-      const needsText = action === "other" || currentRequest.textRequiredFor?.includes(action) === true
-      if (needsText) {
-        selectedAction = action
-        textInputMode = true
-        textInputValue = ""
-        updateStatusBox(eventBus.getSnapshot())
-        return
-      }
-      // 预设选项：直接 resolve
-      // 仅当有 requestOptions 时附带 optionId（用于结构化选项回传）
-      const hasStructuredOptions = currentRequest.requestOptions && currentRequest.requestOptions.length > 0
-      pendingResolve({ action, optionId: hasStructuredOptions ? action : undefined })
+      pendingResolve({ action })
       pendingResolve = null
       currentRequest = null
     })
   }
-
-  // 文本输入模式下的键盘处理
-  // ch 为实际字符（含空格、大写），key 用于识别控制键
-  screen.on("keypress", (ch: string, key: { name: string; ctrl?: boolean }) => {
-    if (!textInputMode || !pendingResolve) return
-
-    if (key.name === "return" || key.name === "enter") {
-      // Enter 提交，使用之前选中的 action
-      if (!selectedAction) return
-      const hasText = textInputValue.trim().length > 0
-      const isRequired = currentRequest?.textRequiredFor?.includes(selectedAction)
-      // 必填文本模式要求非空；可选文本模式允许空文本
-      if (hasText || (!isRequired && currentRequest?.textOptional)) {
-        pendingResolve({ action: selectedAction, text: textInputValue.trim() || undefined })
-        pendingResolve = null
-        currentRequest = null
-        selectedAction = null
-        textInputMode = false
-        textInputValue = ""
-      }
-      return
-    }
-
-    if (key.name === "escape") {
-      // 无按钮模式：Esc 直接取消交互（workflow 不阻塞）
-      if (!currentRequest?.actions?.length) {
-        if (pendingResolve) {
-          pendingResolve({ action: "abort" })
-          pendingResolve = null
-          currentRequest = null
-        }
-        return
-      }
-      // 有按钮模式：Esc 退出文本输入，回到按钮选择
-      textInputMode = false
-      textInputValue = ""
-      selectedAction = null
-      const snap = eventBus.getSnapshot()
-      updateStatusBox(snap)
-      return
-    }
-
-    if (key.name === "backspace") {
-      textInputValue = textInputValue.slice(0, -1)
-      const snap = eventBus.getSnapshot()
-      updateStatusBox(snap)
-      return
-    }
-
-    // 用 ch 追加可打印字符（含空格、大写、符号等）
-    if (ch && !key.ctrl) {
-      textInputValue += ch
-      const snap = eventBus.getSnapshot()
-      updateStatusBox(snap)
-    }
-  })
 
   // 停止计时（内部辅助）
   const freezeTimer = () => {
@@ -269,31 +189,14 @@ export const createBlessedUI = (
       freezeTimer()
     }
 
-    // 构建带文本输入状态的交互请求
-    let displayRequest = currentRequest
-    if (textInputMode && currentRequest) {
-      displayRequest = {
-        ...currentRequest,
-        prompt: currentRequest.prompt,
-        // 在 actions 后追加文本输入显示
-      }
-    }
-
-    const layout = calculateLayout(snap, screen.cols, screen.rows, displayRequest)
-
-    // 在文本输入模式下追加输入行（显示已选 action）
-    const displayLines = [...layout.lines]
-    if (textInputMode) {
-      const actionLabel = selectedAction ? `[${selectedAction}] ` : ""
-      displayLines.push(`${actionLabel}> ${textInputValue}█`)
-    }
+    const layout = calculateLayout(snap, screen.cols, screen.rows, currentRequest)
 
     // 更新状态面板内容和高度
-    statusBox.setContent(displayLines.join("\n"))
-    statusBox.height = displayLines.length
+    statusBox.setContent(layout.lines.join("\n"))
+    statusBox.height = layout.lines.length
 
     // 更新日志区高度
-    logWidget.height = Math.max(0, screen.rows - displayLines.length)
+    logWidget.height = Math.max(0, screen.rows - layout.lines.length)
 
     screen.render()
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { extractOutcomeSummary, render, stripAgentOutcome } from "./utils.js"
+import { extractStatusSummary, render, stripStatus } from "./utils.js"
 
 describe("render", () => {
   it("replaces provided keys only", () => {
@@ -12,43 +12,26 @@ describe("render", () => {
   })
 })
 
-describe("stripAgentOutcome", () => {
-  it("removes trailing JSON outcome block", () => {
-    expect(stripAgentOutcome('晴天\n{"outcome":"completed"}')).toBe("晴天")
+describe("stripStatus", () => {
+  it("removes STATUS line and keeps body", () => {
+    expect(stripStatus("晴天\nSTATUS: IMPLEMENT_DONE", "implementer")).toBe("晴天")
   })
 
-  it("keeps normal JSON that is not at the end", () => {
-    expect(stripAgentOutcome('{"key":"val"}\n晴天\n{"outcome":"completed"}')).toBe('{"key":"val"}\n晴天')
-  })
-
-  it("returns original when no JSON at end", () => {
-    expect(stripAgentOutcome("no json here")).toBe("no json here")
+  it("returns original when no STATUS line", () => {
+    expect(stripStatus("no status here", "implementer")).toBe("no status here")
   })
 })
 
-describe("extractOutcomeSummary", () => {
-  it("shows REVIEW_PASS for completed with pass verdict", () => {
-    const output = '{"outcome":"completed","summary":"ok","review":{"verdict":"pass"}}'
-    expect(extractOutcomeSummary(output)).toBe("REVIEW_PASS")
+describe("extractStatusSummary", () => {
+  it("shows STATUS for implementer done", () => {
+    expect(extractStatusSummary("STATUS: IMPLEMENT_DONE", "implementer")).toBe("IMPLEMENT_DONE")
   })
 
-  it("shows REVIEW_FAIL for completed with fail verdict", () => {
-    const output = '{"outcome":"completed","summary":"bad","review":{"verdict":"fail"}}'
-    expect(extractOutcomeSummary(output)).toBe("REVIEW_FAIL")
+  it("shows REVIEW_PASS for reviewer", () => {
+    expect(extractStatusSummary("STATUS: REVIEW_PASS", "reviewer")).toBe("REVIEW_PASS")
   })
 
-  it("shows IMPLEMENT_DONE for completed without review", () => {
-    const output = '{"outcome":"completed","summary":"done"}'
-    expect(extractOutcomeSummary(output)).toBe("IMPLEMENT_DONE")
-  })
-
-  it("shows question for needs_input", () => {
-    const output = '{"outcome":"needs_input","summary":"help","request":{"question":"Which way?","allowFreeform":true}}'
-    expect(extractOutcomeSummary(output)).toContain("Which way?")
-  })
-
-  it("shows error for failed", () => {
-    const output = '{"outcome":"failed","summary":"failed","failure":{"message":"API error"}}'
-    expect(extractOutcomeSummary(output)).toContain("API error")
+  it("shows no status when missing", () => {
+    expect(extractStatusSummary("nothing", "reviewer")).toBe("(no status)")
   })
 })
