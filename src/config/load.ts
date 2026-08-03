@@ -60,6 +60,14 @@ const parseFinalMaxRounds = (value: unknown) => {
   return value
 }
 
+const parseFinalGateEnabled = (value: unknown) => {
+  if (value === undefined) return true
+  if (typeof value !== "boolean") {
+    throw new Error("[Config] finalGate.enabled must be a boolean")
+  }
+  return value
+}
+
 /**
  * 解析 finalGate：缺省或 enabled: false 时返回 undefined（完全保持旧行为）；
  * 启用时必须提供完整的 reviewer / fixer 角色配置，缺少任一字段即在加载阶段报错。
@@ -70,7 +78,7 @@ const parseFinalGate = (raw: unknown, resolveAgentInput: (input: AgentInputConfi
     throw new Error("[Config] finalGate must be an object")
   }
   const gate = raw as FinalGateInputConfig
-  if (gate.enabled === false) return undefined
+  if (!parseFinalGateEnabled(gate.enabled)) return undefined
 
   const resolveFinalRole = (input: AgentInputConfig | undefined, role: string): AgentConfig => {
     if (!input || typeof input !== "object") {

@@ -224,6 +224,14 @@ describe("finalGate", () => {
     expect(config.finalGate).toBeUndefined()
   })
 
+  it("rejects non-boolean enabled values", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    await mkdir(dir, { recursive: true })
+    const configPath = writeConfigWithSpec(dir, { finalGate: { enabled: "false" } })
+
+    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.enabled must be a boolean/)
+  })
+
   it("throws when enabled finalGate is missing reviewer", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
     await mkdir(dir, { recursive: true })
