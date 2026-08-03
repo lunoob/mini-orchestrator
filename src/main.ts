@@ -2,6 +2,8 @@ import { format } from "node:util"
 
 import { notifyError, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
+import { formatCommandDuration } from "./lib/command-duration.js"
+import { registerNonInteractiveSignalHandlers } from "./lib/command-signals.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runSkillCli } from "./cli/skill.js"
 import { AgentFailError, ImplementAskAbortError } from "./workflow/implement-ask.js"
@@ -34,7 +36,6 @@ const proxyConsoleToSink = (sink: LogSink): (() => void) => {
 }
 
 export const main = async () => {
-  const commandStartedAt = Date.now()
   const argv = process.argv.slice(2)
 
   if (argv[0] === "skill") {
@@ -47,6 +48,16 @@ export const main = async () => {
     return
   }
 
+  const commandStartedAt = Date.now()
+  // 在 process.exit 阶段输出，确保正常、异常和信号退出时都位于 UI 日志之后。
+  process.once("exit", () => {
+    process.stdout.write(`${formatCommandDuration(Date.now() - commandStartedAt)}\n`)
+  })
+  const useBlessedUI = isInteractiveTTY()
+  const removeSignalHandlers = useBlessedUI
+    ? undefined
+    : registerNonInteractiveSignalHandlers(process)
+
   assertHerdrEnv()
 
   const args = parseArgs(argv)
@@ -58,7 +69,6 @@ export const main = async () => {
   }
 
   // 创建共享事件总线和 terminal UI
-  const useBlessedUI = isInteractiveTTY()
   const eventBus = createWorkflowEventBus(commandStartedAt)
   const ui = useBlessedUI
     ? await createTerminalUI(eventBus)
@@ -83,6 +93,7 @@ export const main = async () => {
       restoreConsole?.()
     }
   } finally {
+    removeSignalHandlers?.()
     ui.stopTimer()
     ui.teardown()
   }
