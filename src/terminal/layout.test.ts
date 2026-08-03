@@ -65,6 +65,11 @@ describe("formatStatusLine", () => {
     expect(line).toContain("review")
   })
 
+  it("displays final-review and final-fix phases", () => {
+    expect(formatStatusLine(createSnapshot({ phase: "final-review" }), 80)).toContain("final-review")
+    expect(formatStatusLine(createSnapshot({ phase: "final-fix" }), 80)).toContain("final-fix")
+  })
+
   it("formats review round", () => {
     const snap = createSnapshot({ reviewRound: 3, maxReviewRounds: 8 })
     const line = formatStatusLine(snap, 80)

@@ -28,6 +28,19 @@
     "agent": "codex",
     "model": "gpt-5.5"
   },
+  "finalGate": {
+    "maxRounds": 3,
+    "reviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.5"
+    },
+    "fixer": {
+      "name": "final-fixer",
+      "agent": "codex",
+      "model": "gpt-5.5"
+    }
+  },
   "prompts": {
     "implement": "./prompts/implement.md",
     "review": "./prompts/review.md",

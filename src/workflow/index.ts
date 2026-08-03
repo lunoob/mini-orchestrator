@@ -19,9 +19,9 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
   const prompts = await loadPrompts(config, configDir)
 
   const hasGit = await isGitRepo(config.projectDir)
-  const baseSha = await getReviewBaselineSha(config.projectDir)
-  if (baseSha) {
-    console.log(`[Workflow] Review baseline: ${baseSha}`)
+  const startBaseSha = await getReviewBaselineSha(config.projectDir)
+  if (startBaseSha) {
+    console.log(`[Workflow] Review baseline: ${startBaseSha}`)
   } else if (hasGit) {
     console.log("[Workflow] Review baseline: (no commits yet — will diff from repo start after implement)")
   } else {
@@ -32,15 +32,18 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
 
   const runtime: WorkflowRuntime = {
     args,
-    baseSha,
+    baseSha: startBaseSha,
     config,
     configPath,
     eventBus,
+    finalFixerPane: "",
+    finalReviewerPane: "",
     hasGit,
     implementerPane: "",
     issueIndex: 0,
     prompts,
     reviewerPane: "",
+    startBaseSha,
   }
 
   await runIssueQueue(runtime, configPath)

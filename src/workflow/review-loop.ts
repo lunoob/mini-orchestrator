@@ -28,7 +28,7 @@ import type { PostReviewStatus, ReviewLoopOptions, WorkflowRuntime } from "./typ
  * - 无 STATUS 标记 → 重试补标记（最多 MAX_MISSING_STATUS_RETRIES 次）
  * - 其余 → 返回最终文本
  */
-const handleMonitorResult = async (
+export const handleMonitorResult = async (
   role: AgentRole,
   paneId: string,
   finalText: string,
@@ -247,18 +247,18 @@ const conductReview = async (
  * REVIEW_NEEDS_CHECK 的处理：通知用户 → 去 reviewer pane 处理 → yes/no 门卫。
  * - yes：发 continuation 给 reviewer 重新审查，返回新一轮输出
  * - no：抛错终止 workflow
+ *
+ * session / pane 由调用方传入：局部 review 用普通 reviewer，final gate 用 Final Reviewer。
  */
-const handleNeedsCheck = async (
-  runtime: WorkflowRuntime, round: number,
+export const handleNeedsCheck = async (
+  runtime: WorkflowRuntime, round: number, session: AgentSessionHandle, pane: string,
 ): Promise<{ action: "approved" | "revised"; finalText?: string }> => {
-  if (runtime.reviewerSession) {
-    notifyNeedsInput(
-      "reviewer", runtime.reviewerSession.provider,
-      "Review 需要人工核查",
-      runtime.reviewerSession.resumeId, runtime.reviewerPane,
-      String(runtime.reviewerSession.offset),
-    )
-  }
+  notifyNeedsInput(
+    "reviewer", session.provider,
+    "Review 需要人工核查",
+    session.resumeId, pane,
+    String(session.offset),
+  )
 
   const yes = await promptNeedsCheckGate(round, runtime.eventBus)
   if (!yes) {
@@ -266,11 +266,10 @@ const handleNeedsCheck = async (
   }
 
   // yes：发 continuation 给 reviewer 重新审查（用户已在 pane 处理完）
-  if (!runtime.reviewerSession) throw new Error("[NeedsCheck] Missing reviewer session")
   runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
-  await sendTask(runtime.reviewerPane, CONTINUATION_PROMPT)
-  const result = await waitForAgentWithMonitor(runtime.reviewerSession)
-  runtime.reviewerSession.offset = result.finalOffset
+  await sendTask(pane, CONTINUATION_PROMPT)
+  const result = await waitForAgentWithMonitor(session)
+  session.offset = result.finalOffset
   resetNotifyDedup()
 
   const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
@@ -287,7 +286,7 @@ const handleNeedsCheck = async (
     // 原生提问 → 通用门卫（用户去 pane 回答后再续；可能再次提问 → 再门卫）
     if (currentStatus === "needs_input") {
       const gated = await handleNeedsInputGate(
-        "reviewer", runtime.reviewerPane, `needs_check round ${round}`, runtime.reviewerSession,
+        "reviewer", pane, `needs_check round ${round}`, session,
         depsWithBus, currentQuestion,
       )
       runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
@@ -300,7 +299,7 @@ const handleNeedsCheck = async (
     // 重审后无 STATUS 标记 → 按约定提示补标记（最多 2 次），仍无则抛错终止
     if (!parseStatus(finalText, "reviewer").status) {
       const retried = await ensureStatusRetry(
-        "reviewer", runtime.reviewerPane, finalText, `needs_check round ${round}`, runtime.reviewerSession,
+        "reviewer", pane, finalText, `needs_check round ${round}`, session,
         depsWithBus,
       )
       finalText = retried.finalText
@@ -400,7 +399,7 @@ export const runReviewLoop = async (
             runtime.eventBus.publish({ type: "fail", reason: `Review needs_check exceeded ${runtime.config.maxReviewRounds} rounds` })
             throw new Error(`[Review] needs_check exceeded ${runtime.config.maxReviewRounds} rounds.`)
           }
-          const decision = await handleNeedsCheck(runtime, round)
+          const decision = await handleNeedsCheck(runtime, round, runtime.reviewerSession!, runtime.reviewerPane)
           if (decision.action === "approved") return
           needsCheckOutput = decision.finalText ?? ""
           const reParsed = parseStatus(needsCheckOutput, "reviewer")

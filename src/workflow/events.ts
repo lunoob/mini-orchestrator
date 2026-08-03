@@ -94,7 +94,9 @@ export type WorkflowEvent =
 export type AgentDisplayStatus = "idle" | "working" | "completed" | "failed" | "needs_input"
 
 /** Workflow 阶段 */
-export type WorkflowPhase = "idle" | "implement" | "review" | "revise" | "post-check" | "controller-revise"
+export type WorkflowPhase =
+  | "idle" | "implement" | "review" | "revise" | "post-check" | "controller-revise"
+  | "final-review" | "final-fix"
 
 /** 需要人工输入的详情 */
 export type NeedsInputDetail = {

@@ -17,6 +17,7 @@ import { render } from "../lib/utils.js"
 import { parseStatus } from "../lib/status-parser.js"
 import { notifyIssueComplete } from "../notify/index.js"
 import { handleNeedsInputGate, ensureStatusRetry, defaultImplementAskDeps, type ImplementAskDeps } from "./implement-ask.js"
+import { createFinalSessionDir, runFinalGate } from "./final-gate.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -218,7 +219,12 @@ export const runIssueQueueFromIndex = async (
     }
   }
 
-  // 所有 issue 处理完毕，发布 workflow complete
+  // 所有 issue 成功完成：若启用 final gate 则先做全局审查，通过后才发布 workflow complete
+  if (runtime.config.finalGate) {
+    const finalSessionDir = await createFinalSessionDir(runtime)
+    await runFinalGate(runtime, finalSessionDir)
+  }
+
   publishCompleteWhenDone()
 }
 
@@ -229,11 +235,19 @@ const agentOutput: OutputCallback = (msg, stream) => {
 
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
   const { implementer, reviewer, projectDir } = runtime.config
+  // 仅在 final gate 启用时为 final 角色执行 update / integration；禁用时不产生额外命令
+  const finalRoles = runtime.config.finalGate
+    ? [runtime.config.finalGate.reviewer, runtime.config.finalGate.fixer]
+    : []
   await Promise.all([
     runAgentUpdate(projectDir, implementer, agentOutput),
     runAgentUpdate(projectDir, reviewer, agentOutput),
     runAgentIntegration(implementer, agentOutput),
     runAgentIntegration(reviewer, agentOutput),
+    ...finalRoles.flatMap((agent) => [
+      runAgentUpdate(projectDir, agent, agentOutput),
+      runAgentIntegration(agent, agentOutput),
+    ]),
   ])
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

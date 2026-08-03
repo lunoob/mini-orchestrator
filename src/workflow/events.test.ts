@@ -98,6 +98,37 @@ describe("createWorkflowEventBus", () => {
     expect(bus.getSnapshot().phase).toBe("review")
   })
 
+  it("supports final-review and final-fix phases", () => {
+    const bus = createWorkflowEventBus()
+
+    bus.publish({ type: "phase_change", phase: "final-review" })
+    expect(bus.getSnapshot().phase).toBe("final-review")
+
+    bus.publish({ type: "phase_change", phase: "final-fix" })
+    expect(bus.getSnapshot().phase).toBe("final-fix")
+  })
+
+  it("maps final gate agent states to existing reviewer/implementer slots", () => {
+    const bus = createWorkflowEventBus()
+
+    bus.publish({ type: "phase_change", phase: "final-review" })
+    bus.publish({ type: "review_round_change", round: 1, maxRounds: 3 })
+    bus.publish({ type: "agent_state_change", agent: "reviewer", status: "completed" })
+    bus.publish({ type: "phase_change", phase: "final-fix" })
+    bus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+    bus.publish({ type: "phase_change", phase: "final-review" })
+    bus.publish({ type: "complete" })
+
+    const snap = bus.getSnapshot()
+
+    expect(snap.phase).toBe("final-review")
+    expect(snap.reviewRound).toBe(1)
+    expect(snap.maxReviewRounds).toBe(3)
+    expect(snap.reviewerStatus).toBe("completed")
+    expect(snap.implementerStatus).toBe("completed")
+    expect(snap.terminalState).toBe("completed")
+  })
+
   it("updates snapshot on review_round_change", () => {
     const bus = createWorkflowEventBus()
 
