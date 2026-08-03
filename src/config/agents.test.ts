@@ -42,7 +42,7 @@ describe("resolveAgentConfig", () => {
       name: "implementer",
     })
 
-    expect(config.command).toBe("cursor-agent --model composer")
+    expect(config.command).toBe("cursor-agent --trust --yolo --model composer")
     expect(config.agentReadyPattern).toBe("Cursor Agent")
     expect(config.integrationAgent).toBe("cursor")
     expect(config.updateCommand).toBe("cursor-agent update")
@@ -55,7 +55,7 @@ describe("resolveAgentConfig", () => {
       name: "implementer",
     })
 
-    expect(config.command).toBe("cursor-agent --model composer-2.5-high")
+    expect(config.command).toBe("cursor-agent --trust --yolo --model composer-2.5-high")
   })
 
   it("throws when cursor has effort field", () => {
@@ -164,7 +164,7 @@ describe("buildBootstrapCommand", () => {
     const cmd = buildBootstrapCommand(config, metaPrompt)
 
     expect(typeof cmd).toBe("string")
-    expect(cmd).toMatch(/^cursor-agent/)
+    expect(cmd).toMatch(/^cursor-agent --trust --yolo/)
     expect(cmd).toContain("-p")
     expect(cmd).toContain("--model")
     expect(cmd).toContain("composer-2.5-high")
@@ -230,6 +230,7 @@ describe("buildResumeArgs", () => {
 
     const args = buildResumeArgs(config, "resume-cur-789")
 
+    expect(args).toContain("--trust --yolo")
     expect(args).toContain("--resume resume-cur-789")
     expect(args).toContain("--model composer-2.5")
   })

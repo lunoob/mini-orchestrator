@@ -18,6 +18,12 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
 
 const CODEX_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"] as const
 const CLAUDE_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
+const CURSOR_CLI_FLAGS = ["--trust", "--yolo"] as const
+
+const appendCursorCliFlags = (parts: string[], agent: string) => {
+  if (agent === "cursor") parts.push(...CURSOR_CLI_FLAGS)
+  return parts
+}
 
 const validateEffort = (agent: string, effort: string, role: string) => {
   if (agent === "cursor") {
@@ -43,7 +49,7 @@ const validateEffort = (agent: string, effort: string, role: string) => {
 }
 
 const buildCommand = (cli: string, agent: string, model?: string, effort?: string) => {
-  const parts = [cli]
+  const parts = appendCursorCliFlags([cli], agent)
   if (model) parts.push("--model", model)
 
   if (!effort) return parts.join(" ")
@@ -65,7 +71,7 @@ const buildBootstrapArgv = (
   model?: string,
   effort?: string,
 ): string[] => {
-  const args = [cli]
+  const args = appendCursorCliFlags([cli], agent)
 
   // Claude/Cursor 用 -p，Codex 用 exec
   if (agent === "codex") {
@@ -177,7 +183,7 @@ export const buildResumeArgs = (config: AgentConfig, resumeId: string) => {
   }
 
   const cli = definition.cli ?? config.agent
-  const parts = [cli]
+  const parts = appendCursorCliFlags([cli], config.agent)
 
   // Claude/Cursor 用 --resume，Codex 用 resume 子命令
   if (config.agent === "codex") {

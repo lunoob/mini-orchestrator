@@ -164,7 +164,7 @@ describe("loadConfig", () => {
 
     const config = await loadConfig(configPath, {})
 
-    expect(config.implementer.command).toBe("cursor-agent --model composer")
+    expect(config.implementer.command).toBe("cursor-agent --trust --yolo --model composer")
     expect(config.implementer.agentReadyPattern).toBe("Cursor Agent")
     expect(config.implementer.integrationAgent).toBe("cursor")
     expect(config.implementer.updateCommand).toBe("cursor-agent update")
