@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
 import { createInterface } from "node:readline/promises"
 
+import { ensureMainBranch } from "../src/release/git-utils.js"
 import { loadReleaseEnv } from "../src/release/load-env.js"
 import { executable, runCommandOrThrow } from "../src/release/run-command.js"
+import { readVersion } from "../src/release/version.js"
 import { executeRelease } from "../src/release/workflow.js"
 
 const increments = ["patch", "minor", "major"] as const
@@ -27,17 +28,10 @@ const getIncrement = async () => {
 }
 
 const ensureReady = () => {
-  const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf8" }).trim()
-  if (branch !== "main") throw new Error("Release must run on the main branch.")
+  ensureMainBranch()
 
   const status = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()
   if (status) throw new Error("Release requires a clean working tree.")
-}
-
-const readVersion = () => {
-  const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version?: unknown }
-  if (typeof packageJson.version !== "string") throw new Error("package.json version is missing.")
-  return packageJson.version
 }
 
 const main = async () => {

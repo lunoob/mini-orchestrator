@@ -18,6 +18,7 @@ describe("release configuration", () => {
     expect(releaseConfig.github).toMatchObject({
       release: true,
       autoGenerate: true,
+      update: true,
     })
   })
 
