@@ -9,7 +9,7 @@ const MAIN_TS_PATH = path.resolve(__dirname, "../src/main.ts")
 const showUsage = () => {
   console.log(`[Install]
 用法:
-  pnpm run install-alias              # 在 shell rc 中安装 mini-orch 别名
+  pnpm run install-alias              # 在 shell rc 中安装 local-mini-orch 别名
   pnpm run install-alias -- --force   # 覆盖已有别名
   pnpm run uninstall-alias            # 卸载别名
 

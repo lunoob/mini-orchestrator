@@ -1,17 +1,5 @@
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "./prompt-delimiters.js"
-
-export type ImplementStatus = "done" | "needs_input" | "unknown"
-
-export const parseImplementStatus = (output: string): ImplementStatus => {
-  if (hasStatus(output, "IMPLEMENT_DONE")) return "done"
-  if (hasStatus(output, "IMPLEMENT_ASK")) return "needs_input"
-  return "unknown"
-}
+import { extractStatus, parseStatus } from "./status-parser.js"
+import type { AgentRole } from "../agent/transcript/types.js"
 
 export const assertHerdrEnv = () => {
   if (process.env.HERDR_ENV === "1") return
@@ -23,92 +11,21 @@ export const getErrorMessage = (error: unknown) => {
   return String(error)
 }
 
-export const hasStatus = (output: string, status: string) =>
-  new RegExp(`STATUS: ${status}`, "m").test(output.trim())
-
-export type ReviewVerdictKind = "pass" | "fail" | "needs_check"
-
-export type ReviewVerdict = {
-  cannotVerifySummary: string | null
-  hasCannotVerify: boolean
-  kind: ReviewVerdictKind
-  passed: boolean
-}
-
-const extractCannotVerifySummary = (output: string) => {
-  const match = output.match(
-    /⚠️\s*Cannot verify from diff:\s*([\s\S]*?)(?=\n### |\n#### |\n- ✅|\n- ❌|$)/i,
-  )
-  if (!match) return null
-
-  const body = match[1].trim()
-  if (!body || /^\(none\)$/i.test(body) || body === "无") return null
-
+/**
+ * 从 agent 输出中移除 STATUS 行，保留业务内容。
+ * 作为 revise 流程传递 reviewer 反馈的文本。
+ */
+export const stripStatus = (output: string, role: AgentRole): string => {
+  const { body } = parseStatus(output, role)
   return body
 }
 
-export const parseReviewVerdict = (output: string): ReviewVerdict => {
-  const explicitPass = hasStatus(output, "REVIEW_PASS")
-  const explicitFail = hasStatus(output, "REVIEW_FAIL")
-  const explicitNeedsCheck = hasStatus(output, "REVIEW_NEEDS_CHECK")
-
-  const cannotVerifySummary = extractCannotVerifySummary(output)
-  const hasCannotVerify = cannotVerifySummary !== null
-
-  const kind: ReviewVerdictKind =
-    explicitFail ? "fail" :
-    (explicitNeedsCheck || hasCannotVerify) ? "needs_check" :
-    explicitPass ? "pass" :
-    "fail"
-
-  return {
-    cannotVerifySummary,
-    hasCannotVerify,
-    kind,
-    passed: kind === "pass",
-  }
+/** 打印 agent 输出的状态摘要 */
+export const extractStatusSummary = (output: string, role: AgentRole): string => {
+  const status = extractStatus(output, role)
+  return status ?? "(no status)"
 }
 
-export const extractReviewResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(REVIEW_RESULT_START)
-  if (startIdx === -1) return output
-
-  const afterStart = startIdx + REVIEW_RESULT_START.length
-  const endIdx = output.lastIndexOf(REVIEW_RESULT_END)
-  if (endIdx <= afterStart) return output
-
-  return output.slice(afterStart, endIdx).trim() || output
-}
-
-export const extractImplementResult = (output: string): string => {
-  const startIdx = output.lastIndexOf(IMPLEMENT_RESULT_START)
-  if (startIdx === -1) return output
-
-  const afterStart = startIdx + IMPLEMENT_RESULT_START.length
-  const endIdx = output.lastIndexOf(IMPLEMENT_RESULT_END)
-  if (endIdx <= afterStart) return output
-
-  return output.slice(afterStart, endIdx).trim() || output
-}
-
-/** 整行 STATUS 标记（允许前导空白）；每次新建 RegExp，避免 g 标志的 lastIndex 串扰 */
-const STATUS_LINE_PATTERN = "^[ \\t]*STATUS: .+$"
-const statusLineRe = () => new RegExp(STATUS_LINE_PATTERN, "gm")
-
-export const stripStatusLines = (output: string): string =>
-  output
-    .replaceAll("\\n", "\n")
-    .trim()
-    .replace(statusLineRe(), "")
-    .trim()
-
-/** 仅保留 STATUS 行，供控制台摘要打印（避免刷完整 agent 输出） */
-export const extractStatusLines = (output: string): string => {
-  const normalized = output.replaceAll("\\n", "\n")
-  const matches = normalized.match(statusLineRe())
-  if (!matches) return ""
-  return matches.map((line) => line.trim()).join("\n")
-}
 
 export const printSection = (title: string, body: string) => {
   console.log(`\n=== ${title} ===\n`)

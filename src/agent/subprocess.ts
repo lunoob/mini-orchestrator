@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process"
 
+/** 子进程输出回调：(消息, 流类型) => void */
+export type OutputCallback = (message: string, stream: "stdout" | "stderr") => void
+
 const DELAY_MS = 800
 
-export const run = async (command: string, args: string[]) => {
+export const run = async (command: string, args: string[], onOutput?: OutputCallback) => {
   await new Promise(resolve => setTimeout(resolve, DELAY_MS))
   return new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -14,10 +17,22 @@ export const run = async (command: string, args: string[]) => {
     let stderr = ""
 
     child.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString()
+      const text = chunk.toString()
+      stdout += text
+      if (onOutput) {
+        for (const line of text.split("\n")) {
+          if (line) onOutput(line, "stdout")
+        }
+      }
     })
     child.stderr.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString()
+      const text = chunk.toString()
+      stderr += text
+      if (onOutput) {
+        for (const line of text.split("\n")) {
+          if (line) onOutput(line, "stderr")
+        }
+      }
     })
 
     child.on("error", reject)
@@ -25,14 +40,14 @@ export const run = async (command: string, args: string[]) => {
   })
 }
 
-export const runHerdr = async (args: string[]) => {
-  const { code, stderr, stdout } = await run("herdr", args)
+export const runHerdr = async (args: string[], onOutput?: OutputCallback) => {
+  const { code, stderr, stdout } = await run("herdr", args, onOutput)
   if (code === 0) return stdout.trim()
 
   throw new Error(`[Agent] ${stderr.trim() || `herdr ${args.join(" ")} failed with code ${code}`}`)
 }
 
-export const tryRunHerdr = async (args: string[]) => {
-  const { code, stderr, stdout } = await run("herdr", args)
+export const tryRunHerdr = async (args: string[], onOutput?: OutputCallback) => {
+  const { code, stderr, stdout } = await run("herdr", args, onOutput)
   return { code, stderr: stderr.trim(), stdout: stdout.trim() }
 }

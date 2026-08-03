@@ -78,16 +78,8 @@ disable-model-invocation: true
 
 ### 3. 输出执行命令
 
-把执行命令输出给用户(包括 LLM 和终端两种模式下的命令)
+输出执行命令:
 
-llm 模式命令为:
-```bash
-zsh -ic 'mini-orch \
-  --config "'"$CONFIG_PATH"'" \
-  --needs-check-mode llm'
-```
-
-终端模式命令为:
 ```bash
 mini-orch --config "'"$CONFIG_PATH"'"
 ```
@@ -108,9 +100,6 @@ mini-orch --config "'"$CONFIG_PATH"'"
 |-----------|------|----------|
 | 0 | 编排正常完成 | 告诉用户"编排完成，所有 issue 已处理完毕" |
 | 1 | 编排失败 | 显示编排器的错误消息 |
-| 2 | needs_check 暂停 | 告诉用户需要人工 Review，以及 `CHECKPOINT:` 路径 |
-
-> exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `mini-orch --resume-from <path> --needs-check-action <action>` 恢复。
 
 ## 示例
 

@@ -33,6 +33,32 @@ export type PromptConfig = {
   revise: string
 }
 
+/** 配置文件中 finalGate 的输入字段（未解析） */
+export type FinalGateInputConfig = {
+  /** 缺省视为启用；false 显式禁用 */
+  enabled?: boolean
+  /** final gate 独立轮次上限，缺省 3，不受 --maxReviewRounds 影响 */
+  maxRounds?: number
+  /** 覆盖内置 final review / final fix prompt 的路径 */
+  prompts?: {
+    review?: string
+    fix?: string
+  }
+  reviewer: AgentInputConfig
+  fixer: AgentInputConfig
+}
+
+/** finalGate 运行时配置；存在即表示启用 */
+export type FinalGateConfig = {
+  maxRounds: number
+  reviewer: AgentConfig
+  fixer: AgentConfig
+  prompts: {
+    review: string
+    fix: string
+  }
+}
+
 /** ready: 可开发；review: 已实现、待审查；finish: 已完成，workflow 会跳过 */
 export type IssueState = "ready" | "review" | "finish"
 
@@ -50,6 +76,8 @@ export type WorkflowConfig = {
   prompts: PromptConfig
   reviewer: AgentConfig
   issues: IssueConfig[]
+  /** 缺省或 enabled: false 时无 final gate；存在即启用 */
+  finalGate?: FinalGateConfig
 }
 
 export type HerdrPaneInfo = {
@@ -99,6 +127,8 @@ export type ParsedArgs = Record<string, string>
 export type LoadedPrompts = {
   controllerImplementer: string
   controllerReReview: string
+  finalFix: string
+  finalReview: string
   implement: string
   postReviewCheck: string
   reReview: string
