@@ -3,7 +3,7 @@ import path from "node:path"
 import os from "node:os"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { runAgentUpdate } from "../agent/index.js"
+import { runAgentIntegration, runAgentUpdate } from "../agent/index.js"
 import { runFinalGate } from "./final-gate.js"
 import { runIssueQueue, runIssueQueueFromIndex, shouldNotifyIssueComplete, shouldSkipImplement, shouldSkipIssue } from "./issues.js"
 import { createWorkflowEventBus } from "./events.js"
@@ -158,6 +158,27 @@ describe("issue queue with final gate", () => {
 
     expect(runAgentUpdate).toHaveBeenCalledTimes(1)
     expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.implementer, expect.any(Function))
+  })
+
+  it("deduplicates updates for final gate agents too", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await runIssueQueue(runtime, configPath)
+
+    expect(runAgentUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it("integrates each unique agent type only once", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await runIssueQueue(runtime, configPath)
+
+    expect(runAgentIntegration).toHaveBeenCalledTimes(1)
+    expect(runAgentIntegration).toHaveBeenCalledWith(runtime.config.implementer, expect.any(Function))
   })
 })
 

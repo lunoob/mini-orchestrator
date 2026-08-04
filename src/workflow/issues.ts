@@ -9,6 +9,7 @@ import {
   stopAgent,
 } from "../agent/index.js"
 import type { OutputCallback } from "../agent/index.js"
+import { deduplicateAgentIntegrations } from "../agent/integration.js"
 import { deduplicateAgentUpdates } from "../agent/update.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { createSession } from "../agent/session.js"
@@ -240,15 +241,12 @@ export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string
   const finalRoles = runtime.config.finalGate
     ? [runtime.config.finalGate.reviewer, runtime.config.finalGate.fixer]
     : []
-  const updateAgents = deduplicateAgentUpdates([implementer, reviewer, ...finalRoles])
+  const allAgents = [implementer, reviewer, ...finalRoles]
+  const updateAgents = deduplicateAgentUpdates(allAgents)
+  const integrationAgents = deduplicateAgentIntegrations(allAgents)
   await Promise.all([
     ...updateAgents.map((agent) => runAgentUpdate(projectDir, agent, agentOutput)),
-    runAgentIntegration(implementer, agentOutput),
-    runAgentIntegration(reviewer, agentOutput),
-    ...finalRoles.flatMap((agent) => [
-      runAgentUpdate(projectDir, agent, agentOutput),
-      runAgentIntegration(agent, agentOutput),
-    ]),
+    ...integrationAgents.map((agent) => runAgentIntegration(agent, agentOutput)),
   ])
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

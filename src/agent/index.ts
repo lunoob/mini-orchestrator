@@ -11,6 +11,12 @@ import {
 import type { AgentSessionHandle, AgentStatus, TranscriptEvent } from "./transcript/types.js"
 import { createTranscriptMonitor } from "./transcript/monitor.js"
 import { splitCommand } from "../lib/utils.js"
+import {
+  formatIntegrationFailure,
+  formatIntegrationStart,
+  formatUpdateFailure,
+  formatUpdateStart,
+} from "./log-messages.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
 import type { OutputCallback } from "./subprocess.js"
 export type { OutputCallback }
@@ -154,21 +160,21 @@ export const runAgentUpdate = async (
   projectDir: string, agent: AgentConfig, onOutput?: OutputCallback,
 ): Promise<boolean> => {
   if (!agent.updateCommand) return true
-  console.log(`[Agent] Running update for "${agent.name}": ${agent.updateCommand}`)
+  console.log(formatUpdateStart(agent.updateCommand))
   const [cmd, ...args] = splitCommand(agent.updateCommand)
   const { code } = await spawnWithOutput(cmd, args, { cwd: projectDir }, onOutput)
   if (code !== 0) {
-    console.warn(`[Agent] Update for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
+    console.warn(formatUpdateFailure(code))
     return false
   }
   return true
 }
 
 export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputCallback): Promise<boolean> => {
-  console.log(`[Agent] Running herdr integration for "${agent.name}": herdr integration ${agent.integrationAgent}`)
+  console.log(formatIntegrationStart(agent.integrationAgent))
   const { code } = await tryRunHerdr(["integration", "install", agent.integrationAgent], onOutput)
   if (code !== 0) {
-    console.warn(`[Agent] Integration for "${agent.name}" failed (exit code ${code}), continuing anyway.`)
+    console.warn(formatIntegrationFailure(code))
     return false
   }
   return true
