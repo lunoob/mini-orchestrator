@@ -13,7 +13,6 @@ export const printHelp = () => {
 按配置中的 issues[] 数组顺序串行执行多个 issue。
 
 Options:
-  --testStatus              进入 herdr 状态测试模式（无需 --config）
   --config <path>           workflow 配置文件路径
   --projectDir <path>       项目目录，覆盖配置中的 projectDir
   --maxReviewRounds <n>     最大 review 轮数，覆盖配置中的 maxReviewRounds
