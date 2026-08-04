@@ -3,7 +3,7 @@
 mini-orch 自带以下 skill。可以使用 `mini-orch skill list` 查看，也可以按名称单独安装：
 
 ```bash
-mini-orch skill install --skill <skill-name>
+mini-orch skill install --skill <skill-name> --agent <agent-name>
 ```
 
 ## Skill 列表
@@ -25,11 +25,14 @@ mini-orch skill install --skill <skill-name>
 mini-orch skill install \
   --skill test-driven-development \
   --skill writing-agent-issues \
-  --skill run-issue
+  --skill run-issue \
+  --agent codex
 ```
 
 只安装集成测试评估 skill：
 
 ```bash
-mini-orch skill install --skill run-integration-tests
+mini-orch skill install --skill run-integration-tests --agent cursor
 ```
+
+支持的 agent：`codex`、`claude-code`、`cursor`。不指定 `--skill` 或 `--agent` 时，命令会分别通过 Space 多选 skill 和 agent。

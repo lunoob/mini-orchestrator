@@ -42,18 +42,28 @@ mini-orch --help
 mini-orch skill list
 ```
 
-交互式安装，或指定 skill 安装：
+交互式安装：先用 Space 选择 skill，再选择要安装到的 agent（Codex、Claude Code、Cursor）：
 
 ```bash
 mini-orch skill install
-mini-orch skill install --skill run-issue
 ```
 
-卸载指定 skill：
+也可以通过参数跳过对应的交互选择：
 
 ```bash
-mini-orch skill uninstall --skill run-issue
+mini-orch skill install --skill run-issue
+mini-orch skill install --skill run-issue --agent codex --agent cursor
+mini-orch skill install --all
 ```
+
+卸载时同样先选择 skill，再选择要移除的 agent：
+
+```bash
+mini-orch skill uninstall
+mini-orch skill uninstall --skill run-issue --agent cursor
+```
+
+默认使用软链接；需要复制文件时使用 `--mode copy`。skill 会安装到对应 agent 的用户级目录。
 
 各个 skill 的作用、依赖关系和安装方式见 [Skill 说明](skills/README.md)。
 

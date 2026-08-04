@@ -37,7 +37,7 @@
     "install-alias": "tsx ./scripts/install-alias.ts",
     "uninstall-alias": "tsx ./scripts/install-alias.ts --uninstall",
     "install-skill": "tsx ./scripts/install-skill.ts",
-    "uninstall-skill": "tsx ./scripts/install-skill.ts --uninstall",
+    "uninstall-skill": "tsx ./scripts/install-skill.ts uninstall",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -50,6 +50,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.5.2",
     "@types/blessed": "^0.1.27",
     "blessed": "^0.1.81"
   }
