@@ -128,6 +128,30 @@ describe("TerminalUI", () => {
       expect(blessed.box).toHaveBeenCalled()
     })
 
+    it("configures a visible scrollbar for overflowing logs", () => {
+      const blessed = createMockBlessed()
+      const eventBus = createEventBus()
+      createBlessedUI(eventBus, blessed)
+
+      const options = blessed.log.mock.calls[0][0]
+      expect(options.scrollable).toBe(true)
+      expect(options.scrollbar.ch).not.toBe(" ")
+    })
+
+    it("leaves one row between the log area and status panel", () => {
+      const blessed = createMockBlessed()
+      const logWidget = {
+        log: vi.fn(), height: 50, focus: vi.fn(), key: vi.fn(), scroll: vi.fn(),
+        setScrollPerc: vi.fn(), getScrollPerc: vi.fn().mockReturnValue(100),
+        getScrollHeight: vi.fn().mockReturnValue(100), childBase: 0,
+      }
+      blessed.log.mockReturnValue(logWidget)
+
+      createBlessedUI(createEventBus(), blessed)
+
+      expect(logWidget.height).toBe(21)
+    })
+
     it("subscribes to workflow events", () => {
       const blessed = createMockBlessed()
       const eventBus = createEventBus()

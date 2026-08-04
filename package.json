@@ -31,6 +31,7 @@
   },
   "scripts": {
     "start": "tsx ./src/main.ts",
+    "test:log-stream": "tsx ./src/terminal/test-log-stream.ts",
     "build": "tsc -p tsconfig.build.json",
     "install-alias": "tsx ./scripts/install-alias.ts",
     "uninstall-alias": "tsx ./scripts/install-alias.ts --uninstall",

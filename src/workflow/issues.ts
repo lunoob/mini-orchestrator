@@ -9,6 +9,7 @@ import {
   stopAgent,
 } from "../agent/index.js"
 import type { OutputCallback } from "../agent/index.js"
+import { deduplicateAgentUpdates } from "../agent/update.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { createSession } from "../agent/session.js"
 import { markIssueFinished, markIssueInReview } from "../config/persist.js"
@@ -239,9 +240,9 @@ export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string
   const finalRoles = runtime.config.finalGate
     ? [runtime.config.finalGate.reviewer, runtime.config.finalGate.fixer]
     : []
+  const updateAgents = deduplicateAgentUpdates([implementer, reviewer, ...finalRoles])
   await Promise.all([
-    runAgentUpdate(projectDir, implementer, agentOutput),
-    runAgentUpdate(projectDir, reviewer, agentOutput),
+    ...updateAgents.map((agent) => runAgentUpdate(projectDir, agent, agentOutput)),
     runAgentIntegration(implementer, agentOutput),
     runAgentIntegration(reviewer, agentOutput),
     ...finalRoles.flatMap((agent) => [
