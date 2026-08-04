@@ -85,7 +85,7 @@ export const main = async (testStatusMode = false, argv = process.argv.slice(2))
 
     try {
       if (testStatusMode) {
-        await runTestStatus(args, eventBus)
+        await runTestStatus(eventBus)
         notifyTestStatusComplete()
       } else {
         await runWorkflow(args, { eventBus })

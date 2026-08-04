@@ -37,7 +37,7 @@ export type PromptConfig = {
 export type FinalGateInputConfig = {
   /** 缺省视为启用；false 显式禁用 */
   enabled?: boolean
-  /** final gate 独立轮次上限，缺省 3，不受 --maxReviewRounds 影响 */
+  /** final gate 独立轮次上限，缺省 3，不受 workflow 的 maxReviewRounds 影响 */
   maxRounds?: number
   /** 覆盖内置 final review / final fix prompt 的路径 */
   prompts?: {

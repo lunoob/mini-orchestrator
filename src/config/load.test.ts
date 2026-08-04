@@ -54,7 +54,7 @@ describe("loadConfig", () => {
       projectDir: dir,
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow("issues is required")
+    await expect(loadConfig(configPath)).rejects.toThrow("issues is required")
   })
 
   it("throws if issues array is empty", async () => {
@@ -65,7 +65,7 @@ describe("loadConfig", () => {
       issues: [],
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow("issues is required")
+    await expect(loadConfig(configPath)).rejects.toThrow("issues is required")
   })
 
   it("validates each issue has title and specPath", async () => {
@@ -76,7 +76,7 @@ describe("loadConfig", () => {
       issues: [{ title: "Only title" }],
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/issues\[0\].specPath is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/issues\[0\].specPath is required/)
   })
 
   it("validates each issue has title", async () => {
@@ -87,7 +87,7 @@ describe("loadConfig", () => {
       issues: [{ specPath: "/tmp/nonexistent/nope.md" }],
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/issues\[0\].title is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/issues\[0\].title is required/)
   })
 
   it("accepts valid issues", async () => {
@@ -104,7 +104,7 @@ describe("loadConfig", () => {
       ],
     })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.issues).toHaveLength(2)
     expect(config.issues[0].title).toBe("Issue One")
@@ -123,7 +123,7 @@ describe("loadConfig", () => {
       issues: [{ title: "Issue", specPath: spec }],
     })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.issues[0].state).toBe("ready")
   })
@@ -144,7 +144,7 @@ describe("loadConfig", () => {
       ],
     })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.issues[0].state).toBe("finish")
     expect(config.issues[1].state).toBe("review")
@@ -161,7 +161,7 @@ describe("loadConfig", () => {
       issues: [{ title: "Issue", specPath: spec, state: "done" }],
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(
+    await expect(loadConfig(configPath)).rejects.toThrow(
       /issues\[0\]\.state must be one of: ready, review, finish/,
     )
   })
@@ -178,7 +178,7 @@ describe("loadConfig", () => {
       issues: [{ title: "Issue", specPath: spec }],
     })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.implementer.command).toBe("cursor-agent --trust --yolo --model composer")
     expect(config.implementer.agentReadyPattern).toBe("Cursor Agent")
@@ -199,7 +199,7 @@ describe("loadConfig", () => {
       issues: [{ title: "Bad", specPath: missing }],
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/Issue 0 spec file not found/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/Issue 0 spec file not found/)
   })
 })
 
@@ -209,7 +209,7 @@ describe("finalGate", () => {
     await mkdir(dir, { recursive: true })
     const configPath = writeConfigWithSpec(dir)
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.finalGate).toBeUndefined()
   })
@@ -219,7 +219,7 @@ describe("finalGate", () => {
     await mkdir(dir, { recursive: true })
     const configPath = writeConfigWithSpec(dir, { finalGate: { enabled: false } })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.finalGate).toBeUndefined()
   })
@@ -229,7 +229,7 @@ describe("finalGate", () => {
     await mkdir(dir, { recursive: true })
     const configPath = writeConfigWithSpec(dir, { finalGate: { enabled: "false" } })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.enabled must be a boolean/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.enabled must be a boolean/)
   })
 
   it("throws when enabled finalGate is missing reviewer", async () => {
@@ -239,7 +239,7 @@ describe("finalGate", () => {
       finalGate: { fixer: FINAL_GATE_BASE.fixer },
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.reviewer is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.reviewer is required/)
   })
 
   it("throws when enabled finalGate is missing fixer", async () => {
@@ -249,7 +249,7 @@ describe("finalGate", () => {
       finalGate: { reviewer: FINAL_GATE_BASE.reviewer },
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.fixer is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.fixer is required/)
   })
 
   it("throws when finalGate.reviewer is missing agent", async () => {
@@ -259,7 +259,7 @@ describe("finalGate", () => {
       finalGate: { reviewer: { name: "final-rev" }, fixer: FINAL_GATE_BASE.fixer },
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.reviewer\.agent is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.reviewer\.agent is required/)
   })
 
   it("throws when finalGate.fixer is missing name", async () => {
@@ -269,7 +269,7 @@ describe("finalGate", () => {
       finalGate: { reviewer: FINAL_GATE_BASE.reviewer, fixer: { agent: "codex" } },
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.fixer\.name is required/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.fixer\.name is required/)
   })
 
   it("rejects non-positive-integer maxRounds", async () => {
@@ -279,22 +279,22 @@ describe("finalGate", () => {
       finalGate: { ...FINAL_GATE_BASE, maxRounds: 0 },
     })
 
-    await expect(loadConfig(configPath, {})).rejects.toThrow(/finalGate\.maxRounds must be a positive integer/)
+    await expect(loadConfig(configPath)).rejects.toThrow(/finalGate\.maxRounds must be a positive integer/)
 
     const configPath2 = writeConfigWithSpec(dir, {
       finalGate: { ...FINAL_GATE_BASE, maxRounds: 1.5 },
     })
-    await expect(loadConfig(configPath2, {})).rejects.toThrow(/finalGate\.maxRounds must be a positive integer/)
+    await expect(loadConfig(configPath2)).rejects.toThrow(/finalGate\.maxRounds must be a positive integer/)
   })
 
-  it("defaults maxRounds to 3 and is not affected by --maxReviewRounds", async () => {
+  it("uses maxReviewRounds from workflow config and defaults finalGate maxRounds to 3", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
     await mkdir(dir, { recursive: true })
     const configPath = writeConfigWithSpec(dir, { finalGate: { ...FINAL_GATE_BASE } })
 
-    const config = await loadConfig(configPath, { maxReviewRounds: "99" })
+    const config = await loadConfig(configPath)
 
-    expect(config.maxReviewRounds).toBe(99)
+    expect(config.maxReviewRounds).toBe(8)
     expect(config.finalGate?.maxRounds).toBe(3)
   })
 
@@ -303,7 +303,7 @@ describe("finalGate", () => {
     await mkdir(dir, { recursive: true })
     const configPath = writeConfigWithSpec(dir, { finalGate: { ...FINAL_GATE_BASE } })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.finalGate?.reviewer.command).toBe("codex --model gpt-5.5")
     expect(config.finalGate?.reviewer.integrationAgent).toBe("codex")
@@ -318,7 +318,7 @@ describe("finalGate", () => {
       finalGate: { ...FINAL_GATE_BASE, prompts: { review: "./custom-final-review.md" } },
     })
 
-    const config = await loadConfig(configPath, {})
+    const config = await loadConfig(configPath)
 
     expect(config.finalGate?.prompts.review).toBe("./custom-final-review.md")
     expect(config.finalGate?.prompts.fix).toContain("prompts/final-fix.md")

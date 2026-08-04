@@ -17,7 +17,6 @@ import { resolveAgentConfig } from "../config/agents.js"
 import { parseStatus } from "../lib/status-parser.js"
 import { printSection, stripStatus } from "../lib/utils.js"
 import { CONTINUATION_PROMPT } from "./implement-ask.js"
-import type { ParsedArgs } from "../types.js"
 import type { WorkflowEventBus } from "./events.js"
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
@@ -42,8 +41,8 @@ export const loadImplementOutputFormat = async () => {
 export const buildTestStatusPrompt = (outputFormat: string) =>
   `${TEST_PROMPT}\n\n${outputFormat}`
 
-export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBus) => {
-  const projectDir = args.projectDir ?? process.cwd()
+export const runTestStatus = async (eventBus?: WorkflowEventBus) => {
+  const projectDir = process.cwd()
   const agent = resolveAgentConfig({
     agent: "codex",
     model: "gpt-5.6-luna",

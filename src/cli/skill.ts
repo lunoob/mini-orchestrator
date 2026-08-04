@@ -2,6 +2,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { getCommandName } from "../command-name.js"
 import {
   getSkillInfos,
   installSelectedSkills,
@@ -26,20 +27,21 @@ export const parseSkillAction = (args: string[]): SkillAction | undefined => {
   return undefined
 }
 
-const showUsage = () => {
-  console.log(`[Skill]
-用法:
-  skill install                交互式安装 skill
-  skill uninstall              交互式卸载 skill
-  skill list                   查看可用 skill
+const showUsage = (commandName = getCommandName()) => {
+  console.log(`Usage: ${commandName} skill <command> [options]
 
-选项:
+Commands:
+  install               安装 skill
+  uninstall             卸载 skill
+  list                  查看可用 skill
+
+Options:
   --mode symlink|copy   安装模式（默认 symlink）
   --force               覆盖已有安装 / 强制卸载复制目录
   --skill <name>        指定 skill（可重复传入，跳过交互）
   --all                 选择全部可用 skill（跳过交互）
   --uninstall           兼容旧版脚本的卸载参数
-  -h, --help            显示此帮助
+  -h, --help            显示帮助信息
 `)
 }
 
@@ -92,9 +94,9 @@ const resolveSelectedSkills = async (
   return promptSkillSelection(candidates, action)
 }
 
-export const runSkillCli = async (args: string[]): Promise<number> => {
+export const runSkillCli = async (args: string[], commandName = getCommandName()): Promise<number> => {
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    showUsage()
+    showUsage(commandName)
     return 0
   }
 

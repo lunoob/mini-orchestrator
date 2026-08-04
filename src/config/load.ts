@@ -10,7 +10,6 @@ import type {
   IssueConfig,
   IssueState,
   LoadedPrompts,
-  ParsedArgs,
   PromptConfig,
   WorkflowConfig,
 } from "../types.js"
@@ -35,9 +34,7 @@ const DEFAULT_FINAL_MAX_ROUNDS = 3
 
 const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
 
-const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
-
-const parseMaxReviewRounds = (value: string) => {
+const parseMaxReviewRounds = (value: unknown) => {
   const rounds = Number(value)
   if (!Number.isInteger(rounds) || rounds < 1) {
     throw new Error(`[Config] Invalid maxReviewRounds: ${value}`)
@@ -98,17 +95,14 @@ const parseFinalGate = (raw: unknown, resolveAgentInput: (input: AgentInputConfi
   }
 }
 
-export const loadConfig = async (configPath: string, args: ParsedArgs) => {
+export const loadConfig = async (configPath: string) => {
   const content = await readFile(configPath, "utf8")
   const fileConfig = JSON.parse(content) as Partial<WorkflowConfig>
 
-  const projectDir = resolveOptionalPath(args.projectDir) ?? fileConfig.projectDir
-  const maxReviewRounds =
-    args.maxReviewRounds !== undefined
-      ? parseMaxReviewRounds(args.maxReviewRounds)
-      : Number(fileConfig.maxReviewRounds ?? 8)
+  const projectDir = fileConfig.projectDir
+  const maxReviewRounds = parseMaxReviewRounds(fileConfig.maxReviewRounds ?? 8)
 
-  if (!projectDir) throw new Error("[Config] projectDir is required (workflow config or --projectDir)")
+  if (!projectDir) throw new Error("[Config] projectDir is required in workflow config")
 
   if (!fileConfig.issues || fileConfig.issues.length === 0) {
     throw new Error("[Config] issues is required (non-empty array)")

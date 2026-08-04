@@ -176,7 +176,7 @@ mini-orch --config ./workflow.json
 
 - 不配置 `finalGate`，或配置 `"enabled": false`，则完全保持旧行为，不会启用最终审查。
 - 启用时 `reviewer` 与 `fixer` 都是必填的完整 agent 配置，缺少任一字段会在启动阶段报错。
-- `maxRounds` 是 final gate 独立的轮次上限，缺省为 3；它不受 `--maxReviewRounds` 影响（后者只作用于单个 issue 的局部 review）。
+- `maxRounds` 是 final gate 独立的轮次上限，缺省为 3；它不受 workflow 配置中的 `maxReviewRounds` 影响（后者只作用于单个 issue 的局部 review）。
 - 内置的 final review / final fix 提示词已随包提供；如需覆盖，在 `finalGate.prompts` 中指定 `review` / `fix` 的路径（路径相对于配置文件目录），自定义 output partial 同样对它们生效。
 - 达到轮次上限仍未通过时，workflow 发布失败并以非零码退出，由 workflow 启动的 final pane 会被关闭，不会发布 `complete` 或成功通知。
 - Final Reviewer / Final Fixer 复用现有的 `REVIEW_*` / `IMPLEMENT_*` 状态协议与人工确认体验，不会按 issue 回源。
@@ -190,11 +190,6 @@ mini-orch --help
 # 指定配置文件
 mini-orch --config ./workflow.json
 
-# 临时指定项目目录
-mini-orch --config ./workflow.json --projectDir /absolute/path/to/project
-
-# 调整最大审查轮数
-mini-orch --config ./workflow.json --maxReviewRounds 6
 ```
 
 ## 常见问题
