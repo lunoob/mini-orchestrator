@@ -16,7 +16,7 @@ disable-model-invocation: true
 
 - 当前上下文中已讨论完成的一个或多个 issue 文档路径（`.md` 或其他可读格式）
 - 讨论过程中确定的实施顺序
-- 用户在讨论中约定的共同配置项（projectDir、implementer、reviewer 等）
+- 用户在讨论中约定的共同配置项（projectDir、agents、maxRounds 等）
 
 ## 输出
 
@@ -25,24 +25,40 @@ disable-model-invocation: true
 ```json
 {
   "projectDir": "<项目目录>",
-  "mode": "issue",
   "issues": [
     {
       "title": "<Issue 标题>",
       "specPath": "<issue 文档绝对路径>"
     }
   ],
-  "maxReviewRounds": 30,
-  "implementer": {
-    "name": "implementer",
-    "agent": "cursor",
-    "model": "composer-2.5"
+  "maxRounds": {
+    "workflow": 30,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.6-terra",
-    "effort": "high"
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    }
   }
 }
 ```
@@ -108,7 +124,6 @@ mini-orch --config "'"$CONFIG_PATH"'"
 ```json
 {
   "projectDir": "/home/user/my-project",
-  "mode": "issue",
   "issues": [
     {
       "title": "数据库 Schema 搭建",
@@ -123,16 +138,33 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "specPath": "/home/user/my-project/specs/frontend.md"
     }
   ],
-  "maxReviewRounds": 8,
-  "implementer": {
-    "name": "implementer",
-    "agent": "claude",
-    "model": "haiku"
+  "maxRounds": {
+    "workflow": 8,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.4"
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
   }
 }
 ```
@@ -148,4 +180,4 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 - issues 按数组顺序串行执行，不做并行调度
 - 任一 issue 进入 `REVIEW_FAIL` 耗尽轮数后，后续 issue 不执行
-- 共用配置字段（projectDir、implementer、reviewer）在讨论中应一次性约定，skill 不会逐项提示
+- 共用配置字段（projectDir、agents、maxRounds）在讨论中应一次性约定，skill 不会逐项提示

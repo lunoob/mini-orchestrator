@@ -1,6 +1,5 @@
 {
   "projectDir": "/absolute/path/to/project",
-  "mode": "issue",
   "issues": [
     {
       "title": "Step 1: Setup database schema",
@@ -17,25 +16,28 @@
       "state": "finish"
     }
   ],
-  "maxReviewRounds": 4,
-  "implementer": {
-    "name": "implementer",
-    "agent": "cursor",
-    "model": "composer"
+  "maxRounds": {
+    "workflow": 4,
+    "finalGate": 3
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.5"
-  },
-  "finalGate": {
-    "maxRounds": 3,
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer"
+    },
     "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.5"
+    },
+    "gateReviewer": {
       "name": "final-reviewer",
       "agent": "codex",
       "model": "gpt-5.5"
     },
-    "fixer": {
+    "gateFixer": {
       "name": "final-fixer",
       "agent": "codex",
       "model": "gpt-5.5"
@@ -44,6 +46,8 @@
   "prompts": {
     "implement": "./prompts/implement.md",
     "review": "./prompts/review.md",
-    "revise": "./prompts/revise.md"
+    "revise": "./prompts/revise.md",
+    "finalReview": "./prompts/final-review.md",
+    "finalFix": "./prompts/final-fix.md"
   }
 }

@@ -54,25 +54,21 @@ const AGENT_CONFIG = (name: string) => ({
 })
 
 const buildConfig = (dir: string, withFinalGate: boolean): WorkflowConfig => ({
-  implementer: AGENT_CONFIG("impl"),
-  reviewer: AGENT_CONFIG("rev"),
-  maxReviewRounds: 8,
+  agents: {
+    implementer: AGENT_CONFIG("impl"),
+    reviewer: AGENT_CONFIG("rev"),
+    ...(withFinalGate
+      ? { gateReviewer: AGENT_CONFIG("final-rev"), gateFixer: AGENT_CONFIG("final-fix") }
+      : {}),
+  },
+  enableFinalGate: withFinalGate,
+  maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: dir,
   prompts: {
     implement: "", review: "", revise: "", reReview: "",
     controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
   },
   issues: [{ title: "Issue One", specPath: path.join(dir, "spec.md") }],
-  ...(withFinalGate
-    ? {
-        finalGate: {
-          maxRounds: 3,
-          reviewer: AGENT_CONFIG("final-rev"),
-          fixer: AGENT_CONFIG("final-fix"),
-          prompts: { review: "/tmp/final-review.md", fix: "/tmp/final-fix.md" },
-        },
-      }
-    : {}),
 })
 
 const buildRuntime = (config: WorkflowConfig, configPath: string): WorkflowRuntime => ({
@@ -136,7 +132,7 @@ describe("issue queue with final gate", () => {
     expect(received).not.toContain("complete")
   })
 
-  it("skips the final gate entirely when finalGate is not configured", async () => {
+  it("skips the final gate entirely when it is disabled", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
     const configPath = writeRealFiles(dir)
     const runtime = buildRuntime(buildConfig(dir, false), configPath)
@@ -157,7 +153,7 @@ describe("issue queue with final gate", () => {
     await runIssueQueue(runtime, configPath)
 
     expect(runAgentUpdate).toHaveBeenCalledTimes(1)
-    expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.implementer, expect.any(Function))
+    expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.agents.implementer, expect.any(Function))
   })
 
   it("deduplicates updates for final gate agents too", async () => {
@@ -178,7 +174,7 @@ describe("issue queue with final gate", () => {
     await runIssueQueue(runtime, configPath)
 
     expect(runAgentIntegration).toHaveBeenCalledTimes(1)
-    expect(runAgentIntegration).toHaveBeenCalledWith(runtime.config.implementer, expect.any(Function))
+    expect(runAgentIntegration).toHaveBeenCalledWith(runtime.config.agents.implementer, expect.any(Function))
   })
 })
 
