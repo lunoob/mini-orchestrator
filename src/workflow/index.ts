@@ -14,7 +14,7 @@ export type WorkflowOptions = {
 
 export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) => {
   const configPath = path.resolve(args.config)
-  const config = await loadConfig(configPath, args)
+  const config = await loadConfig(configPath)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
 

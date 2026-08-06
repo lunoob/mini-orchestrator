@@ -21,7 +21,7 @@ describe("markIssueFinished", () => {
         { title: "One", specPath: "/a.md", state: "ready" },
         { title: "Two", specPath: "/b.md" },
       ],
-      maxReviewRounds: 4,
+      maxRounds: { workflow: 4, finalGate: 3 },
     })
     const issues: IssueConfig[] = [
       { title: "One", specPath: "/a.md", state: "ready" },
@@ -57,7 +57,7 @@ describe("markIssueInReview", () => {
         { title: "One", specPath: "/a.md", state: "ready" },
         { title: "Two", specPath: "/b.md", state: "review" },
       ],
-      maxReviewRounds: 4,
+      maxRounds: { workflow: 4, finalGate: 3 },
     })
     const issues: IssueConfig[] = [
       { title: "One", specPath: "/a.md", state: "ready" },

@@ -9,6 +9,7 @@ import {
   stopAgent,
 } from "../agent/index.js"
 import type { OutputCallback } from "../agent/index.js"
+import { deduplicateAgentIntegrations } from "../agent/integration.js"
 import { deduplicateAgentUpdates } from "../agent/update.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { createSession } from "../agent/session.js"
@@ -31,11 +32,11 @@ export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
 const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
   if (runtime.implementerPane) return
   if (!runtime.implementerSession) {
-    runtime.implementerSession = await bootstrapSession(runtime.config.implementer)
+    runtime.implementerSession = await bootstrapSession(runtime.config.agents.implementer)
   }
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,
-    runtime.config.implementer,
+    runtime.config.agents.implementer,
     runtime.implementerSession.resumeId,
     { ensureUniqueName: true },
   )
@@ -141,7 +142,7 @@ const runSingleSpecCycle = async (
     const { finalText, status: monitorStatus, question, reason: failReasonFromMonitor } = await sendTaskAndMonitor(
       runtime.implementerPane,
       render(runtime.prompts.implement, {
-        maxReviewRounds: String(runtime.config.maxReviewRounds),
+        maxReviewRounds: String(runtime.config.maxRounds.workflow),
         specPath,
       }),
       sh,
@@ -171,7 +172,7 @@ const runSingleSpecCycle = async (
   }
 
   await markIssueInReview(configPath, issueIndex, issues)
-  runtime.reviewerSession = await bootstrapSession(runtime.config.reviewer)
+  runtime.reviewerSession = await bootstrapSession(runtime.config.agents.reviewer)
 
   await runReviewLoop(runtime, 1, specSessionDir, specPath)
 }
@@ -221,7 +222,7 @@ export const runIssueQueueFromIndex = async (
   }
 
   // 所有 issue 成功完成：若启用 final gate 则先做全局审查，通过后才发布 workflow complete
-  if (runtime.config.finalGate) {
+  if (runtime.config.enableFinalGate) {
     const finalSessionDir = await createFinalSessionDir(runtime)
     await runFinalGate(runtime, finalSessionDir)
   }
@@ -235,20 +236,17 @@ const agentOutput: OutputCallback = (msg, stream) => {
 }
 
 export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string) => {
-  const { implementer, reviewer, projectDir } = runtime.config
+  const { agents, projectDir } = runtime.config
   // 仅在 final gate 启用时为 final 角色执行 update / integration；禁用时不产生额外命令
-  const finalRoles = runtime.config.finalGate
-    ? [runtime.config.finalGate.reviewer, runtime.config.finalGate.fixer]
+  const finalRoles = runtime.config.enableFinalGate
+    ? [agents.gateReviewer!, agents.gateFixer!]
     : []
-  const updateAgents = deduplicateAgentUpdates([implementer, reviewer, ...finalRoles])
+  const allAgents = [agents.implementer, agents.reviewer, ...finalRoles]
+  const updateAgents = deduplicateAgentUpdates(allAgents)
+  const integrationAgents = deduplicateAgentIntegrations(allAgents)
   await Promise.all([
     ...updateAgents.map((agent) => runAgentUpdate(projectDir, agent, agentOutput)),
-    runAgentIntegration(implementer, agentOutput),
-    runAgentIntegration(reviewer, agentOutput),
-    ...finalRoles.flatMap((agent) => [
-      runAgentUpdate(projectDir, agent, agentOutput),
-      runAgentIntegration(agent, agentOutput),
-    ]),
+    ...integrationAgents.map((agent) => runAgentIntegration(agent, agentOutput)),
   ])
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
 }

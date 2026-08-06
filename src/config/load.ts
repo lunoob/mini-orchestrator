@@ -5,12 +5,10 @@ import { fileURLToPath } from "node:url"
 import type {
   AgentConfig,
   AgentInputConfig,
-  FinalGateConfig,
-  FinalGateInputConfig,
   IssueConfig,
   IssueState,
   LoadedPrompts,
-  ParsedArgs,
+  MaxRoundsConfig,
   PromptConfig,
   WorkflowConfig,
 } from "../types.js"
@@ -31,16 +29,17 @@ const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/
 const DEFAULT_FINAL_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/final-review.md")
 const DEFAULT_FINAL_FIX_PROMPT = path.join(PROJECT_ROOT, "prompts/final-fix.md")
 
+const DEFAULT_WORKFLOW_MAX_ROUNDS = 8
 const DEFAULT_FINAL_MAX_ROUNDS = 3
+const LEGACY_FIELDS = ["maxReviewRounds", "implementer", "reviewer", "finalGate"] as const
 
 const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
 
-const resolveOptionalPath = (value: string | undefined) => (value ? path.resolve(value) : undefined)
-
-const parseMaxReviewRounds = (value: string) => {
+const parseRounds = (value: unknown, field: string, fallback: number) => {
+  if (value === undefined) return fallback
   const rounds = Number(value)
   if (!Number.isInteger(rounds) || rounds < 1) {
-    throw new Error(`[Config] Invalid maxReviewRounds: ${value}`)
+    throw new Error(`[Config] Invalid ${field}: ${value}`)
   }
   return rounds
 }
@@ -53,73 +52,36 @@ const parseIssueState = (value: unknown, index: number): IssueState => {
   throw new Error(`[Config] issues[${index}].state must be one of: ready, review, finish`)
 }
 
-const parseFinalMaxRounds = (value: unknown) => {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new Error("[Config] finalGate.maxRounds must be a positive integer")
-  }
-  return value
-}
-
-const parseFinalGateEnabled = (value: unknown) => {
-  if (value === undefined) return true
-  if (typeof value !== "boolean") {
-    throw new Error("[Config] finalGate.enabled must be a boolean")
-  }
-  return value
-}
-
-/**
- * 解析 finalGate：缺省或 enabled: false 时返回 undefined（完全保持旧行为）；
- * 启用时必须提供完整的 reviewer / fixer 角色配置，缺少任一字段即在加载阶段报错。
- */
-const parseFinalGate = (raw: unknown, resolveAgentInput: (input: AgentInputConfig, role: string) => AgentConfig): FinalGateConfig | undefined => {
-  if (raw === undefined) return undefined
-  if (typeof raw !== "object" || raw === null) {
-    throw new Error("[Config] finalGate must be an object")
-  }
-  const gate = raw as FinalGateInputConfig
-  if (!parseFinalGateEnabled(gate.enabled)) return undefined
-
-  const resolveFinalRole = (input: AgentInputConfig | undefined, role: string): AgentConfig => {
-    if (!input || typeof input !== "object") {
-      throw new Error(`[Config] finalGate.${role} is required`)
-    }
-    return resolveAgentInput(input, `finalGate.${role}`)
-  }
-
-  return {
-    maxRounds: gate.maxRounds === undefined ? DEFAULT_FINAL_MAX_ROUNDS : parseFinalMaxRounds(gate.maxRounds),
-    reviewer: resolveFinalRole(gate.reviewer, "reviewer"),
-    fixer: resolveFinalRole(gate.fixer, "fixer"),
-    prompts: {
-      review: gate.prompts?.review ?? DEFAULT_FINAL_REVIEW_PROMPT,
-      fix: gate.prompts?.fix ?? DEFAULT_FINAL_FIX_PROMPT,
-    },
-  }
-}
-
-export const loadConfig = async (configPath: string, args: ParsedArgs) => {
+export const loadConfig = async (configPath: string) => {
   const content = await readFile(configPath, "utf8")
-  const fileConfig = JSON.parse(content) as Partial<WorkflowConfig>
+  const fileConfig = JSON.parse(content) as Record<string, unknown>
 
-  const projectDir = resolveOptionalPath(args.projectDir) ?? fileConfig.projectDir
-  const maxReviewRounds =
-    args.maxReviewRounds !== undefined
-      ? parseMaxReviewRounds(args.maxReviewRounds)
-      : Number(fileConfig.maxReviewRounds ?? 8)
+  const legacyField = LEGACY_FIELDS.find(field => field in fileConfig)
+  if (legacyField) {
+    throw new Error(`[Config] Legacy field "${legacyField}" is no longer supported; use the grouped config fields`)
+  }
 
-  if (!projectDir) throw new Error("[Config] projectDir is required (workflow config or --projectDir)")
+  const projectDir = fileConfig.projectDir
+  if (typeof projectDir !== "string" || !projectDir) {
+    throw new Error("[Config] projectDir is required in workflow config")
+  }
 
-  if (!fileConfig.issues || fileConfig.issues.length === 0) {
+  const rawIssues = fileConfig.issues
+  if (!Array.isArray(rawIssues) || rawIssues.length === 0) {
     throw new Error("[Config] issues is required (non-empty array)")
   }
-  const issues: IssueConfig[] = fileConfig.issues.map((issue, index) => {
-    if (!issue.title) throw new Error(`[Config] issues[${index}].title is required`)
-    if (!issue.specPath) throw new Error(`[Config] issues[${index}].specPath is required`)
+
+  const issues: IssueConfig[] = rawIssues.map((issue, index) => {
+    if (typeof issue !== "object" || issue === null) {
+      throw new Error(`[Config] issues[${index}] must be an object`)
+    }
+    const item = issue as Partial<IssueConfig>
+    if (!item.title) throw new Error(`[Config] issues[${index}].title is required`)
+    if (!item.specPath) throw new Error(`[Config] issues[${index}].specPath is required`)
     return {
-      title: issue.title,
-      specPath: issue.specPath,
-      state: parseIssueState(issue.state, index),
+      title: item.title,
+      specPath: item.specPath,
+      state: parseIssueState(item.state, index),
     }
   })
 
@@ -129,42 +91,68 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     }
   }
 
+  const rawPrompts = (fileConfig.prompts ?? {}) as Partial<PromptConfig>
   const prompts: PromptConfig = {
-    implement: fileConfig.prompts?.implement ?? DEFAULT_IMPLEMENT_PROMPT,
-    reReview: fileConfig.prompts?.reReview ?? DEFAULT_RE_REVIEW_PROMPT,
-    review: fileConfig.prompts?.review ?? DEFAULT_REVIEW_PROMPT,
-    revise: fileConfig.prompts?.revise ?? DEFAULT_REVISE_PROMPT,
     controllerImplementer:
-      fileConfig.prompts?.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
+      rawPrompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
     controllerReReview:
-      fileConfig.prompts?.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
+      rawPrompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
+    finalFix: rawPrompts.finalFix ?? DEFAULT_FINAL_FIX_PROMPT,
+    finalReview: rawPrompts.finalReview ?? DEFAULT_FINAL_REVIEW_PROMPT,
+    implement: rawPrompts.implement ?? DEFAULT_IMPLEMENT_PROMPT,
     postReviewCheck:
-      fileConfig.prompts?.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
+      rawPrompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
     outputFormatImplement:
-      fileConfig.prompts?.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
+      rawPrompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
     outputFormatReview:
-      fileConfig.prompts?.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
+      rawPrompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
+    reReview: rawPrompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT,
+    review: rawPrompts.review ?? DEFAULT_REVIEW_PROMPT,
+    revise: rawPrompts.revise ?? DEFAULT_REVISE_PROMPT,
   }
 
-  if (!fileConfig.implementer) throw new Error("[Config] workflow config is missing implementer")
-  if (!fileConfig.reviewer) throw new Error("[Config] workflow config is missing reviewer")
-
-  const resolveAgentInput = (input: AgentInputConfig, role: string) => {
-    if (!input.agent) throw new Error(`[Config] ${role}.agent is required`)
-    if (!input.name) throw new Error(`[Config] ${role}.name is required`)
-    return resolveAgentConfig(input)
+  const rawAgents = fileConfig.agents
+  if (typeof rawAgents !== "object" || rawAgents === null) {
+    throw new Error("[Config] agents is required")
+  }
+  const agents = rawAgents as Record<string, unknown>
+  const resolveAgentInput = (input: unknown, role: string) => {
+    if (typeof input !== "object" || input === null) {
+      throw new Error(`[Config] agents.${role} is required`)
+    }
+    const agentInput = input as AgentInputConfig
+    if (!agentInput.agent) throw new Error(`[Config] agents.${role}.agent is required`)
+    if (!agentInput.name) throw new Error(`[Config] agents.${role}.name is required`)
+    return resolveAgentConfig(agentInput)
   }
 
-  return {
-    ...fileConfig,
-    implementer: resolveAgentInput(fileConfig.implementer, "implementer"),
-    maxReviewRounds,
-    projectDir,
-    prompts,
-    reviewer: resolveAgentInput(fileConfig.reviewer, "reviewer"),
-    finalGate: parseFinalGate(fileConfig.finalGate, resolveAgentInput),
-    issues,
-  } as WorkflowConfig
+  const enableFinalGate = fileConfig.enableFinalGate ?? false
+  if (typeof enableFinalGate !== "boolean") {
+    throw new Error("[Config] enableFinalGate must be a boolean")
+  }
+
+  const resolvedAgents = {
+    implementer: resolveAgentInput(agents.implementer, "implementer"),
+    reviewer: resolveAgentInput(agents.reviewer, "reviewer"),
+    ...(enableFinalGate
+      ? {
+          gateReviewer: resolveAgentInput(agents.gateReviewer, "gateReviewer"),
+          gateFixer: resolveAgentInput(agents.gateFixer, "gateFixer"),
+        }
+      : {}),
+  }
+
+  const rawRounds = fileConfig.maxRounds
+  if (rawRounds !== undefined && (typeof rawRounds !== "object" || rawRounds === null)) {
+    throw new Error("[Config] maxRounds must be an object")
+  }
+  const rounds = (rawRounds ?? {}) as Partial<MaxRoundsConfig>
+  const maxRounds = {
+    workflow: parseRounds(rounds.workflow, "maxRounds.workflow", DEFAULT_WORKFLOW_MAX_ROUNDS),
+    finalGate: parseRounds(rounds.finalGate, "maxRounds.finalGate", DEFAULT_FINAL_MAX_ROUNDS),
+  }
+
+  return { agents: resolvedAgents, enableFinalGate, issues, maxRounds, projectDir, prompts } as WorkflowConfig
 }
 
 const readPrompt = async (configDir: string, file: string) =>
@@ -210,8 +198,8 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     readPrompt(configDir, config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT),
     readPrompt(configDir, config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT),
     readPrompt(configDir, config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT),
-    readPrompt(configDir, config.finalGate?.prompts.review ?? DEFAULT_FINAL_REVIEW_PROMPT),
-    readPrompt(configDir, config.finalGate?.prompts.fix ?? DEFAULT_FINAL_FIX_PROMPT),
+    readPrompt(configDir, config.prompts.finalReview ?? DEFAULT_FINAL_REVIEW_PROMPT),
+    readPrompt(configDir, config.prompts.finalFix ?? DEFAULT_FINAL_FIX_PROMPT),
   ])
 
   return {

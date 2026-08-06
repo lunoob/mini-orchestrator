@@ -1,4 +1,5 @@
 import { format } from "node:util"
+import { pathToFileURL } from "node:url"
 
 import { notifyError, notifySuccess, notifyTestStatusComplete } from "./notify/index.js"
 import { assertHerdrEnv, getErrorMessage } from "./lib/utils.js"
@@ -35,8 +36,7 @@ const proxyConsoleToSink = (sink: LogSink): (() => void) => {
   }
 }
 
-export const main = async () => {
-  const argv = process.argv.slice(2)
+export const main = async (testStatusMode = false, argv = process.argv.slice(2)) => {
 
   if (argv[0] === "skill") {
     process.exitCode = await runSkillCli(argv.slice(1))
@@ -62,10 +62,12 @@ export const main = async () => {
 
   const args = parseArgs(argv)
 
-  if (args.config) {
-    args.config = getConfigPath(args)
-  } else if (args.testStatus !== "true") {
-    throw new Error("[Config] Missing required argument --config /absolute/path/to/workflow.json")
+  if (!testStatusMode) {
+    if (args.config) {
+      args.config = getConfigPath(args)
+    } else {
+      throw new Error("[Config] Missing required argument --config /absolute/path/to/workflow.json")
+    }
   }
 
   // 创建共享事件总线和 terminal UI
@@ -82,8 +84,8 @@ export const main = async () => {
     }
 
     try {
-      if (args.testStatus === "true") {
-        await runTestStatus(args, eventBus)
+      if (testStatusMode) {
+        await runTestStatus(eventBus)
         notifyTestStatusComplete()
       } else {
         await runWorkflow(args, { eventBus })
@@ -99,7 +101,7 @@ export const main = async () => {
   }
 }
 
-void main().catch((error) => {
+export const handleMainError = (error: unknown) => {
   // Agent 失败：workflow 失败，返回退出码 1 并发送错误通知
   if (error instanceof AgentFailError) {
     console.error(`\n[Workflow] ${error.message}`)
@@ -119,4 +121,8 @@ void main().catch((error) => {
   console.error(`\n[Workflow] Workflow failed: ${message}`)
   notifyError(message)
   process.exitCode = 1
-})
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main().catch(handleMainError)
+}

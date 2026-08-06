@@ -109,9 +109,9 @@ const conductFinalReview = async (
   runtime: WorkflowRuntime, round: number, sessionDir: string, lastReviewOutput?: string,
 ) => {
   const session = runtime.finalReviewerSession!
-  const gate = runtime.config.finalGate!
+  const maxRounds = runtime.config.maxRounds.finalGate
 
-  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds: gate.maxRounds })
+  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
 
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.startBaseSha, round)
@@ -154,7 +154,7 @@ const conductFinalReview = async (
 
 /** 执行 Final Fixer：输入为去 STATUS 行的问题清单、当前 round、全部 spec 路径 */
 const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, round: number) => {
-  const session = await ensureFinalFixer(runtime, runtime.config.finalGate!.fixer)
+  const session = await ensureFinalFixer(runtime, runtime.config.agents.gateFixer!)
 
   runtime.eventBus.publish({ type: "phase_change", phase: "final-fix" })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
@@ -184,14 +184,14 @@ const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, rou
 const settleFinalNeedsCheck = async (
   runtime: WorkflowRuntime, round: number, initialOutput: string,
 ): Promise<"passed" | { reviewOutput: string }> => {
-  const gate = runtime.config.finalGate!
+  const maxRounds = runtime.config.maxRounds.finalGate
   let needsCheckOutput = initialOutput
   let checks = 0
 
   while (true) {
     checks += 1
-    if (checks > gate.maxRounds) {
-      failWithError(runtime, `Final review needs_check exceeded ${gate.maxRounds} rounds`)
+    if (checks > maxRounds) {
+      failWithError(runtime, `Final review needs_check exceeded ${maxRounds} rounds`)
     }
 
     const decision = await handleNeedsCheck(
@@ -202,8 +202,8 @@ const settleFinalNeedsCheck = async (
 
     if (reParsed.status === "REVIEW_PASS") return "passed"
     if (reParsed.status === "REVIEW_FAIL") {
-      if (round === gate.maxRounds) {
-        failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
+      if (round === maxRounds) {
+        failWithError(runtime, `Final review failed after ${maxRounds} rounds`)
       }
       await runFinalFixer(runtime, needsCheckOutput, round)
       return { reviewOutput: needsCheckOutput }
@@ -215,14 +215,13 @@ const settleFinalNeedsCheck = async (
 }
 
 export const runFinalGate = async (runtime: WorkflowRuntime, sessionDir: string) => {
-  const gate = runtime.config.finalGate
-  if (!gate) return
+  if (!runtime.config.enableFinalGate) return
 
   try {
-    await ensureFinalReviewer(runtime, gate.reviewer)
+    await ensureFinalReviewer(runtime, runtime.config.agents.gateReviewer!)
     let lastReviewOutput: string | undefined
 
-    for (let round = 1; round <= gate.maxRounds; round += 1) {
+    for (let round = 1; round <= runtime.config.maxRounds.finalGate; round += 1) {
       runtime.eventBus.publish({ type: "phase_change", phase: "final-review" })
 
       const { reviewOutput, parsed } = await conductFinalReview(runtime, round, sessionDir, lastReviewOutput)
@@ -240,13 +239,13 @@ export const runFinalGate = async (runtime: WorkflowRuntime, sessionDir: string)
       }
 
       // REVIEW_FAIL → 未达上限则交给 Final Fixer，进入下一轮
-      if (round === gate.maxRounds) {
-        failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
+      if (round === runtime.config.maxRounds.finalGate) {
+        failWithError(runtime, `Final review failed after ${runtime.config.maxRounds.finalGate} rounds`)
       }
       await runFinalFixer(runtime, reviewOutput, round)
     }
 
-    failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
+    failWithError(runtime, `Final review failed after ${runtime.config.maxRounds.finalGate} rounds`)
   } finally {
     // 只关闭由 final gate 启动的 pane
     const fp = runtime.finalFixerPane

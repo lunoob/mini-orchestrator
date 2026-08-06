@@ -22,6 +22,8 @@ export type AgentConfig = AgentInputConfig & {
 export type PromptConfig = {
   controllerImplementer?: string
   controllerReReview?: string
+  finalFix?: string
+  finalReview?: string
   implement: string
   /** 自定义 implement 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/implement-output.md` */
   outputFormatImplement?: string
@@ -33,30 +35,16 @@ export type PromptConfig = {
   revise: string
 }
 
-/** 配置文件中 finalGate 的输入字段（未解析） */
-export type FinalGateInputConfig = {
-  /** 缺省视为启用；false 显式禁用 */
-  enabled?: boolean
-  /** final gate 独立轮次上限，缺省 3，不受 --maxReviewRounds 影响 */
-  maxRounds?: number
-  /** 覆盖内置 final review / final fix prompt 的路径 */
-  prompts?: {
-    review?: string
-    fix?: string
-  }
-  reviewer: AgentInputConfig
-  fixer: AgentInputConfig
+export type WorkflowAgents = {
+  implementer: AgentConfig
+  reviewer: AgentConfig
+  gateReviewer?: AgentConfig
+  gateFixer?: AgentConfig
 }
 
-/** finalGate 运行时配置；存在即表示启用 */
-export type FinalGateConfig = {
-  maxRounds: number
-  reviewer: AgentConfig
-  fixer: AgentConfig
-  prompts: {
-    review: string
-    fix: string
-  }
+export type MaxRoundsConfig = {
+  finalGate: number
+  workflow: number
 }
 
 /** ready: 可开发；review: 已实现、待审查；finish: 已完成，workflow 会跳过 */
@@ -70,14 +58,12 @@ export type IssueConfig = {
 }
 
 export type WorkflowConfig = {
-  implementer: AgentConfig
-  maxReviewRounds: number
+  agents: WorkflowAgents
+  enableFinalGate: boolean
+  maxRounds: MaxRoundsConfig
   projectDir: string
   prompts: PromptConfig
-  reviewer: AgentConfig
   issues: IssueConfig[]
-  /** 缺省或 enabled: false 时无 final gate；存在即启用 */
-  finalGate?: FinalGateConfig
 }
 
 export type HerdrPaneInfo = {
