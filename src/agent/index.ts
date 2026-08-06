@@ -18,6 +18,7 @@ import {
   formatUpdateStart,
 } from "./log-messages.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
+import { waitForAgentReady } from "./readiness.js"
 import type { OutputCallback } from "./subprocess.js"
 export type { OutputCallback }
 
@@ -324,10 +325,11 @@ export const bootstrapSession = async (
 }
 
 const startAgentWithResumeId = async (
-  projectDir: string, agent: AgentConfig, name: string, resumeId: string,
+  projectDir: string, agent: AgentConfig, name: string,
+  session: Pick<AgentSessionHandle, "resumeId" | "jsonl">,
 ) => {
   const paneId = await createAgentPane(projectDir)
-  const resumeCommand = buildResumeArgs(agent, resumeId)
+  const resumeCommand = buildResumeArgs(agent, session.resumeId)
   const agentArgs = splitCommand(resumeCommand).slice(1)
   const startArgs = [
     "agent", "start", name, "--kind", agent.integrationAgent,
@@ -340,7 +342,8 @@ const startAgentWithResumeId = async (
 }
 
 export const startAgentResumed = async (
-  projectDir: string, agent: AgentConfig, resumeId: string,
+  projectDir: string, agent: AgentConfig,
+  session: Pick<AgentSessionHandle, "resumeId" | "jsonl">,
   options: StartAgentOptions = {},
 ) => {
   let name = agent.name
@@ -348,7 +351,14 @@ export const startAgentResumed = async (
     name = await resolveUniqueAgentName(agent.name)
     if (name !== agent.name) console.log(`[Agent] Name "${agent.name}" is taken; using "${name}" instead.`)
   }
-  return startAgentWithResumeId(projectDir, agent, name, resumeId)
+  const paneId = await startAgentWithResumeId(projectDir, agent, name, session)
+  try {
+    await waitForAgentReady(paneId, session, { read: readAgentOutput })
+    return paneId
+  } catch (error) {
+    await stopAgent(paneId)
+    throw error
+  }
 }
 
 // ── Transcript monitor ──

@@ -180,7 +180,12 @@ describe("runFinalGate", () => {
     await runFinalGate(runtime, "/tmp/final-session")
 
     expect(startAgentResumed).toHaveBeenCalledTimes(1)
-    expect(startAgentResumed).toHaveBeenCalledWith("/tmp/project", expect.objectContaining({ name: "final-rev" }), expect.any(String), expect.any(Object))
+    expect(startAgentResumed).toHaveBeenCalledWith(
+      "/tmp/project",
+      expect.objectContaining({ name: "final-rev" }),
+      expect.objectContaining({ resumeId: "resume-final-rev", jsonl: "/tmp/resume-final-rev.jsonl" }),
+      expect.any(Object),
+    )
     expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
     expect(stopAgent).not.toHaveBeenCalledWith("pane-final-fix")
     expect(failEvents(runtime.eventBus)).toEqual([])

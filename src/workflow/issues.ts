@@ -37,10 +37,9 @@ const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,
     runtime.config.agents.implementer,
-    runtime.implementerSession.resumeId,
+    runtime.implementerSession,
     { ensureUniqueName: true },
   )
-  // 不再等待 Herdr 状态：Agent 启动后直接发 task，monitor 以 JSONL 首次事件确认为准
 }
 
 /**

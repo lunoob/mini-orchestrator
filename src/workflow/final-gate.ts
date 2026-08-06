@@ -69,7 +69,7 @@ const ensureFinalReviewer = async (runtime: WorkflowRuntime, agent: AgentConfig)
   }
   runtime.finalReviewerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
-    runtime.finalReviewerSession.resumeId, { ensureUniqueName: true },
+    runtime.finalReviewerSession, { ensureUniqueName: true },
   )
   console.log(`[FinalGate] Started final reviewer on demand: ${runtime.finalReviewerPane}`)
   return runtime.finalReviewerSession
@@ -83,7 +83,7 @@ const ensureFinalFixer = async (runtime: WorkflowRuntime, agent: AgentConfig): P
   }
   runtime.finalFixerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
-    runtime.finalFixerSession.resumeId, { ensureUniqueName: true },
+    runtime.finalFixerSession, { ensureUniqueName: true },
   )
   console.log(`[FinalGate] Started final fixer on demand: ${runtime.finalFixerPane}`)
   return runtime.finalFixerSession

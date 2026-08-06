@@ -9,8 +9,6 @@ export type AgentInputConfig = {
 
 /** 由 agent + model 解析后的运行时 agent 配置 */
 export type AgentConfig = AgentInputConfig & {
-  /** herdr pane wait-output --match：等待启动输出中出现该文本后再发送首条 prompt */
-  agentReadyPattern?: string
   command: string
   /** 启动 agent 前先执行的 update 命令（如 "codex update"），
    *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */

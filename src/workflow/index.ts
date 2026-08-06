@@ -46,5 +46,12 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
     startBaseSha,
   }
 
-  await runIssueQueue(runtime, configPath)
+  try {
+    await runIssueQueue(runtime, configPath)
+  } catch (error) {
+    if (error instanceof Error && error.message === "Agent CLI 启动失败") {
+      eventBus.publish({ type: "fail", reason: error.message })
+    }
+    throw error
+  }
 }

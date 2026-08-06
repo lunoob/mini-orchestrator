@@ -165,7 +165,7 @@ const ensureImplementer = async (runtime: WorkflowRuntime): Promise<AgentSession
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,
     runtime.config.agents.implementer,
-    runtime.implementerSession.resumeId,
+    runtime.implementerSession,
     { ensureUniqueName: true },
   )
   console.log(`[Review] Started implementer on demand for repair: ${runtime.implementerPane}`)
@@ -364,7 +364,7 @@ export const runReviewLoop = async (
   if (runtime.reviewerSession && !runtime.reviewerPane) {
     runtime.reviewerPane = await startAgentResumed(
       runtime.config.projectDir, runtime.config.agents.reviewer,
-      runtime.reviewerSession.resumeId, { ensureUniqueName: true },
+      runtime.reviewerSession, { ensureUniqueName: true },
     )
   }
 

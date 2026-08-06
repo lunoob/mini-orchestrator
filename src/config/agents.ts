@@ -2,7 +2,6 @@ import type { AgentConfig, AgentInputConfig } from "../types.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 
 export type AgentDefinition = {
-  agentReadyPattern: string
   /** 实际 CLI 可执行名，省略时与配置中的 agent 同名 */
   cli?: string
   /** herdr integration 子命令参数，省略时与配置中的 agent 同名 */
@@ -11,9 +10,9 @@ export type AgentDefinition = {
 }
 
 export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
-  claude: { agentReadyPattern: "Claude", supportsUpdate: true },
-  codex: { agentReadyPattern: "Codex", supportsUpdate: true },
-  cursor: { agentReadyPattern: "Cursor Agent", cli: "cursor-agent", supportsUpdate: true },
+  claude: { supportsUpdate: true },
+  codex: { supportsUpdate: true },
+  cursor: { cli: "cursor-agent", supportsUpdate: true },
 }
 
 const CODEX_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"] as const
@@ -255,7 +254,6 @@ export const resolveAgentConfig = (input: AgentInputConfig): AgentConfig => {
 
   return {
     ...input,
-    agentReadyPattern: definition.agentReadyPattern,
     command: buildCommand(cli, input.agent, input.model, input.effort),
     integrationAgent,
     updateCommand: definition.supportsUpdate ? `${cli} update` : undefined,

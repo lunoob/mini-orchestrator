@@ -184,11 +184,9 @@ describe("loadConfig", () => {
     const config = await loadConfig(configPath)
 
     expect(config.agents.implementer.command).toBe("cursor-agent --trust --yolo --model composer")
-    expect(config.agents.implementer.agentReadyPattern).toBe("Cursor Agent")
     expect(config.agents.implementer.integrationAgent).toBe("cursor")
     expect(config.agents.implementer.updateCommand).toBe("cursor-agent update")
     expect(config.agents.reviewer.command).toBe("codex --model gpt-5.6-terra")
-    expect(config.agents.reviewer.agentReadyPattern).toBe("Codex")
     expect(config.agents.reviewer.integrationAgent).toBe("codex")
     expect(config.agents.reviewer.updateCommand).toBe("codex update")
   })

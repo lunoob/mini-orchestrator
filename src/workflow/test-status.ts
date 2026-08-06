@@ -83,7 +83,7 @@ export const runTestStatus = async (eventBus?: WorkflowEventBus) => {
 
     // 使用 JSONL-based monitoring 流程
     const sessionHandle = await bootstrapSession(agent)
-    paneId = await startAgentResumed(projectDir, agent, sessionHandle.resumeId, {
+    paneId = await startAgentResumed(projectDir, agent, sessionHandle, {
       ensureUniqueName: true,
     })
     started = true
