@@ -77,7 +77,7 @@ export const runTestStatus = async (eventBus?: WorkflowEventBus) => {
     console.log(`[TestStatus] Command: ${agent.command}`)
 
     await Promise.all([
-      runAgentUpdate(projectDir, agent, agentOutput),
+      runAgentUpdate(projectDir, agent),
       runAgentIntegration(agent, agentOutput),
     ])
 

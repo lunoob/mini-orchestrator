@@ -244,7 +244,7 @@ export const runIssueQueue = async (runtime: WorkflowRuntime, configPath: string
   const updateAgents = deduplicateAgentUpdates(allAgents)
   const integrationAgents = deduplicateAgentIntegrations(allAgents)
   await Promise.all([
-    ...updateAgents.map((agent) => runAgentUpdate(projectDir, agent, agentOutput)),
+    ...updateAgents.map((agent) => runAgentUpdate(projectDir, agent)),
     ...integrationAgents.map((agent) => runAgentIntegration(agent, agentOutput)),
   ])
   await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)

@@ -153,7 +153,7 @@ describe("issue queue with final gate", () => {
     await runIssueQueue(runtime, configPath)
 
     expect(runAgentUpdate).toHaveBeenCalledTimes(1)
-    expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.agents.implementer, expect.any(Function))
+    expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.agents.implementer)
   })
 
   it("deduplicates updates for final gate agents too", async () => {

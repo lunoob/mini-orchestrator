@@ -154,16 +154,17 @@ const spawnWithOutput = (
       })
     }
     child.on("error", reject)
-    child.on("close", resolve)
+    child.on("close", (code) => resolve({ code }))
   })
 
 export const runAgentUpdate = async (
-  projectDir: string, agent: AgentConfig, onOutput?: OutputCallback,
+  projectDir: string, agent: AgentConfig,
 ): Promise<boolean> => {
   if (!agent.updateCommand) return true
   console.log(formatUpdateStart(agent.updateCommand))
   const [cmd, ...args] = splitCommand(agent.updateCommand)
-  const { code } = await spawnWithOutput(cmd, args, { cwd: projectDir }, onOutput)
+  // 更新 CLI 可能输出基于 \r 的实时进度条，不转发其过程输出，避免污染终端日志。
+  const { code } = await spawnWithOutput(cmd, args, { cwd: projectDir })
   if (code !== 0) {
     console.warn(formatUpdateFailure(code))
     return false
