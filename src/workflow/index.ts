@@ -49,7 +49,7 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
   try {
     await runIssueQueue(runtime, configPath)
   } catch (error) {
-    if (error instanceof Error && error.message === "Agent CLI 启动失败") {
+    if (error instanceof Error && error.message.startsWith("Agent CLI 启动失败")) {
       eventBus.publish({ type: "fail", reason: error.message })
     }
     throw error

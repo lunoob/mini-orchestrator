@@ -12,6 +12,14 @@ describe("waitForAgentReady", () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 
+  it("matches jsonl paths split by pane line wrapping", async () => {
+    const read = vi.fn().mockResolvedValue(
+      "Cursor --resume resume-1\n{\"resumeId\":\"resume-1\",\"jsonl\":\"/tmp/session-1.\njsonl\"}",
+    )
+
+    await expect(waitForAgentReady("pane-1", session, { read, sleep: vi.fn() })).resolves.toBeUndefined()
+  })
+
   it("retries every five seconds until the pane is ready", async () => {
     const read = vi.fn()
       .mockResolvedValueOnce("Codex starting")
@@ -36,12 +44,12 @@ describe("waitForAgentReady", () => {
     expect(sleep).toHaveBeenCalledTimes(2)
   })
 
-  it("throws a concise error after six unsuccessful attempts", async () => {
+  it("includes the latest pane output after six unsuccessful attempts", async () => {
     const read = vi.fn().mockResolvedValue("Codex starting")
     const sleep = vi.fn().mockResolvedValue(undefined)
 
     await expect(waitForAgentReady("pane-1", session, { read, sleep })).rejects.toThrow(
-      "Agent CLI 启动失败",
+      "Agent CLI 启动失败\nMatch: resumeId=false, jsonl=false\nPane output:\nCodex starting",
     )
     expect(read).toHaveBeenCalledTimes(6)
     expect(sleep).toHaveBeenCalledTimes(6)
