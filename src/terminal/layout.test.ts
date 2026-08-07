@@ -59,13 +59,6 @@ describe("formatStatusLine", () => {
     expect(line).toContain("Dashboard")
   })
 
-  it("includes workflow title when provided", () => {
-    const snap = createSnapshot({ workflowTitle: "实现用户登录功能" })
-    const line = formatStatusLine(snap, 80)
-
-    expect(line).toContain("实现用户登录功能")
-  })
-
   it("formats phase", () => {
     const snap = createSnapshot({ phase: "review" })
     const line = formatStatusLine(snap, 80)

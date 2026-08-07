@@ -88,10 +88,6 @@ export const formatElapsed = (ms: number): string => {
 export const formatStatusLine = (snap: WorkflowSnapshot, _cols: number): string => {
   const parts: string[] = []
 
-  if (snap.workflowTitle) {
-    parts.push(snap.workflowTitle)
-  }
-
   // Issue progress
   parts.push(`Issue: ${snap.issueIndex + 1}/${snap.issueCount}`)
 
