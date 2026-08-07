@@ -20,7 +20,9 @@
 
 {{reviewOutput}}
 
-请结合 Controller 补充信息，重新评估此前 `⚠️ Cannot verify` 项是否可确认。按 `review` prompt 相同格式输出，并给出**一个**状态信号：
+请结合 Controller 补充信息，重新评估此前 `⚠️ Cannot verify` 项是否可确认。
+
+在输出中标记**一个**状态：
 
 - 全部确认通过：`STATUS: REVIEW_PASS`
 - 仍有无法验证项：`STATUS: REVIEW_NEEDS_CHECK`

@@ -9,8 +9,6 @@ export type AgentInputConfig = {
 
 /** 由 agent + model 解析后的运行时 agent 配置 */
 export type AgentConfig = AgentInputConfig & {
-  /** herdr pane wait-output --match：等待启动输出中出现该文本后再发送首条 prompt */
-  agentReadyPattern?: string
   command: string
   /** 启动 agent 前先执行的 update 命令（如 "codex update"），
    *  仅在 workflow 首次启动 agent 前执行一次，避免 update 完成后 pane 关闭导致后续失败 */
@@ -22,6 +20,8 @@ export type AgentConfig = AgentInputConfig & {
 export type PromptConfig = {
   controllerImplementer?: string
   controllerReReview?: string
+  finalFix?: string
+  finalReview?: string
   implement: string
   /** 自定义 implement 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/implement-output.md` */
   outputFormatImplement?: string
@@ -31,6 +31,18 @@ export type PromptConfig = {
   reReview?: string
   review: string
   revise: string
+}
+
+export type WorkflowAgents = {
+  implementer: AgentConfig
+  reviewer: AgentConfig
+  gateReviewer?: AgentConfig
+  gateFixer?: AgentConfig
+}
+
+export type MaxRoundsConfig = {
+  finalGate: number
+  workflow: number
 }
 
 /** ready: 可开发；review: 已实现、待审查；finish: 已完成，workflow 会跳过 */
@@ -44,12 +56,14 @@ export type IssueConfig = {
 }
 
 export type WorkflowConfig = {
-  implementer: AgentConfig
-  maxReviewRounds: number
+  agents: WorkflowAgents
+  enableFinalGate: boolean
+  maxRounds: MaxRoundsConfig
   projectDir: string
   prompts: PromptConfig
-  reviewer: AgentConfig
   issues: IssueConfig[]
+  /** 描述本次 workflow 任务，可选 */
+  title?: string
 }
 
 export type HerdrPaneInfo = {
@@ -99,6 +113,8 @@ export type ParsedArgs = Record<string, string>
 export type LoadedPrompts = {
   controllerImplementer: string
   controllerReReview: string
+  finalFix: string
+  finalReview: string
   implement: string
   postReviewCheck: string
   reReview: string

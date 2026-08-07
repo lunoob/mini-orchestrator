@@ -16,7 +16,7 @@ disable-model-invocation: true
 
 - 当前上下文中已讨论完成的一个或多个 issue 文档路径（`.md` 或其他可读格式）
 - 讨论过程中确定的实施顺序
-- 用户在讨论中约定的共同配置项（projectDir、implementer、reviewer 等）
+- 用户在讨论中约定的共同配置项（projectDir、agents、maxRounds 等）
 
 ## 输出
 
@@ -24,31 +24,49 @@ disable-model-invocation: true
 
 ```json
 {
+  "title": "<本次任务描述>",
   "projectDir": "<项目目录>",
-  "mode": "issue",
   "issues": [
     {
       "title": "<Issue 标题>",
       "specPath": "<issue 文档绝对路径>"
     }
   ],
-  "maxReviewRounds": 30,
-  "implementer": {
-    "name": "implementer",
-    "agent": "cursor",
-    "model": "composer-2.5"
+  "maxRounds": {
+    "workflow": 30,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.6-terra",
-    "effort": "high"
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    }
   }
 }
 ```
 
+- `title`：描述本次 workflow 任务，用于终端展示和系统通知
 - `issues[]` 按顺序排列，对应编排器的串行执行顺序
-- `title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
+- `issues[].title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
 - `projectDir` 使用当前的项目目录
 - 如出现配置项没提供，可以采用上述的配置做 fallback
@@ -78,16 +96,8 @@ disable-model-invocation: true
 
 ### 3. 输出执行命令
 
-把执行命令输出给用户(包括 LLM 和终端两种模式下的命令)
+输出执行命令:
 
-llm 模式命令为:
-```bash
-zsh -ic 'mini-orch \
-  --config "'"$CONFIG_PATH"'" \
-  --needs-check-mode llm'
-```
-
-终端模式命令为:
 ```bash
 mini-orch --config "'"$CONFIG_PATH"'"
 ```
@@ -108,9 +118,6 @@ mini-orch --config "'"$CONFIG_PATH"'"
 |-----------|------|----------|
 | 0 | 编排正常完成 | 告诉用户"编排完成，所有 issue 已处理完毕" |
 | 1 | 编排失败 | 显示编排器的错误消息 |
-| 2 | needs_check 暂停 | 告诉用户需要人工 Review，以及 `CHECKPOINT:` 路径 |
-
-> exit 2 时 stdout 含 `CHECKPOINT: <path>`，可用 `mini-orch --resume-from <path> --needs-check-action <action>` 恢复。
 
 ## 示例
 
@@ -118,8 +125,8 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 ```json
 {
+  "title": "用户认证功能开发",
   "projectDir": "/home/user/my-project",
-  "mode": "issue",
   "issues": [
     {
       "title": "数据库 Schema 搭建",
@@ -134,16 +141,33 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "specPath": "/home/user/my-project/specs/frontend.md"
     }
   ],
-  "maxReviewRounds": 8,
-  "implementer": {
-    "name": "implementer",
-    "agent": "claude",
-    "model": "haiku"
+  "maxRounds": {
+    "workflow": 8,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.4"
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
   }
 }
 ```
@@ -159,4 +183,4 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 - issues 按数组顺序串行执行，不做并行调度
 - 任一 issue 进入 `REVIEW_FAIL` 耗尽轮数后，后续 issue 不执行
-- 共用配置字段（projectDir、implementer、reviewer）在讨论中应一次性约定，skill 不会逐项提示
+- 共用配置字段（projectDir、agents、maxRounds）在讨论中应一次性约定，skill 不会逐项提示
