@@ -62,6 +62,8 @@ export type WorkflowConfig = {
   projectDir: string
   prompts: PromptConfig
   issues: IssueConfig[]
+  /** 描述本次 workflow 任务，可选 */
+  title?: string
 }
 
 export type HerdrPaneInfo = {

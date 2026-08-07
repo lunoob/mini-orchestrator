@@ -4,6 +4,7 @@ import type { WorkflowSnapshot } from "../workflow/events.js"
 import { calculateLayout, formatStatusLine, getStringDisplayWidth } from "./layout.js"
 
 const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnapshot => ({
+  workflowTitle: "",
   issueIndex: 0,
   issueCount: 3,
   issueTitle: "Auth",
@@ -56,6 +57,13 @@ describe("formatStatusLine", () => {
 
     expect(line).toContain("Issue: 3/5")
     expect(line).toContain("Dashboard")
+  })
+
+  it("includes workflow title when provided", () => {
+    const snap = createSnapshot({ workflowTitle: "实现用户登录功能" })
+    const line = formatStatusLine(snap, 80)
+
+    expect(line).toContain("实现用户登录功能")
   })
 
   it("formats phase", () => {

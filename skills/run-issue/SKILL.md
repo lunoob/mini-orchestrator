@@ -24,6 +24,7 @@ disable-model-invocation: true
 
 ```json
 {
+  "title": "<本次任务描述>",
   "projectDir": "<项目目录>",
   "issues": [
     {
@@ -63,8 +64,9 @@ disable-model-invocation: true
 }
 ```
 
+- `title`：描述本次 workflow 任务，用于终端展示和系统通知
 - `issues[]` 按顺序排列，对应编排器的串行执行顺序
-- `title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
+- `issues[].title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
 - `projectDir` 使用当前的项目目录
 - 如出现配置项没提供，可以采用上述的配置做 fallback
@@ -123,6 +125,7 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 ```json
 {
+  "title": "用户认证功能开发",
   "projectDir": "/home/user/my-project",
   "issues": [
     {

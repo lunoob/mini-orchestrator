@@ -206,6 +206,8 @@ export const createBlessedUI = (
       freezeTimer()
     }
 
+    screen.title = snap.workflowTitle ? `mini-orch — ${snap.workflowTitle}` : "mini-orch"
+
     const layout = calculateLayout(snap, screen.cols, screen.rows, currentRequest)
 
     // 更新状态面板内容和高度

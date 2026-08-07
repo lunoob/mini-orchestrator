@@ -66,6 +66,14 @@ export const loadConfig = async (configPath: string) => {
     throw new Error("[Config] projectDir is required in workflow config")
   }
 
+  const rawTitle = fileConfig.title
+  if (rawTitle !== undefined) {
+    if (typeof rawTitle !== "string" || !rawTitle.trim()) {
+      throw new Error("[Config] title must be a non-empty string when provided")
+    }
+  }
+  const title = typeof rawTitle === "string" ? rawTitle.trim() : undefined
+
   const rawIssues = fileConfig.issues
   if (!Array.isArray(rawIssues) || rawIssues.length === 0) {
     throw new Error("[Config] issues is required (non-empty array)")
@@ -152,7 +160,7 @@ export const loadConfig = async (configPath: string) => {
     finalGate: parseRounds(rounds.finalGate, "maxRounds.finalGate", DEFAULT_FINAL_MAX_ROUNDS),
   }
 
-  return { agents: resolvedAgents, enableFinalGate, issues, maxRounds, projectDir, prompts } as WorkflowConfig
+  return { agents: resolvedAgents, enableFinalGate, issues, maxRounds, projectDir, prompts, title } as WorkflowConfig
 }
 
 const readPrompt = async (configDir: string, file: string) =>

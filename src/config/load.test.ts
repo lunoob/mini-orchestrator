@@ -202,6 +202,31 @@ describe("loadConfig", () => {
 
     await expect(loadConfig(configPath)).rejects.toThrow(/Issue 0 spec file not found/)
   })
+
+  it("loads optional workflow title", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir, { title: "实现用户登录功能" })
+
+    const config = await loadConfig(configPath)
+
+    expect(config.title).toBe("实现用户登录功能")
+  })
+
+  it("omits title when not provided", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir)
+
+    const config = await loadConfig(configPath)
+
+    expect(config.title).toBeUndefined()
+  })
+
+  it("rejects empty workflow title", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir, { title: "   " })
+
+    await expect(loadConfig(configPath)).rejects.toThrow(/title must be a non-empty string/)
+  })
 })
 
 describe("final gate", () => {

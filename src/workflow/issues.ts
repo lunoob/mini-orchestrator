@@ -147,7 +147,11 @@ const runSingleSpecCycle = async (
       sh,
     )
 
-    const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
+    const depsWithBus = {
+      ...defaultImplementAskDeps(),
+      eventBus: runtime.eventBus,
+      workflowTitle: runtime.config.title,
+    }
 
     // 先检查 monitor 级状态，再解析 STATUS 标记
     if (monitorStatus === "needs_input" || monitorStatus === "failed") {
@@ -210,7 +214,7 @@ export const runIssueQueueFromIndex = async (
       await advanceBaseline(runtime)
       await markIssueFinished(configPath, index, issues)
       if (shouldNotifyIssueComplete(index, issues.length)) {
-        notifyIssueComplete(issue.title)
+        notifyIssueComplete(issue.title, runtime.config.title)
       }
     } finally {
       const ip = runtime.implementerPane

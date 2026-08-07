@@ -36,6 +36,7 @@ const createMockBlessed = () => {
   })
 
   const screen = vi.fn().mockReturnValue({
+    title: "mini-orch",
     append: vi.fn(),
     render: vi.fn(),
     destroy: vi.fn(),
@@ -67,6 +68,7 @@ const createMockBlessed = () => {
 // ── Helper ──
 
 const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnapshot => ({
+  workflowTitle: "",
   issueIndex: 0,
   issueCount: 3,
   issueTitle: "Auth",
@@ -126,6 +128,18 @@ describe("TerminalUI", () => {
 
       expect(blessed.log).toHaveBeenCalled()
       expect(blessed.box).toHaveBeenCalled()
+    })
+
+    it("updates screen title from workflow snapshot", () => {
+      const blessed = createMockBlessed()
+      const eventBus = createEventBus()
+      const ui = createBlessedUI(eventBus, blessed)
+      const screen = blessed.screen.mock.results[0].value
+
+      expect(screen.title).toBe("mini-orch")
+
+      ui.updateStatus(createSnapshot({ workflowTitle: "实现用户登录功能" }))
+      expect(screen.title).toBe("mini-orch — 实现用户登录功能")
     })
 
     it("configures a visible scrollbar for overflowing logs", () => {

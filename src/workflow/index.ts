@@ -12,11 +12,15 @@ export type WorkflowOptions = {
   eventBus?: WorkflowEventBus
 }
 
-export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) => {
+export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions): Promise<string | undefined> => {
   const configPath = path.resolve(args.config)
   const config = await loadConfig(configPath)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
+
+  if (config.title) {
+    console.log(`[Workflow] Task: ${config.title}`)
+  }
 
   const hasGit = await isGitRepo(config.projectDir)
   const startBaseSha = await getReviewBaselineSha(config.projectDir)
@@ -29,6 +33,7 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
   }
 
   const eventBus = options?.eventBus ?? createWorkflowEventBus()
+  eventBus.publish({ type: "workflow_init", title: config.title })
 
   const runtime: WorkflowRuntime = {
     args,
@@ -48,6 +53,7 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions) =
 
   try {
     await runIssueQueue(runtime, configPath)
+    return config.title
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Agent CLI 启动失败")) {
       eventBus.publish({ type: "fail", reason: error.message })

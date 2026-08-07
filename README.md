@@ -100,6 +100,7 @@ mini-orch skill uninstall --skill run-issue --agent cursor
 
 ```json
 {
+  "title": "实现用户登录功能",
   "projectDir": "/absolute/path/to/your/project",
   "issues": [
     {
@@ -129,6 +130,7 @@ mini-orch skill uninstall --skill run-issue --agent cursor
 
 需要替换：
 
+- `title`（可选）：描述本次 workflow 任务，会显示在终端状态面板和系统通知中
 - `projectDir`：要修改的项目目录
 - `specPath`：需求文件路径
 - `agent` 和 `model`：你实际使用的 agent 和模型

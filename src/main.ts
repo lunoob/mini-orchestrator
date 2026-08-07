@@ -88,12 +88,16 @@ export const main = async (testStatusMode = false, argv = process.argv.slice(2))
         await runTestStatus(eventBus)
         notifyTestStatusComplete()
       } else {
-        await runWorkflow(args, { eventBus })
-        notifySuccess()
+        const workflowTitle = await runWorkflow(args, { eventBus })
+        notifySuccess(workflowTitle)
       }
     } finally {
       restoreConsole?.()
     }
+  } catch (error) {
+    const workflowTitle = eventBus.getSnapshot().workflowTitle || undefined
+    handleMainError(error, workflowTitle)
+    return
   } finally {
     removeSignalHandlers?.()
     ui.stopTimer()
@@ -101,11 +105,13 @@ export const main = async (testStatusMode = false, argv = process.argv.slice(2))
   }
 }
 
-export const handleMainError = (error: unknown) => {
+export const handleMainError = (error: unknown, workflowTitle?: string) => {
+  const title = workflowTitle?.trim() || undefined
+
   // Agent 失败：workflow 失败，返回退出码 1 并发送错误通知
   if (error instanceof AgentFailError) {
     console.error(`\n[Workflow] ${error.message}`)
-    notifyError(error.message)
+    notifyError(error.message, title)
     process.exitCode = 1
     return
   }
@@ -119,7 +125,7 @@ export const handleMainError = (error: unknown) => {
 
   const message = getErrorMessage(error)
   console.error(`\n[Workflow] Workflow failed: ${message}`)
-  notifyError(message)
+  notifyError(message, title)
   process.exitCode = 1
 }
 

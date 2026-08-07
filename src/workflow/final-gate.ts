@@ -137,7 +137,7 @@ const conductFinalReview = async (
 
   const final = await handleMonitorResult(
     "reviewer", runtime.finalReviewerPane, finalText, status, question,
-    `final review round ${round}`, session, runtime.eventBus,
+    `final review round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   const parsed = parseStatus(final, "reviewer")
@@ -171,7 +171,7 @@ const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, rou
 
   await handleMonitorResult(
     "implementer", runtime.finalFixerPane, finalText, status, question,
-    `final fix round ${round}`, session, runtime.eventBus,
+    `final fix round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })

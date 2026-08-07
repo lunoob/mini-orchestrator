@@ -37,6 +37,7 @@ export const handleMonitorResult = async (
   context: string,
   session: AgentSessionHandle,
   eventBus?: import("./events.js").WorkflowEventBus,
+  workflowTitle?: string,
 ): Promise<string> => {
   const agentKey = role === "implementer" ? "implementer" : "reviewer"
 
@@ -53,7 +54,7 @@ export const handleMonitorResult = async (
   }
 
   const depsWithBus = eventBus
-    ? { ...defaultImplementAskDeps(), eventBus }
+    ? { ...defaultImplementAskDeps(), eventBus, workflowTitle }
     : undefined
 
   // monitor 级 needs_input（原生提问）→ 门卫，循环处理 gate 后的新状态
@@ -190,7 +191,7 @@ export const sendControllerRevise = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `controller revise round ${round}`, session, runtime.eventBus,
+    `controller revise round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -226,7 +227,7 @@ const conductReview = async (
 
   const final = await handleMonitorResult(
     "reviewer", runtime.reviewerPane, finalText, status, question,
-    `review round ${round}`, runtime.reviewerSession, runtime.eventBus,
+    `review round ${round}`, runtime.reviewerSession, runtime.eventBus, runtime.config.title,
   )
 
   const parsed = parseStatus(final, "reviewer")
@@ -258,6 +259,7 @@ export const handleNeedsCheck = async (
     "Review 需要人工核查",
     session.resumeId, pane,
     String(session.offset),
+    runtime.config.title,
   )
 
   const yes = await promptNeedsCheckGate(round, runtime.eventBus)
@@ -272,7 +274,7 @@ export const handleNeedsCheck = async (
   session.offset = result.finalOffset
   resetNotifyDedup()
 
-  const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
+  const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus, workflowTitle: runtime.config.title }
   let finalText = result.finalText
   let currentStatus = result.status
   let currentQuestion = result.lastEvent?.question
@@ -328,7 +330,7 @@ export const sendPostReviewCheck = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `post-review check round ${round}`, session, runtime.eventBus,
+    `post-review check round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -349,7 +351,7 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `revise round ${round}`, session, runtime.eventBus,
+    `revise round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
