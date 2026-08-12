@@ -1,42 +1,31 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-} from "../lib/prompt-delimiters.js"
-import { extractImplementResult, parseImplementStatus, stripStatusLines } from "../lib/utils.js"
+import { extractStatus } from "../lib/status-parser.js"
 import { buildTestStatusPrompt, loadImplementOutputFormat } from "./test-status.js"
 
 describe("testStatus prompt and output parsing", () => {
-  it("appends implement-output format with delimiters to the prompt", async () => {
+  it("appends implement-output format with STATUS instructions", async () => {
     const outputFormat = await loadImplementOutputFormat()
     const prompt = buildTestStatusPrompt(outputFormat)
 
     expect(prompt).toContain("查询今天佛山天气")
-    expect(prompt).toContain(IMPLEMENT_RESULT_START)
-    expect(prompt).toContain(IMPLEMENT_RESULT_END)
-    expect(outputFormat).toContain(IMPLEMENT_RESULT_START)
-    expect(outputFormat).toContain(IMPLEMENT_RESULT_END)
+    expect(outputFormat).toContain("STATUS: IMPLEMENT_DONE")
   })
 
-  it("strips delimiters and parses implement status like workflow", () => {
-    const raw = [
-      "some agent chatter",
-      IMPLEMENT_RESULT_START,
-      "佛山今天多云，气温 28°C。",
-      "STATUS: IMPLEMENT_DONE",
-      IMPLEMENT_RESULT_END,
-    ].join("\n")
+  it("parses IMPLEMENT_DONE from STATUS marker", () => {
+    expect(extractStatus("完成\nSTATUS: IMPLEMENT_DONE", "implementer")).toBe("IMPLEMENT_DONE")
+  })
 
-    const resultBody = extractImplementResult(raw)
-    const status = parseImplementStatus(resultBody)
-    const printable = stripStatusLines(resultBody)
+  it("parses IMPLEMENT_ASK from STATUS marker", () => {
+    expect(extractStatus("STATUS: IMPLEMENT_ASK", "implementer")).toBe("IMPLEMENT_ASK")
+  })
 
-    expect(resultBody).toContain("佛山今天多云")
-    expect(resultBody).not.toContain(IMPLEMENT_RESULT_START)
-    expect(resultBody).not.toContain(IMPLEMENT_RESULT_END)
-    expect(status).toBe("done")
-    expect(printable).toContain("佛山今天多云")
-    expect(printable).not.toMatch(/STATUS:/)
+  it("extracts status from text with other content", () => {
+    const raw = "佛山今天多云\nSTATUS: IMPLEMENT_DONE"
+    expect(extractStatus(raw, "implementer")).toBe("IMPLEMENT_DONE")
+  })
+
+  it("returns null when no STATUS marker", () => {
+    expect(extractStatus("没有状态标记", "implementer")).toBeNull()
   })
 })

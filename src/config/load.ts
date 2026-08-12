@@ -2,14 +2,11 @@ import { access as fsAccess, readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import {
-  IMPLEMENT_RESULT_END,
-  IMPLEMENT_RESULT_START,
-  REVIEW_RESULT_END,
-  REVIEW_RESULT_START,
-} from "../lib/prompt-delimiters.js"
 import type {
+  AgentConfig,
   AgentInputConfig,
+  FinalGateConfig,
+  FinalGateInputConfig,
   IssueConfig,
   IssueState,
   LoadedPrompts,
@@ -31,6 +28,10 @@ const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/con
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-review-check.md")
 const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
 const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
+const DEFAULT_FINAL_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/final-review.md")
+const DEFAULT_FINAL_FIX_PROMPT = path.join(PROJECT_ROOT, "prompts/final-fix.md")
+
+const DEFAULT_FINAL_MAX_ROUNDS = 3
 
 const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
 
@@ -50,6 +51,51 @@ const parseIssueState = (value: unknown, index: number): IssueState => {
     return value as IssueState
   }
   throw new Error(`[Config] issues[${index}].state must be one of: ready, review, finish`)
+}
+
+const parseFinalMaxRounds = (value: unknown) => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error("[Config] finalGate.maxRounds must be a positive integer")
+  }
+  return value
+}
+
+const parseFinalGateEnabled = (value: unknown) => {
+  if (value === undefined) return true
+  if (typeof value !== "boolean") {
+    throw new Error("[Config] finalGate.enabled must be a boolean")
+  }
+  return value
+}
+
+/**
+ * 解析 finalGate：缺省或 enabled: false 时返回 undefined（完全保持旧行为）；
+ * 启用时必须提供完整的 reviewer / fixer 角色配置，缺少任一字段即在加载阶段报错。
+ */
+const parseFinalGate = (raw: unknown, resolveAgentInput: (input: AgentInputConfig, role: string) => AgentConfig): FinalGateConfig | undefined => {
+  if (raw === undefined) return undefined
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("[Config] finalGate must be an object")
+  }
+  const gate = raw as FinalGateInputConfig
+  if (!parseFinalGateEnabled(gate.enabled)) return undefined
+
+  const resolveFinalRole = (input: AgentInputConfig | undefined, role: string): AgentConfig => {
+    if (!input || typeof input !== "object") {
+      throw new Error(`[Config] finalGate.${role} is required`)
+    }
+    return resolveAgentInput(input, `finalGate.${role}`)
+  }
+
+  return {
+    maxRounds: gate.maxRounds === undefined ? DEFAULT_FINAL_MAX_ROUNDS : parseFinalMaxRounds(gate.maxRounds),
+    reviewer: resolveFinalRole(gate.reviewer, "reviewer"),
+    fixer: resolveFinalRole(gate.fixer, "fixer"),
+    prompts: {
+      review: gate.prompts?.review ?? DEFAULT_FINAL_REVIEW_PROMPT,
+      fix: gate.prompts?.fix ?? DEFAULT_FINAL_FIX_PROMPT,
+    },
+  }
 }
 
 export const loadConfig = async (configPath: string, args: ParsedArgs) => {
@@ -116,6 +162,7 @@ export const loadConfig = async (configPath: string, args: ParsedArgs) => {
     projectDir,
     prompts,
     reviewer: resolveAgentInput(fileConfig.reviewer, "reviewer"),
+    finalGate: parseFinalGate(fileConfig.finalGate, resolveAgentInput),
     issues,
   } as WorkflowConfig
 }
@@ -129,11 +176,8 @@ const injectOutputFormat = (template: string, outputFormat: string) =>
 const loadOutputFormat = async (
   configDir: string,
   partialPath: string,
-  delimiterStart: string,
-  delimiterEnd: string,
 ) => {
-  const template = await readPrompt(configDir, partialPath)
-  return render(template, { delimiterEnd, delimiterStart })
+  return readPrompt(configDir, partialPath)
 }
 
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
@@ -141,14 +185,10 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     loadOutputFormat(
       configDir,
       config.prompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
-      IMPLEMENT_RESULT_START,
-      IMPLEMENT_RESULT_END,
     ),
     loadOutputFormat(
       configDir,
       config.prompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
-      REVIEW_RESULT_START,
-      REVIEW_RESULT_END,
     ),
   ])
 
@@ -160,6 +200,8 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     controllerImplementer,
     controllerReReview,
     postReviewCheck,
+    finalReview,
+    finalFix,
   ] = await Promise.all([
     readPrompt(configDir, config.prompts.implement),
     readPrompt(configDir, config.prompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT),
@@ -168,11 +210,15 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     readPrompt(configDir, config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT),
     readPrompt(configDir, config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT),
     readPrompt(configDir, config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT),
+    readPrompt(configDir, config.finalGate?.prompts.review ?? DEFAULT_FINAL_REVIEW_PROMPT),
+    readPrompt(configDir, config.finalGate?.prompts.fix ?? DEFAULT_FINAL_FIX_PROMPT),
   ])
 
   return {
     controllerImplementer: injectOutputFormat(controllerImplementer, implementOutput),
     controllerReReview: injectOutputFormat(controllerReReview, reviewOutput),
+    finalFix: injectOutputFormat(finalFix, implementOutput),
+    finalReview: injectOutputFormat(finalReview, reviewOutput),
     implement: injectOutputFormat(implement, implementOutput),
     postReviewCheck: injectOutputFormat(postReviewCheck, implementOutput),
     reReview: injectOutputFormat(reReview, reviewOutput),

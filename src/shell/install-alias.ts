@@ -2,7 +2,7 @@ import { access, appendFile, constants, readFile, writeFile } from "node:fs/prom
 import os from "node:os"
 import path from "node:path"
 
-export const ALIAS_NAME = "mini-orch"
+export const ALIAS_NAME = "local-mini-orch"
 export const ALIAS_MARKER_START = "# mini-orchestrator:mini-orch"
 export const ALIAS_MARKER_END = "# mini-orchestrator:end"
 

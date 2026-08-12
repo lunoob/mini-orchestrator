@@ -39,12 +39,23 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "release": "tsx scripts/release.ts",
+    "release:git": "tsx scripts/release-git.ts",
+    "release:github": "tsx scripts/release-github.ts",
     "prepublishOnly": "npm run test && npm run typecheck && npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/semver": "^7.8.0",
+    "dotenv": "^17.4.2",
+    "release-it": "^21.0.1",
+    "semver": "^7.8.5",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@types/blessed": "^0.1.27",
+    "blessed": "^0.1.81"
   }
 }

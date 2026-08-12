@@ -34,6 +34,53 @@ npm install -g mini-orch
 mini-orch --help
 ```
 
+## 发布
+
+完整发布命令只允许在 `main` 分支执行：
+
+先复制 `.env.example` 为 `.env`，填入 GitHub token：
+
+```bash
+cp .env.example .env
+```
+
+单独发布 npm 包可以直接执行：
+
+```bash
+pnpm publish
+```
+
+完整发布执行：
+
+```bash
+pnpm release
+```
+
+发布时交互选择 `patch`、`minor` 或 `major`。完整流程会依次完成版本号更新、npm 发布、release commit、`vX.Y.Z` tag、Git push，以及 GitHub Release Notes 生成；只有 npm 发布成功后才会创建 commit 和 tag。
+
+各阶段也可以单独重试：
+
+```bash
+pnpm publish                 # 只发布 npm
+pnpm run release:git         # npm 成功后，创建 commit、tag 并 push
+pnpm run release:github      # tag 已存在且已 push 后，只创建 GitHub Release
+```
+
+如果 npm 发布失败，`package.json` 中的版本号会保留在已递增状态。修复问题后只能重试 `pnpm publish`，不要重新执行完整的 `pnpm release`，否则会再次递增版本号。
+
+如果 GitHub Release 创建失败，只需重试 `pnpm run release:github`，不会再次发布 npm。Release 已存在时会直接视为成功，不会重新生成 Release Notes。
+
+如果 `main` 已经进入下一版本，或需要重试历史版本，请显式传入版本号：
+
+```bash
+pnpm run release:git -- 1.2.3
+pnpm run release:github -- 1.2.3
+```
+
+不传版本参数时，两个命令都会使用当前 `package.json` 中的版本。`release:github` 在显式版本与 `package.json` 不一致时，会改用 `gh release create` 针对指定 tag 创建 Release。
+
+完整发布和 GitHub Release 重试需要完成 npm 登录，并确保 `.env` 中的 `GITHUB_TOKEN` 具备创建 GitHub Release 的权限；shell 中已存在的 `GITHUB_TOKEN` 会优先于 `.env`。单独执行 `pnpm publish` 只需要 npm 登录。`release:git` 与 `release:github` 需要在完整 Git 仓库中运行（非浅克隆），以便读取远程 tag 对应的 commit。首次发布前建议先将当前 `0.1.7` 建立为 GitHub Release 基线，后续日志会按相邻 tag 自动生成。
+
 ## 安装 Skill
 
 查看可用 skill：
@@ -149,6 +196,37 @@ mini-orch --config ./workflow.json
 ```
 
 任务会按照数组顺序执行。已完成的任务可以设置 `"state": "finish"`，运行时会自动跳过。
+
+## 最终审查（finalGate）
+
+可选地为整个 workflow 增加一个独立的全局审查环节：所有 issue 完成后，Final Reviewer 对合并结果做最终审查；发现问题时由 Final Fixer 修复并重新审查，直到通过或达到轮次上限。只有最终审查通过，workflow 才会成功完成并发布 `complete`。
+
+```json
+{
+  "finalGate": {
+    "maxRounds": 3,
+    "reviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.5"
+    },
+    "fixer": {
+      "name": "final-fixer",
+      "agent": "codex",
+      "model": "gpt-5.5"
+    }
+  }
+}
+```
+
+规则：
+
+- 不配置 `finalGate`，或配置 `"enabled": false`，则完全保持旧行为，不会启用最终审查。
+- 启用时 `reviewer` 与 `fixer` 都是必填的完整 agent 配置，缺少任一字段会在启动阶段报错。
+- `maxRounds` 是 final gate 独立的轮次上限，缺省为 3；它不受 `--maxReviewRounds` 影响（后者只作用于单个 issue 的局部 review）。
+- 内置的 final review / final fix 提示词已随包提供；如需覆盖，在 `finalGate.prompts` 中指定 `review` / `fix` 的路径（路径相对于配置文件目录），自定义 output partial 同样对它们生效。
+- 达到轮次上限仍未通过时，workflow 发布失败并以非零码退出，由 workflow 启动的 final pane 会被关闭，不会发布 `complete` 或成功通知。
+- Final Reviewer / Final Fixer 复用现有的 `REVIEW_*` / `IMPLEMENT_*` 状态协议与人工确认体验，不会按 issue 回源。
 
 ## 常用命令
 
