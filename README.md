@@ -56,7 +56,14 @@ pnpm publish
 pnpm release
 ```
 
-发布时交互选择 `patch`、`minor` 或 `major`。完整流程会依次完成版本号更新、npm 发布、release commit、`vX.Y.Z` tag、Git push，以及 GitHub Release Notes 生成；只有 npm 发布成功后才会创建 commit 和 tag。
+发布时先选择类型（`staging` / `production`）：
+
+- `staging`：发布预发布版本（如 `0.2.0-staging.0`），只更新 `package.json` 版本号、创建 `v0.2.0-staging.0` tag 并 push、创建 GitHub Prerelease，**不发布 npm**。连续发布会自动递增预发布序号（`0.2.0-staging.0` → `0.2.0-staging.1`）。
+- `production`：交互选择 `patch`、`minor` 或 `major`，完整流程会依次完成版本号更新、npm 发布、release commit、`vX.Y.Z` tag、Git push，以及 GitHub Release Notes 生成；只有 npm 发布成功后才会创建 commit 和 tag。
+
+正式版本号基于 npm registry 上的最新已发布版本递增，因此发布过 staging 后无需手动调整 `package.json` 即可直接发布正式版本；若 npm registry 不可达，则回退到本地正式版本号（本地为预发布版本时会报错）。
+
+也可以直接传参跳过交互：`pnpm release staging` 或 `pnpm release production`，`pnpm release patch` 等价于 production + patch。
 
 各阶段也可以单独重试：
 

@@ -1,6 +1,24 @@
 import { execFileSync } from "node:child_process"
 
+import semver from "semver"
+
 import { executable } from "./run-command.js"
+
+export const getLatestPublishedVersion = (
+  packageName: string,
+  exec: typeof execFileSync = execFileSync,
+): string | null => {
+  try {
+    const output = exec(executable("npm"), ["view", packageName, "version"], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim()
+    const version = output.split("\n").at(-1)?.trim() ?? ""
+    return semver.valid(version)
+  } catch {
+    return null
+  }
+}
 
 export const ensureNpmVersionPublished = (
   packageName: string,

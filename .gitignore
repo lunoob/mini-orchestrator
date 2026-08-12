@@ -28,6 +28,7 @@ coverage/
 .cache/
 .eslintcache
 .turbo/
+.pnpm-store/
 
 # OS
 .DS_Store
