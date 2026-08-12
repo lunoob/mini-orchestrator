@@ -298,30 +298,35 @@ export const bootstrapSession = async (
 ): Promise<AgentSessionHandle> => {
   const prompt = metaPrompt ?? BOOTSTRAP_META_PROMPT
 
-  // Claude 使用两步 bootstrap 流程
+  let handle: AgentSessionHandle
   if (agent.agent === "claude") {
-    return bootstrapClaudeSession(agent, prompt)
+    // Claude 使用两步 bootstrap 流程
+    handle = await bootstrapClaudeSession(agent, prompt)
+  } else {
+    // 其他 agent 使用单步 bootstrap 流程
+    const shellCommand = buildBootstrapCommand(agent, prompt)
+    console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
+
+    const { stdout, code } = await execHeadless(shellCommand)
+    if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
+
+    const parsed = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])
+    if (!parsed) {
+      throw new Error(
+        `[Agent] Bootstrap failed for "${agent.name}": could not parse { resumeId, jsonl } from stdout. ` +
+        `stdout was: ${stdout.slice(0, 500)}`,
+      )
+    }
+    handle = parsed
+
+    // 等待 JSONL 就绪
+    handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
+
+    console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
   }
 
-  // 其他 agent 使用单步 bootstrap 流程
-  const shellCommand = buildBootstrapCommand(agent, prompt)
-  console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
-
-  const { stdout, code } = await execHeadless(shellCommand)
-  if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
-
-  const handle = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])
-  if (!handle) {
-    throw new Error(
-      `[Agent] Bootstrap failed for "${agent.name}": could not parse { resumeId, jsonl } from stdout. ` +
-      `stdout was: ${stdout.slice(0, 500)}`,
-    )
-  }
-
-  // 等待 JSONL 就绪
-  handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
-
-  console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
+  // 延迟 5s 返回，确保 JSONL 稳定落盘后再启动 agent
+  await new Promise((resolve) => setTimeout(resolve, 5_000))
   return handle
 }
 
