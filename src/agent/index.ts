@@ -189,7 +189,9 @@ export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputC
  * 避免 agent 受 memory 影响找错目录、输出错误的 resume_id。
  */
 const buildBootstrapMetaPrompt = (projectDir: string) => [
-  `你的当前工作目录是 ${projectDir}，我给你读取的权限，输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。`,
+  `当前 cwd 路径为: ${projectDir}`,
+  `我给你读取的权限，输出本次会话的 sessionId/resumeId，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。`,
+  `只依据我给的当前工作目录推导，与 memory 无关。`
 ].join("\n")
 
 /**
