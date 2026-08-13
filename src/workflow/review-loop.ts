@@ -161,7 +161,7 @@ const settleAgentStatus = async (
 const ensureImplementer = async (runtime: WorkflowRuntime): Promise<AgentSessionHandle> => {
   if (runtime.implementerPane) return runtime.implementerSession!
   if (!runtime.implementerSession) {
-    runtime.implementerSession = await bootstrapSession(runtime.config.agents.implementer)
+    runtime.implementerSession = await bootstrapSession(runtime.config.projectDir, runtime.config.agents.implementer)
   }
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,

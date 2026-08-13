@@ -32,7 +32,7 @@ export const shouldNotifyIssueComplete = (index: number, issueCount: number) =>
 const ensureImplementerSession = async (runtime: WorkflowRuntime) => {
   if (runtime.implementerPane) return
   if (!runtime.implementerSession) {
-    runtime.implementerSession = await bootstrapSession(runtime.config.agents.implementer)
+    runtime.implementerSession = await bootstrapSession(runtime.config.projectDir, runtime.config.agents.implementer)
   }
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,
@@ -175,7 +175,7 @@ const runSingleSpecCycle = async (
   }
 
   await markIssueInReview(configPath, issueIndex, issues)
-  runtime.reviewerSession = await bootstrapSession(runtime.config.agents.reviewer)
+  runtime.reviewerSession = await bootstrapSession(runtime.config.projectDir, runtime.config.agents.reviewer)
 
   await runReviewLoop(runtime, 1, specSessionDir, specPath)
 }

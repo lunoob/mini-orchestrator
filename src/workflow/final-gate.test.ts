@@ -20,7 +20,7 @@ const mockSession = (resumeId: string): AgentSessionHandle => ({
 })
 
 vi.mock("../agent/index.js", () => ({
-  bootstrapSession: vi.fn(async (agent: { name: string }) => mockSession(`resume-${agent.name}`)),
+  bootstrapSession: vi.fn(async (_dir: string, agent: { name: string }) => mockSession(`resume-${agent.name}`)),
   sendTask: vi.fn(async () => {}),
   sendTaskAndMonitor: vi.fn(),
   startAgentResumed: vi.fn(async (_dir: string, agent: { name: string }) => `pane-${agent.name}`),

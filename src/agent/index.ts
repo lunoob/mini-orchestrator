@@ -184,17 +184,22 @@ export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputC
 
 // ── JSONL-based session management ──
 
-const BOOTSTRAP_META_PROMPT = [
-  "我给你读取的权限，输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。",
+/**
+ * 构建 bootstrap meta prompt，注入当前工作的项目目录路径，
+ * 避免 agent 受 memory 影响找错目录、输出错误的 resume_id。
+ */
+const buildBootstrapMetaPrompt = (projectDir: string) => [
+  `你的当前工作目录是 ${projectDir}，我给你读取的权限，输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。`,
 ].join("\n")
 
 /**
- * 执行 headless 命令并返回 stdout。
+ * 执行 headless 命令并返回 stdout。cwd 固定为项目目录，
+ * 确保 headless 进程实际运行目录与 prompt 中注入的目录一致。
  */
-const execHeadless = async (shellCommand: string): Promise<{ stdout: string; code: number | null }> => {
+const execHeadless = async (shellCommand: string, cwd: string): Promise<{ stdout: string; code: number | null }> => {
   return new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
     const child = spawn(shellCommand, {
-      env: process.env, shell: true, stdio: ["ignore", "pipe", "pipe"],
+      env: process.env, shell: true, cwd, stdio: ["ignore", "pipe", "pipe"],
     })
     let out = ""
     child.stdout.on("data", (chunk: Buffer | string) => { out += chunk.toString() })
@@ -236,13 +241,13 @@ const waitForJsonlReady = async (jsonlPath: string, agentName: string): Promise<
  * Step 2: 使用 session_id 恢复会话并获取 resumeId 和 jsonl
  */
 const bootstrapClaudeSession = async (
-  agent: AgentConfig, metaPrompt: string,
+  projectDir: string, agent: AgentConfig, metaPrompt: string,
 ): Promise<AgentSessionHandle> => {
   // Step 1: 发送 "Hello" 获取 session_id
   const step1Command = buildClaudeBootstrapStep1Command(agent)
   console.log(`[Agent] Bootstrap Step 1: Getting session_id for "${agent.name}"...`)
 
-  const { stdout: step1Output, code: step1Code } = await execHeadless(step1Command)
+  const { stdout: step1Output, code: step1Code } = await execHeadless(step1Command, projectDir)
   if (step1Code !== 0) {
     throw new Error(`[Agent] Bootstrap Step 1 failed for "${agent.name}" (exit ${step1Code})`)
   }
@@ -272,7 +277,7 @@ const bootstrapClaudeSession = async (
   const step2Command = buildClaudeBootstrapStep2Command(agent, sessionId, metaPrompt)
   console.log(`[Agent] Bootstrap Step 2: Getting resumeId and jsonl for "${agent.name}"...`)
 
-  const { stdout: step2Output, code: step2Code } = await execHeadless(step2Command)
+  const { stdout: step2Output, code: step2Code } = await execHeadless(step2Command, projectDir)
   if (step2Code !== 0) {
     throw new Error(`[Agent] Bootstrap Step 2 failed for "${agent.name}" (exit ${step2Code})`)
   }
@@ -294,20 +299,20 @@ const bootstrapClaudeSession = async (
 }
 
 export const bootstrapSession = async (
-  agent: AgentConfig, metaPrompt?: string,
+  projectDir: string, agent: AgentConfig, metaPrompt?: string,
 ): Promise<AgentSessionHandle> => {
-  const prompt = metaPrompt ?? BOOTSTRAP_META_PROMPT
+  const prompt = metaPrompt ?? buildBootstrapMetaPrompt(projectDir)
 
   let handle: AgentSessionHandle
   if (agent.agent === "claude") {
     // Claude 使用两步 bootstrap 流程
-    handle = await bootstrapClaudeSession(agent, prompt)
+    handle = await bootstrapClaudeSession(projectDir, agent, prompt)
   } else {
     // 其他 agent 使用单步 bootstrap 流程
     const shellCommand = buildBootstrapCommand(agent, prompt)
     console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
 
-    const { stdout, code } = await execHeadless(shellCommand)
+    const { stdout, code } = await execHeadless(shellCommand, projectDir)
     if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
 
     const parsed = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])

@@ -65,7 +65,7 @@ export const createFinalSessionDir = async (runtime: WorkflowRuntime): Promise<s
 const ensureFinalReviewer = async (runtime: WorkflowRuntime, agent: AgentConfig): Promise<AgentSessionHandle> => {
   if (runtime.finalReviewerPane) return runtime.finalReviewerSession!
   if (!runtime.finalReviewerSession) {
-    runtime.finalReviewerSession = await bootstrapSession(agent)
+    runtime.finalReviewerSession = await bootstrapSession(runtime.config.projectDir, agent)
   }
   runtime.finalReviewerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
@@ -79,7 +79,7 @@ const ensureFinalReviewer = async (runtime: WorkflowRuntime, agent: AgentConfig)
 const ensureFinalFixer = async (runtime: WorkflowRuntime, agent: AgentConfig): Promise<AgentSessionHandle> => {
   if (runtime.finalFixerPane) return runtime.finalFixerSession!
   if (!runtime.finalFixerSession) {
-    runtime.finalFixerSession = await bootstrapSession(agent)
+    runtime.finalFixerSession = await bootstrapSession(runtime.config.projectDir, agent)
   }
   runtime.finalFixerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
