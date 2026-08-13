@@ -184,9 +184,15 @@ export const runAgentIntegration = async (agent: AgentConfig, onOutput?: OutputC
 
 // ── JSONL-based session management ──
 
+/** codex 沿用旧版 meta prompt（不注入 cwd） */
+const BOOTSTRAP_META_PROMPT = [
+  "我给你读取的权限，输出本次会话的 resume_id，消息持久化 jsonl 文件的位置。输出 json 字符串即可，格式如: { resumeId, jsonl }, 不要使用 markdown 代码块。",
+].join("\n")
+
 /**
  * 构建 bootstrap meta prompt，注入当前工作的项目目录路径，
  * 避免 agent 受 memory 影响找错目录、输出错误的 resume_id。
+ * 仅 claude / cursor 使用，codex 保持旧 prompt。
  */
 const buildBootstrapMetaPrompt = (projectDir: string) => [
   `当前 cwd 路径为: ${projectDir}`,
@@ -303,7 +309,8 @@ const bootstrapClaudeSession = async (
 export const bootstrapSession = async (
   projectDir: string, agent: AgentConfig, metaPrompt?: string,
 ): Promise<AgentSessionHandle> => {
-  const prompt = metaPrompt ?? buildBootstrapMetaPrompt(projectDir)
+  // codex 沿用旧 prompt，claude/cursor 使用注入 cwd 的新 prompt
+  const prompt = metaPrompt ?? (agent.agent === "codex" ? BOOTSTRAP_META_PROMPT : buildBootstrapMetaPrompt(projectDir))
 
   let handle: AgentSessionHandle
   if (agent.agent === "claude") {
