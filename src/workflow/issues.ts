@@ -13,7 +13,7 @@ import { deduplicateAgentIntegrations } from "../agent/integration.js"
 import { deduplicateAgentUpdates } from "../agent/update.js"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { createSession } from "../agent/session.js"
-import { markIssueFinished, markIssueInReview } from "../config/persist.js"
+import { markIssueFinished, markIssueInReview, setWorkflowStatus } from "../config/persist.js"
 import type { IssueConfig } from "../types.js"
 import { render } from "../lib/utils.js"
 import { parseStatus } from "../lib/status-parser.js"
@@ -227,9 +227,11 @@ export const runIssueQueueFromIndex = async (
   // 所有 issue 成功完成：若启用 final gate 则先做全局审查，通过后才发布 workflow complete
   if (runtime.config.enableFinalGate) {
     const finalSessionDir = await createFinalSessionDir(runtime)
+    await setWorkflowStatus(configPath, "reviewing", runtime.config)
     await runFinalGate(runtime, finalSessionDir)
   }
 
+  await setWorkflowStatus(configPath, "finish", runtime.config)
   publishCompleteWhenDone()
 }
 

@@ -8,7 +8,7 @@ import { registerNonInteractiveSignalHandlers } from "./lib/command-signals.js"
 import { getConfigPath, parseArgs, printHelp, wantsHelp } from "./cli/index.js"
 import { runSkillCli } from "./cli/skill.js"
 import { AgentFailError, ImplementAskAbortError } from "./workflow/implement-ask.js"
-import { runWorkflow } from "./workflow/index.js"
+import { WorkflowFinishedError, runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
 import { createWorkflowEventBus } from "./workflow/events.js"
 import { createTerminalUI, isInteractiveTTY, type LogSink } from "./terminal/ui.js"
@@ -118,6 +118,13 @@ export const handleMainError = (error: unknown, workflowTitle?: string) => {
 
   // IMPLEMENT_ASK 时用户选 no：正常中止，不当作工作流失败
   if (error instanceof ImplementAskAbortError) {
+    console.log(`\n[Workflow] ${error.message}`)
+    process.exitCode = 0
+    return
+  }
+
+  // 配置 status 为 finish：workflow 已完成，直接退出
+  if (error instanceof WorkflowFinishedError) {
     console.log(`\n[Workflow] ${error.message}`)
     process.exitCode = 0
     return

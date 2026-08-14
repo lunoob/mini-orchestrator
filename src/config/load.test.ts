@@ -166,6 +166,31 @@ describe("loadConfig", () => {
     )
   })
 
+  it("defaults workflow status to undefined when omitted", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir)
+
+    const config = await loadConfig(configPath)
+    expect(config.status).toBeUndefined()
+  })
+
+  it("parses explicit workflow status implementing, reviewing and finish", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir, { status: "finish" })
+
+    const config = await loadConfig(configPath)
+    expect(config.status).toBe("finish")
+  })
+
+  it("throws if workflow status is invalid", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir, { status: "done" })
+
+    await expect(loadConfig(configPath)).rejects.toThrow(
+      /status must be one of: implementing, reviewing, finish/,
+    )
+  })
+
   it("resolves agent config from agent and model", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
     await mkdir(dir, { recursive: true })

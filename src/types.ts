@@ -48,6 +48,9 @@ export type MaxRoundsConfig = {
 /** ready: 可开发；review: 已实现、待审查；finish: 已完成，workflow 会跳过 */
 export type IssueState = "ready" | "review" | "finish"
 
+/** implementing: 运行中；reviewing: final gate 审查中；finish: 已完成，再次启动会直接退出 */
+export type WorkflowStatus = "implementing" | "reviewing" | "finish"
+
 export type IssueConfig = {
   title: string
   specPath: string
@@ -64,6 +67,8 @@ export type WorkflowConfig = {
   issues: IssueConfig[]
   /** 描述本次 workflow 任务，可选 */
   title?: string
+  /** 上次运行的进度状态；finish 时再次启动会直接退出 */
+  status?: WorkflowStatus
 }
 
 export type HerdrPaneInfo = {

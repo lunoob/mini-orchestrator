@@ -11,6 +11,7 @@ import type {
   MaxRoundsConfig,
   PromptConfig,
   WorkflowConfig,
+  WorkflowStatus,
 } from "../types.js"
 import { render } from "../lib/utils.js"
 import { resolveAgentConfig } from "./agents.js"
@@ -34,6 +35,7 @@ const DEFAULT_FINAL_MAX_ROUNDS = 3
 const LEGACY_FIELDS = ["maxReviewRounds", "implementer", "reviewer", "finalGate"] as const
 
 const ISSUE_STATES: readonly IssueState[] = ["ready", "review", "finish"]
+const WORKFLOW_STATUSES: readonly WorkflowStatus[] = ["implementing", "reviewing", "finish"]
 
 const parseRounds = (value: unknown, field: string, fallback: number) => {
   if (value === undefined) return fallback
@@ -50,6 +52,14 @@ const parseIssueState = (value: unknown, index: number): IssueState => {
     return value as IssueState
   }
   throw new Error(`[Config] issues[${index}].state must be one of: ready, review, finish`)
+}
+
+const parseWorkflowStatus = (value: unknown): WorkflowStatus | undefined => {
+  if (value === undefined) return undefined
+  if (typeof value === "string" && (WORKFLOW_STATUSES as readonly string[]).includes(value)) {
+    return value as WorkflowStatus
+  }
+  throw new Error("[Config] status must be one of: implementing, reviewing, finish")
 }
 
 export const loadConfig = async (configPath: string) => {
@@ -160,7 +170,16 @@ export const loadConfig = async (configPath: string) => {
     finalGate: parseRounds(rounds.finalGate, "maxRounds.finalGate", DEFAULT_FINAL_MAX_ROUNDS),
   }
 
-  return { agents: resolvedAgents, enableFinalGate, issues, maxRounds, projectDir, prompts, title } as WorkflowConfig
+  return {
+    agents: resolvedAgents,
+    enableFinalGate,
+    issues,
+    maxRounds,
+    projectDir,
+    prompts,
+    status: parseWorkflowStatus(fileConfig.status),
+    title,
+  } as WorkflowConfig
 }
 
 const readPrompt = async (configDir: string, file: string) =>
