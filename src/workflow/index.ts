@@ -4,6 +4,7 @@ import { loadConfig, loadPrompts } from "../config/load.js"
 import { getReviewBaselineSha, isGitRepo } from "../git/index.js"
 import type { ParsedArgs } from "../types.js"
 import { createWorkflowEventBus, type WorkflowEventBus } from "./events.js"
+import { startConsoleFileLog } from "../lib/console-file-log.js"
 import { runIssueQueue } from "./issues.js"
 import type { WorkflowRuntime } from "./types.js"
 
@@ -17,6 +18,10 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions): 
   const config = await loadConfig(configPath)
   const configDir = path.dirname(configPath)
   const prompts = await loadPrompts(config, configDir)
+
+  const workflowName = path.basename(configPath, path.extname(configPath))
+  const fileLog = await startConsoleFileLog(config.projectDir, workflowName)
+  console.log(`[Log] Console output: ${fileLog.filePath}`)
 
   if (config.title) {
     console.log(`[Workflow] Task: ${config.title}`)
@@ -59,5 +64,8 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions): 
       eventBus.publish({ type: "fail", reason: error.message })
     }
     throw error
+  } finally {
+    fileLog.restore()
+    await fileLog.close()
   }
 }
