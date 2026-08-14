@@ -20,7 +20,7 @@ const mockSession = (resumeId: string): AgentSessionHandle => ({
 })
 
 vi.mock("../agent/index.js", () => ({
-  bootstrapSession: vi.fn(async (agent: { name: string }) => mockSession(`resume-${agent.name}`)),
+  bootstrapSession: vi.fn(async (_dir: string, agent: { name: string }) => mockSession(`resume-${agent.name}`)),
   sendTask: vi.fn(async () => {}),
   sendTaskAndMonitor: vi.fn(),
   startAgentResumed: vi.fn(async (_dir: string, agent: { name: string }) => `pane-${agent.name}`),
@@ -69,19 +69,18 @@ const buildRuntime = (overrides: Partial<WorkflowRuntime> = {}): WorkflowRuntime
     args: {},
     baseSha: "base-after-last-issue",
     config: {
-      implementer: AGENT_CONFIG("impl"),
-      reviewer: AGENT_CONFIG("rev"),
-      maxReviewRounds: 8,
+      agents: {
+        implementer: AGENT_CONFIG("impl"),
+        reviewer: AGENT_CONFIG("rev"),
+        gateReviewer: AGENT_CONFIG("final-rev"),
+        gateFixer: AGENT_CONFIG("final-fix"),
+      },
+      enableFinalGate: true,
+      maxRounds: { workflow: 8, finalGate: 3 },
       projectDir: "/tmp/project",
       prompts: {
         implement: "", review: "", revise: "", reReview: "",
         controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
-      },
-      finalGate: {
-        maxRounds: 3,
-        reviewer: AGENT_CONFIG("final-rev"),
-        fixer: AGENT_CONFIG("final-fix"),
-        prompts: { review: "/tmp/final-review.md", fix: "/tmp/final-fix.md" },
       },
       issues: [
         { title: "Issue One", specPath: "/tmp/spec1.md" },
@@ -181,7 +180,12 @@ describe("runFinalGate", () => {
     await runFinalGate(runtime, "/tmp/final-session")
 
     expect(startAgentResumed).toHaveBeenCalledTimes(1)
-    expect(startAgentResumed).toHaveBeenCalledWith("/tmp/project", expect.objectContaining({ name: "final-rev" }), expect.any(String), expect.any(Object))
+    expect(startAgentResumed).toHaveBeenCalledWith(
+      "/tmp/project",
+      expect.objectContaining({ name: "final-rev" }),
+      expect.objectContaining({ resumeId: "resume-final-rev", jsonl: "/tmp/resume-final-rev.jsonl" }),
+      expect.any(Object),
+    )
     expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
     expect(stopAgent).not.toHaveBeenCalledWith("pane-final-fix")
     expect(failEvents(runtime.eventBus)).toEqual([])
@@ -189,7 +193,7 @@ describe("runFinalGate", () => {
 
   it("publishes fail and throws when final review fails on the last round", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 1 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 1 } },
     })
     vi.mocked(sendTaskAndMonitor).mockResolvedValueOnce(monitorResult(REVIEW_FAIL_OUTPUT))
 
@@ -206,7 +210,7 @@ describe("runFinalGate", () => {
 
   it("publishes fail and throws when review still fails after a fixer round", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 2 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 2 } },
     })
     vi.mocked(sendTaskAndMonitor)
       .mockResolvedValueOnce(monitorResult(REVIEW_FAIL_OUTPUT))
@@ -225,7 +229,7 @@ describe("runFinalGate", () => {
 
   it("publishes fail and throws when REVIEW_NEEDS_CHECK retries exceed maxRounds", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 1 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 1 } },
     })
     vi.mocked(sendTaskAndMonitor).mockResolvedValueOnce(monitorResult(NEEDS_CHECK_OUTPUT))
     // 人工核查后 reviewer 重审仍 NEEDS_CHECK → 超过上限
@@ -269,8 +273,8 @@ describe("runFinalGate", () => {
     expect(stopAgent).toHaveBeenCalledWith("pane-final-fix")
   })
 
-  it("is a no-op when finalGate is not configured", async () => {
-    const runtime = buildRuntime({ config: { ...buildRuntime().config, finalGate: undefined } })
+  it("is a no-op when final gate is disabled", async () => {
+    const runtime = buildRuntime({ config: { ...buildRuntime().config, enableFinalGate: false } })
 
     await runFinalGate(runtime, "/tmp/final-session")
 

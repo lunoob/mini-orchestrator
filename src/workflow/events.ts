@@ -8,6 +8,11 @@
 
 // ── 事件类型 ──
 
+export type WorkflowInitEvent = {
+  type: "workflow_init"
+  title?: string
+}
+
 export type IssueChangeEvent = {
   type: "issue_change"
   issueIndex: number
@@ -78,6 +83,7 @@ export type InteractionResult = {
 }
 
 export type WorkflowEvent =
+  | WorkflowInitEvent
   | IssueChangeEvent
   | PhaseChangeEvent
   | ReviewRoundChangeEvent
@@ -110,6 +116,8 @@ export type NeedsInputDetail = {
  * 供 terminal UI 渲染，不依赖读取终端日志。
  */
 export type WorkflowSnapshot = {
+  /** workflow 任务标题（来自配置 title） */
+  workflowTitle: string
   /** 当前 issue 索引（0-based） */
   issueIndex: number
   /** 总 issue 数 */
@@ -165,6 +173,7 @@ export type WorkflowEventBus = {
 }
 
 const initialSnapshot = (startedAt: number): WorkflowSnapshot => ({
+  workflowTitle: "",
   issueIndex: 0,
   issueCount: 0,
   issueTitle: "",
@@ -209,6 +218,10 @@ export const createWorkflowEventBus = (startedAt = Date.now()): WorkflowEventBus
     const now = Date.now()
 
     switch (event.type) {
+      case "workflow_init":
+        snapshot = { ...snapshot, workflowTitle: event.title ?? "" }
+        break
+
       case "issue_change":
         snapshot = {
           ...snapshot,

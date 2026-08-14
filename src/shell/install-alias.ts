@@ -2,6 +2,8 @@ import { access, appendFile, constants, readFile, writeFile } from "node:fs/prom
 import os from "node:os"
 import path from "node:path"
 
+import { COMMAND_NAME_ENV } from "../command-name.js"
+
 export const ALIAS_NAME = "local-mini-orch"
 export const ALIAS_MARKER_START = "# mini-orchestrator:mini-orch"
 export const ALIAS_MARKER_END = "# mini-orchestrator:end"
@@ -13,7 +15,7 @@ export type InstallAliasResult = {
 }
 
 export const buildAliasBlock = (mainTsPath: string): string => {
-  const aliasLine = `alias ${ALIAS_NAME}='npx tsx ${mainTsPath}'`
+  const aliasLine = `alias ${ALIAS_NAME}='${COMMAND_NAME_ENV}=${ALIAS_NAME} npx tsx ${mainTsPath}'`
   return `${ALIAS_MARKER_START}\n${aliasLine}\n${ALIAS_MARKER_END}`
 }
 

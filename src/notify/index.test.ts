@@ -35,6 +35,12 @@ describe("buildNotificationCommand", () => {
   it("does not call an external notifier on unsupported platforms", () => {
     expect(buildNotificationCommand("freebsd", "标题", "消息", "success")).toBeUndefined()
   })
+
+  it("uses custom workflow title in notification", () => {
+    const command = buildNotificationCommand("darwin", "实现用户登录功能", "完成", "success")
+
+    expect(command?.args[1]).toContain('title "实现用户登录功能"')
+  })
 })
 
 describe("notify dedup", () => {

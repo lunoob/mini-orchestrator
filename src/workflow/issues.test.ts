@@ -3,8 +3,10 @@ import path from "node:path"
 import os from "node:os"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { runAgentIntegration, runAgentUpdate } from "../agent/index.js"
+import { setWorkflowStatus } from "../config/persist.js"
 import { runFinalGate } from "./final-gate.js"
-import { runIssueQueueFromIndex, shouldNotifyIssueComplete, shouldSkipImplement, shouldSkipIssue } from "./issues.js"
+import { runIssueQueue, runIssueQueueFromIndex, shouldNotifyIssueComplete, shouldSkipImplement, shouldSkipIssue } from "./issues.js"
 import { createWorkflowEventBus } from "./events.js"
 import type { WorkflowConfig } from "../types.js"
 import type { WorkflowRuntime } from "./types.js"
@@ -25,6 +27,7 @@ vi.mock("../agent/session.js", () => ({
 vi.mock("../config/persist.js", () => ({
   markIssueFinished: vi.fn(async () => {}),
   markIssueInReview: vi.fn(async () => {}),
+  setWorkflowStatus: vi.fn(async () => {}),
 }))
 
 vi.mock("../notify/index.js", () => ({
@@ -48,29 +51,26 @@ const AGENT_CONFIG = (name: string) => ({
   name,
   agent: "codex",
   command: "codex",
+  updateCommand: "codex update",
   integrationAgent: "codex",
 })
 
 const buildConfig = (dir: string, withFinalGate: boolean): WorkflowConfig => ({
-  implementer: AGENT_CONFIG("impl"),
-  reviewer: AGENT_CONFIG("rev"),
-  maxReviewRounds: 8,
+  agents: {
+    implementer: AGENT_CONFIG("impl"),
+    reviewer: AGENT_CONFIG("rev"),
+    ...(withFinalGate
+      ? { gateReviewer: AGENT_CONFIG("final-rev"), gateFixer: AGENT_CONFIG("final-fix") }
+      : {}),
+  },
+  enableFinalGate: withFinalGate,
+  maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: dir,
   prompts: {
     implement: "", review: "", revise: "", reReview: "",
     controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
   },
   issues: [{ title: "Issue One", specPath: path.join(dir, "spec.md") }],
-  ...(withFinalGate
-    ? {
-        finalGate: {
-          maxRounds: 3,
-          reviewer: AGENT_CONFIG("final-rev"),
-          fixer: AGENT_CONFIG("final-fix"),
-          prompts: { review: "/tmp/final-review.md", fix: "/tmp/final-fix.md" },
-        },
-      }
-    : {}),
 })
 
 const buildRuntime = (config: WorkflowConfig, configPath: string): WorkflowRuntime => ({
@@ -134,7 +134,50 @@ describe("issue queue with final gate", () => {
     expect(received).not.toContain("complete")
   })
 
-  it("skips the final gate entirely when finalGate is not configured", async () => {
+  it("marks reviewing before the final gate and finish after it passes", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
+
+    const calls = vi.mocked(setWorkflowStatus).mock.calls
+    expect(calls).toContainEqual([configPath, "reviewing", runtime.config])
+    expect(calls).toContainEqual([configPath, "finish", runtime.config])
+    const reviewingIndex = calls.findIndex(([, s]) => s === "reviewing")
+    const finishIndex = calls.findIndex(([, s]) => s === "finish")
+    expect(reviewingIndex).toBeGreaterThan(-1)
+    expect(finishIndex).toBeGreaterThan(reviewingIndex)
+  })
+
+  it("marks reviewing but not finish when the final gate fails", async () => {
+    vi.mocked(runFinalGate).mockRejectedValueOnce(new Error("final gate failed"))
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await expect(runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)).rejects.toThrow(
+      "final gate failed",
+    )
+
+    const statuses = vi.mocked(setWorkflowStatus).mock.calls.map(([, s]) => s)
+    expect(statuses).toContain("reviewing")
+    expect(statuses).not.toContain("finish")
+  })
+
+  it("marks finish without reviewing when the final gate is disabled", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, false), configPath)
+
+    await runIssueQueueFromIndex(runtime, configPath, 0, runtime.config.issues)
+
+    const statuses = vi.mocked(setWorkflowStatus).mock.calls.map(([, s]) => s)
+    expect(statuses).toContain("finish")
+    expect(statuses).not.toContain("reviewing")
+  })
+
+  it("skips the final gate entirely when it is disabled", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
     const configPath = writeRealFiles(dir)
     const runtime = buildRuntime(buildConfig(dir, false), configPath)
@@ -145,6 +188,38 @@ describe("issue queue with final gate", () => {
 
     expect(runFinalGate).not.toHaveBeenCalled()
     expect(received).toContain("complete")
+  })
+
+  it("updates each unique agent CLI only once", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, false), configPath)
+
+    await runIssueQueue(runtime, configPath)
+
+    expect(runAgentUpdate).toHaveBeenCalledTimes(1)
+    expect(runAgentUpdate).toHaveBeenCalledWith(dir, runtime.config.agents.implementer)
+  })
+
+  it("deduplicates updates for final gate agents too", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await runIssueQueue(runtime, configPath)
+
+    expect(runAgentUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it("integrates each unique agent type only once", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "issues-test-"))
+    const configPath = writeRealFiles(dir)
+    const runtime = buildRuntime(buildConfig(dir, true), configPath)
+
+    await runIssueQueue(runtime, configPath)
+
+    expect(runAgentIntegration).toHaveBeenCalledTimes(1)
+    expect(runAgentIntegration).toHaveBeenCalledWith(runtime.config.agents.implementer, expect.any(Function))
   })
 })
 

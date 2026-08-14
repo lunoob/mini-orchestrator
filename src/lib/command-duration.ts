@@ -9,5 +9,5 @@ export const formatCommandDuration = (elapsedMs: number) => {
     .map((value) => String(value).padStart(2, "0"))
     .join(":")
 
-  return `[Workflow] Total duration: ${duration}`
+  return `\n\n[Workflow] Total duration: ${duration}`
 }

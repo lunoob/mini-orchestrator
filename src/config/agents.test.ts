@@ -16,7 +16,6 @@ describe("resolveAgentConfig", () => {
     })
 
     expect(config.command).toBe("codex --model gpt-5.6-terra")
-    expect(config.agentReadyPattern).toBe("Codex")
     expect(config.integrationAgent).toBe("codex")
     expect(config.updateCommand).toBe("codex update")
   })
@@ -43,7 +42,6 @@ describe("resolveAgentConfig", () => {
     })
 
     expect(config.command).toBe("cursor-agent --trust --yolo --model composer")
-    expect(config.agentReadyPattern).toBe("Cursor Agent")
     expect(config.integrationAgent).toBe("cursor")
     expect(config.updateCommand).toBe("cursor-agent update")
   })
@@ -77,7 +75,6 @@ describe("resolveAgentConfig", () => {
     })
 
     expect(config.command).toBe("claude --model haiku")
-    expect(config.agentReadyPattern).toBe("Claude")
     expect(config.updateCommand).toBe("claude update")
   })
 
