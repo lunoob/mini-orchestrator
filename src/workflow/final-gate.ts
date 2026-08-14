@@ -56,7 +56,8 @@ export const createFinalSessionDir = async (runtime: WorkflowRuntime): Promise<s
     .digest("hex")
     .slice(0, 8)
 
-  const sessionDir = path.join(runtime.config.projectDir, ".orchestrator", `final-${hash}`)
+  const workflowName = path.basename(configPath, path.extname(configPath))
+  const sessionDir = path.join(runtime.config.projectDir, ".orchestrator", workflowName, `final-${hash}`)
   await mkdir(sessionDir, { recursive: true })
   return sessionDir
 }
