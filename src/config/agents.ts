@@ -15,7 +15,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   cursor: { cli: "cursor-agent", supportsUpdate: true },
 }
 
-const CODEX_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"] as const
+const CODEX_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
 const CLAUDE_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const
 const CURSOR_CLI_FLAGS = ["--trust", "--yolo"] as const
 
