@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 
-type NotifyLevel = "success" | "warning" | "error"
+type NotifyLevel = "success" | "warning" | "error" | "info"
 type NotificationCommand = {
   args: string[]
   command: string
@@ -10,6 +10,7 @@ const SUBTITLES: Record<NotifyLevel, string> = {
   success: "✅ 工作流完成",
   warning: "⚠️ 需要人工 Review",
   error: "❌ 错误",
+  info: "📋 Issue 完成",
 }
 
 const escapeAppleScriptString = (value: string) => {
@@ -77,7 +78,7 @@ export const notifyIssueComplete = (issueTitle: string, workflowTitle?: string) 
   notify(
     resolveNotifyTitle(workflowTitle),
     `Issue 已完成：${issueTitle}`,
-    "success",
+    "info",
   )
 }
 
