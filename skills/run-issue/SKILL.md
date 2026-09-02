@@ -40,20 +40,19 @@ disable-model-invocation: true
   "agents": {
     "implementer": {
       "name": "implementer",
-      "agent": "cursor",
-      "model": "composer-2.5"
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "xhigh"
     },
     "reviewer": {
       "name": "reviewer",
-      "agent": "codex",
-      "model": "gpt-5.6-luna",
-      "effort": "high"
+      "agent": "cursor",
+      "model": "cursor-grok-4.6-high"
     },
     "gateReviewer": {
       "name": "final-reviewer",
-      "agent": "codex",
-      "model": "gpt-5.6-terra",
-      "effort": "high"
+      "agent": "cursor",
+      "model": "cursor-grok-4.6-high"
     },
     "gateFixer": {
       "name": "final-fixer",
