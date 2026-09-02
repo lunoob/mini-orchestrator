@@ -23,7 +23,7 @@ import type { OutputCallback } from "./subprocess.js"
 export type { OutputCallback }
 
 const DEFAULT_MONITOR_POLL_MS = 10_000
-const DEFAULT_MONITOR_TIMEOUT_MS = 3_600_000
+const DEFAULT_MONITOR_TIMEOUT_MS = 10_800_000
 
 // ── Agent listing / naming ──
 
