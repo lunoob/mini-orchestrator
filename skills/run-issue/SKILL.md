@@ -2,7 +2,7 @@
 name: run-issue
 description: >-
   基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，
-  确认后保存配置, 输出执行命令, 启询问是否启动编排器。编排器暂停或结束时向用户报告结果。
+  确认后保存配置文件并输出执行命令。
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## 概述
 
-根据当前上下文中的 issue 文档路径与讨论结论，整理出编排器的 `issue` 模式配置，供用户确认后使用。确认后保存配置文件，并自动启动编排器执行。
+根据当前上下文中的 issue 文档路径与讨论结论，整理出编排器的 `issue` 模式配置，供用户确认后使用。确认后保存配置文件并输出执行命令，由用户自行启动编排器。
 
 ## 输入
 
@@ -72,7 +72,7 @@ disable-model-invocation: true
 
 ## 工作流
 
-生成配置草案 → 展示给用户确认 → 用户确认后保存配置 -> 输出执行命令 → 询问用户是否启动编排器
+生成配置草案 → 展示给用户确认 → 用户确认后保存配置 → 输出执行命令
 
 ### 1. 展示草案并确认
 
@@ -81,7 +81,7 @@ disable-model-invocation: true
 | 用户回答 | 行为 |
 |----------|------|
 | 需要修改 | 按用户要求修改后重新展示确认 |
-| 确认 | 进入下一步——保存配置并启动编排器 |
+| 确认 | 进入下一步——保存配置并输出执行命令 |
 
 ### 2. 保存配置
 
@@ -91,32 +91,14 @@ disable-model-invocation: true
 > 例：若 `issues[0].specPath` 为 `/home/user/my-project/specs/db-schema.md`，则配置保存至 `/home/user/my-project/specs/db-schema_workflow.issue.json`。
 
 记录 `CONFIG_PATH` = 已保存配置文件的**绝对路径**。
-输出执行命令
 
 ### 3. 输出执行命令
 
-输出执行命令:
+向用户输出以下命令，由用户自行在终端执行；本 skill 不代为启动编排器：
 
 ```bash
 mini-orch --config "'"$CONFIG_PATH"'"
 ```
-
-### 4. 询问是否启动编排器
-
-用户要启动的话就使用 `mini-orch` 启动编排器，传入已保存的配置文件：
-
-> `mini-orch` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
-
-等待期间**不要**向用户反复发送状态旁白，**不要**去读项目文件探查进度；仅以 exit code 为准。若用户主动询问，简短说明即可。
-
-#### 退出码处理
-
-`mini-orch` 退出后，根据 exit code 在 chat 中向用户报告结果：
-
-| exit code | 含义 | 报告方式 |
-|-----------|------|----------|
-| 0 | 编排正常完成 | 告诉用户"编排完成，所有 issue 已处理完毕" |
-| 1 | 编排失败 | 显示编排器的错误消息 |
 
 ## 示例
 

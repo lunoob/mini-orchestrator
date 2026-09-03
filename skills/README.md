@@ -12,7 +12,7 @@ mini-orch skill install --skill <skill-name> --agent <agent-name>
 | --- | --- | --- |
 | `test-driven-development` | 实现新功能、修复 bug 或重构时，先写失败测试，再用最少代码让测试通过。 | 无 |
 | `writing-agent-issues` | 将讨论结论或 PRD 整理成可直接交给实现 agent 执行的 issue，并写入 `.agent-plans/`。 | `test-driven-development`（生成的 issue 要求实现 agent 使用） |
-| `run-issue` | 根据已有 issue 文档生成编排器配置，确认后启动 issue 模式工作流。 | `writing-agent-issues`（推荐作为前置步骤；也可以直接使用已有 issue 文档） |
+| `run-issue` | 根据已有 issue 文档生成编排器配置，确认后保存并输出执行命令。 | `writing-agent-issues`（推荐作为前置步骤；也可以直接使用已有 issue 文档） |
 | `run-integration-tests` | 分析当前改动是否需要集成测试，并列出测试项和前置条件。 | 无 |
 
 > `run-integration-tests` 是项目中的安装名称；它的 skill 元数据名称是 `evaluate-integration-tests`。
