@@ -6,6 +6,7 @@
  */
 
 import type { WorkflowSnapshot, InteractionRequest } from "../workflow/events.js"
+import { LOG_STATUS_GAP } from "./layout-constants.js"
 
 export type LayoutResult = {
   /** 状态面板内容行 */
@@ -296,7 +297,7 @@ export const calculateLayout = (
   }
 
   const panelHeight = lines.length
-  const logHeight = Math.max(0, rows - panelHeight)
+  const logHeight = Math.max(0, rows - panelHeight - LOG_STATUS_GAP)
 
   return {
     lines,

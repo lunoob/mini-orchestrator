@@ -56,7 +56,8 @@ export const createFinalSessionDir = async (runtime: WorkflowRuntime): Promise<s
     .digest("hex")
     .slice(0, 8)
 
-  const sessionDir = path.join(runtime.config.projectDir, ".orchestrator", `final-${hash}`)
+  const workflowName = path.basename(configPath, path.extname(configPath))
+  const sessionDir = path.join(runtime.config.projectDir, ".orchestrator", workflowName, `final-${hash}`)
   await mkdir(sessionDir, { recursive: true })
   return sessionDir
 }
@@ -65,11 +66,11 @@ export const createFinalSessionDir = async (runtime: WorkflowRuntime): Promise<s
 const ensureFinalReviewer = async (runtime: WorkflowRuntime, agent: AgentConfig): Promise<AgentSessionHandle> => {
   if (runtime.finalReviewerPane) return runtime.finalReviewerSession!
   if (!runtime.finalReviewerSession) {
-    runtime.finalReviewerSession = await bootstrapSession(agent)
+    runtime.finalReviewerSession = await bootstrapSession(runtime.config.projectDir, agent)
   }
   runtime.finalReviewerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
-    runtime.finalReviewerSession.resumeId, { ensureUniqueName: true },
+    runtime.finalReviewerSession, { ensureUniqueName: true },
   )
   console.log(`[FinalGate] Started final reviewer on demand: ${runtime.finalReviewerPane}`)
   return runtime.finalReviewerSession
@@ -79,11 +80,11 @@ const ensureFinalReviewer = async (runtime: WorkflowRuntime, agent: AgentConfig)
 const ensureFinalFixer = async (runtime: WorkflowRuntime, agent: AgentConfig): Promise<AgentSessionHandle> => {
   if (runtime.finalFixerPane) return runtime.finalFixerSession!
   if (!runtime.finalFixerSession) {
-    runtime.finalFixerSession = await bootstrapSession(agent)
+    runtime.finalFixerSession = await bootstrapSession(runtime.config.projectDir, agent)
   }
   runtime.finalFixerPane = await startAgentResumed(
     runtime.config.projectDir, agent,
-    runtime.finalFixerSession.resumeId, { ensureUniqueName: true },
+    runtime.finalFixerSession, { ensureUniqueName: true },
   )
   console.log(`[FinalGate] Started final fixer on demand: ${runtime.finalFixerPane}`)
   return runtime.finalFixerSession
@@ -109,9 +110,9 @@ const conductFinalReview = async (
   runtime: WorkflowRuntime, round: number, sessionDir: string, lastReviewOutput?: string,
 ) => {
   const session = runtime.finalReviewerSession!
-  const gate = runtime.config.finalGate!
+  const maxRounds = runtime.config.maxRounds.finalGate
 
-  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds: gate.maxRounds })
+  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
 
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.startBaseSha, round)
@@ -137,7 +138,7 @@ const conductFinalReview = async (
 
   const final = await handleMonitorResult(
     "reviewer", runtime.finalReviewerPane, finalText, status, question,
-    `final review round ${round}`, session, runtime.eventBus,
+    `final review round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   const parsed = parseStatus(final, "reviewer")
@@ -154,7 +155,8 @@ const conductFinalReview = async (
 
 /** 执行 Final Fixer：输入为去 STATUS 行的问题清单、当前 round、全部 spec 路径 */
 const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, round: number) => {
-  const session = await ensureFinalFixer(runtime, runtime.config.finalGate!.fixer)
+  runtime.finalFixerTouched = true
+  const session = await ensureFinalFixer(runtime, runtime.config.agents.gateFixer!)
 
   runtime.eventBus.publish({ type: "phase_change", phase: "final-fix" })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
@@ -171,10 +173,48 @@ const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, rou
 
   await handleMonitorResult(
     "implementer", runtime.finalFixerPane, finalText, status, question,
-    `final fix round ${round}`, session, runtime.eventBus,
+    `final fix round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+}
+
+/** gateFixer 修改过代码后，在 final review 通过后执行静态检查与 commit */
+const sendFinalPostReviewCheck = async (runtime: WorkflowRuntime, round: number) => {
+  const session = await ensureFinalFixer(runtime, runtime.config.agents.gateFixer!)
+
+  console.log("[FinalGate] Final fixer touched code — running post-check.")
+  runtime.eventBus.publish({ type: "phase_change", phase: "post-check" })
+  runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "working" })
+
+  const { finalText, status, question } = await sendTaskAndMonitor(
+    runtime.finalFixerPane,
+    render(runtime.prompts.finalPostCheck, {
+      reviewStatus: "REVIEW_PASS",
+      round: String(round),
+    }),
+    session,
+  )
+
+  await handleMonitorResult(
+    "implementer", runtime.finalFixerPane, finalText, status, question,
+    `final post-check round ${round}`, session, runtime.eventBus, runtime.config.title,
+  )
+
+  runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
+}
+
+const finalizeFinalGatePass = async (runtime: WorkflowRuntime, round: number) => {
+  if (runtime.finalFixerTouched) {
+    await sendFinalPostReviewCheck(runtime, round)
+  }
+}
+
+export const closeFinalGatePanes = async (runtime: WorkflowRuntime) => {
+  const fp = runtime.finalFixerPane
+  const rp = runtime.finalReviewerPane
+  if (fp) { runtime.finalFixerPane = ""; await stopAgent(fp).catch(() => {}) }
+  if (rp) { runtime.finalReviewerPane = ""; await stopAgent(rp).catch(() => {}) }
 }
 
 /**
@@ -184,14 +224,14 @@ const runFinalFixer = async (runtime: WorkflowRuntime, reviewOutput: string, rou
 const settleFinalNeedsCheck = async (
   runtime: WorkflowRuntime, round: number, initialOutput: string,
 ): Promise<"passed" | { reviewOutput: string }> => {
-  const gate = runtime.config.finalGate!
+  const maxRounds = runtime.config.maxRounds.finalGate
   let needsCheckOutput = initialOutput
   let checks = 0
 
   while (true) {
     checks += 1
-    if (checks > gate.maxRounds) {
-      failWithError(runtime, `Final review needs_check exceeded ${gate.maxRounds} rounds`)
+    if (checks > maxRounds) {
+      failWithError(runtime, `Final review needs_check exceeded ${maxRounds} rounds`)
     }
 
     const decision = await handleNeedsCheck(
@@ -202,8 +242,8 @@ const settleFinalNeedsCheck = async (
 
     if (reParsed.status === "REVIEW_PASS") return "passed"
     if (reParsed.status === "REVIEW_FAIL") {
-      if (round === gate.maxRounds) {
-        failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
+      if (round === maxRounds) {
+        failWithError(runtime, `Final review failed after ${maxRounds} rounds`)
       }
       await runFinalFixer(runtime, needsCheckOutput, round)
       return { reviewOutput: needsCheckOutput }
@@ -215,43 +255,44 @@ const settleFinalNeedsCheck = async (
 }
 
 export const runFinalGate = async (runtime: WorkflowRuntime, sessionDir: string) => {
-  const gate = runtime.config.finalGate
-  if (!gate) return
+  if (!runtime.config.enableFinalGate) return
+
+  runtime.finalFixerTouched = false
 
   try {
-    await ensureFinalReviewer(runtime, gate.reviewer)
+    await ensureFinalReviewer(runtime, runtime.config.agents.gateReviewer!)
     let lastReviewOutput: string | undefined
 
-    for (let round = 1; round <= gate.maxRounds; round += 1) {
+    for (let round = 1; round <= runtime.config.maxRounds.finalGate; round += 1) {
       runtime.eventBus.publish({ type: "phase_change", phase: "final-review" })
 
       const { reviewOutput, parsed } = await conductFinalReview(runtime, round, sessionDir, lastReviewOutput)
       lastReviewOutput = stripStatus(reviewOutput, "reviewer")
 
-      // REVIEW_PASS → 直接成功，不调用局部 post-review-check；complete 由顶层发布
-      if (parsed.status === "REVIEW_PASS") return
+      if (parsed.status === "REVIEW_PASS") {
+        await finalizeFinalGatePass(runtime, round)
+        return
+      }
 
-      // REVIEW_NEEDS_CHECK → 人工核查 gate；FAIL 同样转 Final Fixer
       if (parsed.status === "REVIEW_NEEDS_CHECK") {
         const outcome = await settleFinalNeedsCheck(runtime, round, reviewOutput)
-        if (outcome === "passed") return
+        if (outcome === "passed") {
+          await finalizeFinalGatePass(runtime, round)
+          return
+        }
         lastReviewOutput = stripStatus(outcome.reviewOutput, "reviewer")
         continue
       }
 
-      // REVIEW_FAIL → 未达上限则交给 Final Fixer，进入下一轮
-      if (round === gate.maxRounds) {
-        failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
+      if (round === runtime.config.maxRounds.finalGate) {
+        failWithError(runtime, `Final review failed after ${runtime.config.maxRounds.finalGate} rounds`)
       }
       await runFinalFixer(runtime, reviewOutput, round)
     }
 
-    failWithError(runtime, `Final review failed after ${gate.maxRounds} rounds`)
-  } finally {
-    // 只关闭由 final gate 启动的 pane
-    const fp = runtime.finalFixerPane
-    const rp = runtime.finalReviewerPane
-    if (fp) { runtime.finalFixerPane = ""; await stopAgent(fp).catch(() => {}) }
-    if (rp) { runtime.finalReviewerPane = ""; await stopAgent(rp).catch(() => {}) }
+    failWithError(runtime, `Final review failed after ${runtime.config.maxRounds.finalGate} rounds`)
+  } catch (error) {
+    await closeFinalGatePanes(runtime)
+    throw error
   }
 }

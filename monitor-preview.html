@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mini-orch Monitor</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fb;
+        --surface: #ffffff;
+        --surface-raised: #ffffff;
+        --surface-soft: #f1f3f7;
+        --border: #e4e7ec;
+        --text: #202938;
+        --muted: #667085;
+        --faint: #98a2b3;
+        --green: #16834b;
+        --amber: #b7791f;
+        --red: #c2415a;
+        --blue: #5b5bd6;
+        --radius: 14px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        font-size: 14px;
+      }
+
+      button { font: inherit; }
+
+      .app-header {
+        min-height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, .92);
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .03);
+      }
+
+      .brand, .connection, .metric, .workflow-meta, .log-meta, .toolbar {
+        display: flex;
+        align-items: center;
+      }
+
+      .brand { gap: 11px; }
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #d9dcff;
+        border-radius: 9px;
+        color: var(--blue);
+        background: #f1f2ff;
+      }
+      .brand-mark svg { width: 17px; height: 17px; }
+      .brand-name { font-weight: 650; letter-spacing: -.01em; }
+      .brand-subtitle { color: var(--faint); font-size: 12px; margin-top: 2px; }
+
+      .header-right { display: flex; align-items: center; gap: 22px; }
+      .metrics { display: flex; gap: 18px; }
+      .metric { gap: 7px; color: var(--muted); font-size: 12px; }
+      .metric strong { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+      .metric.attention strong { color: var(--amber); }
+      .connection { gap: 7px; color: var(--green); font-size: 12px; }
+      .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent); }
+
+      .app-shell { min-height: calc(100vh - 64px); display: grid; grid-template-columns: 288px minmax(0, 1fr); }
+      .sidebar { padding: 22px 14px; border-right: 1px solid var(--border); background: #fbfcfe; }
+      .sidebar-heading { display: flex; justify-content: space-between; align-items: center; padding: 0 10px 12px; }
+      .sidebar-heading h2 { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+      .count { color: var(--faint); font-size: 12px; }
+      .filter-bar { display: flex; gap: 5px; padding: 0 7px 14px; }
+      .filter-button, .log-filter { border: 0; border-radius: 6px; color: var(--muted); background: transparent; cursor: pointer; }
+      .filter-button { padding: 6px 8px; font-size: 12px; }
+      .filter-button:hover, .filter-button.active, .log-filter:hover, .log-filter.active { color: var(--text); background: var(--surface-soft); }
+      .workflow-list { display: grid; gap: 6px; }
+      .workflow-item { width: 100%; padding: 12px 10px; display: block; text-align: left; border: 1px solid transparent; border-radius: 9px; color: var(--text); background: transparent; cursor: pointer; }
+      .workflow-item:hover { background: #f4f6fa; }
+      .workflow-item.selected { border-color: #d9dcff; background: #f5f5ff; }
+      .workflow-meta { justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+      .workflow-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 580; }
+      .state { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; }
+      .state.running { color: var(--green); }
+      .state.needs-input { color: var(--amber); }
+      .workflow-id, .workflow-detail { color: var(--faint); font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11px; }
+      .workflow-detail { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-family: inherit; }
+
+      .content { min-width: 0; padding: 28px 32px 36px; }
+      .content-inner { width: min(1120px, 100%); margin: 0 auto; }
+      .detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+      .eyebrow { margin: 0 0 8px; color: var(--faint); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+      h1 { margin: 0; font-size: clamp(22px, 3vw, 32px); letter-spacing: -.04em; }
+      .detail-id { margin-top: 8px; color: var(--muted); font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; }
+      .detail-status { padding: 8px 10px; border: 1px solid; border-radius: 8px; font-size: 12px; white-space: nowrap; }
+      .detail-status.running { border-color: #b7e3ca; color: var(--green); background: #effaf3; }
+      .detail-status.needs-input { border-color: #f0d39a; color: var(--amber); background: #fff9eb; }
+
+      .signal-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 20px; }
+      .signal { padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+      .signal-label { color: var(--muted); font-size: 11px; }
+      .signal-value { margin-top: 7px; color: var(--text); font-weight: 600; }
+      .signal-value.mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+      .signal-value.status-running { color: var(--green); }
+      .signal-value.status-needs-input { color: var(--amber); }
+
+      .log-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+      .log-card-header { min-height: 58px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+      .log-title { font-weight: 600; }
+      .log-meta { gap: 8px; color: var(--faint); font-size: 12px; }
+      .toolbar { gap: 4px; }
+      .log-filter { padding: 6px 8px; font-size: 11px; }
+      .follow { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; }
+      .follow input { accent-color: var(--green); }
+      .logs { min-height: 450px; max-height: 560px; overflow: auto; padding: 9px 0; background: #fafbfc; }
+      .log-line { display: grid; grid-template-columns: 76px 94px minmax(0, 1fr); gap: 12px; padding: 7px 16px; color: #475467; font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+      .log-line:hover { background: #f1f4f8; }
+      .log-time { color: var(--faint); }
+      .log-source { color: #4f46b8; }
+      .log-source.reviewer { color: #7c3aed; }
+      .log-source.system { color: #a16207; }
+      .log-text { overflow-wrap: anywhere; }
+      .log-text .muted { color: var(--muted); }
+      .empty { padding: 50px 20px; text-align: center; color: var(--faint); }
+
+      @media (max-width: 800px) {
+        .app-header { padding: 12px 16px; }
+        .metrics { display: none; }
+        .app-shell { display: block; }
+        .sidebar { padding: 14px 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+        .workflow-list { display: flex; overflow-x: auto; padding-bottom: 2px; }
+        .workflow-item { min-width: 220px; }
+        .content { padding: 22px 16px 30px; }
+      }
+
+      @media (max-width: 560px) {
+        .brand-subtitle, .connection { display: none; }
+        .detail-header { display: block; }
+        .detail-status { display: inline-block; margin-top: 14px; }
+        .signal-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .log-card-header { align-items: flex-start; flex-direction: column; }
+        .log-meta { width: 100%; justify-content: space-between; }
+        .log-line { grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+        .log-source { grid-column: 2; grid-row: 1; }
+        .log-text { grid-column: 2; }
+      }
+
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="6" height="6" rx="2"/><rect x="13" y="5" width="6" height="6" rx="2" opacity=".55"/><rect x="5" y="13" width="6" height="6" rx="2" opacity=".55"/><rect x="13" y="13" width="6" height="6" rx="2"/></svg>
+        </div>
+        <div><div class="brand-name">mini-orch Monitor</div><div class="brand-subtitle">本地运行中心</div></div>
+      </div>
+      <div class="header-right">
+        <div class="metrics"><div class="metric"><strong>2</strong> 个 workflow</div><div class="metric attention"><strong>1</strong> 需关注</div></div>
+        <div class="connection"><span class="status-dot"></span> Monitor 已连接</div>
+      </div>
+    </header>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workflow 列表">
+        <div class="sidebar-heading"><h2>Workflows</h2><span class="count">2 total</span></div>
+        <div class="filter-bar" role="tablist" aria-label="Workflow 筛选"><button class="filter-button active" data-filter="all">全部</button><button class="filter-button" data-filter="running">运行中</button><button class="filter-button" data-filter="attention">需关注</button></div>
+        <div class="workflow-list">
+          <button class="workflow-item selected" data-workflow="login" data-state="running"><div class="workflow-meta"><span class="workflow-name">登录流程</span><span class="state running"><span class="status-dot"></span>运行中</span></div><div class="workflow-id">run_abc123</div><div class="workflow-detail"><span>implement · issue 1/4</span><span>02:31</span></div></button>
+          <button class="workflow-item" data-workflow="sync" data-state="attention"><div class="workflow-meta"><span class="workflow-name">数据同步</span><span class="state needs-input"><span class="status-dot"></span>需输入</span></div><div class="workflow-id">run_def456</div><div class="workflow-detail"><span>review · issue 2</span><span>07:12</span></div></button>
+        </div>
+      </aside>
+
+      <main class="content"><div class="content-inner">
+        <section class="detail-header"><div><p class="eyebrow">当前 workflow</p><h1 id="detail-title">登录流程</h1><div class="detail-id" id="detail-id">run_abc123</div></div><div class="detail-status running" id="detail-status"><span class="status-dot"></span> RUNNING</div></section>
+        <section class="signal-strip" aria-label="Workflow 状态摘要"><div class="signal"><div class="signal-label">当前阶段</div><div class="signal-value" id="phase">implement</div></div><div class="signal"><div class="signal-label">Issue 进度</div><div class="signal-value" id="issues">1 / 4</div></div><div class="signal"><div class="signal-label">Implementer</div><div class="signal-value status-running" id="implementer">working</div></div><div class="signal"><div class="signal-label">已运行</div><div class="signal-value mono" id="elapsed">02:31</div></div></section>
+        <section class="log-card"><div class="log-card-header"><div class="log-meta"><span class="log-title">实时日志</span><span>·</span><span id="log-count">8 lines</span></div><div class="toolbar" role="toolbar" aria-label="日志筛选"><button class="log-filter active" data-log-filter="all">全部</button><button class="log-filter" data-log-filter="implementer">Implementer</button><button class="log-filter" data-log-filter="reviewer">Reviewer</button><label class="follow"><input type="checkbox" checked /> 跟随最新</label></div></div><div class="logs" id="logs" aria-live="polite">
+          <div class="log-line" data-source="system"><span class="log-time">12:28:31</span><span class="log-source system">system</span><span class="log-text">Workflow started <span class="muted">· issue 1/4</span></span></div>
+          <div class="log-line" data-source="implementer"><span class="log-time">12:28:36</span><span class="log-source">implementer</span><span class="log-text">Reading issue specification...</span></div>
+          <div class="log-line" data-source="implementer"><span class="log-time">12:28:49</span><span class="log-source">implementer</span><span class="log-text">Planning implementation steps</span></div>
+          <div class="log-line" data-source="implementer"><span class="log-time">12:29:08</span><span class="log-source">implementer</span><span class="log-text">Updated src/workflow/events.ts</span></div>
+          <div class="log-line" data-source="reviewer"><span class="log-time">12:30:12</span><span class="log-source reviewer">reviewer</span><span class="log-text">Waiting for implementation to finish</span></div>
+          <div class="log-line" data-source="implementer"><span class="log-time">12:30:41</span><span class="log-source">implementer</span><span class="log-text">Running targeted tests</span></div>
+          <div class="log-line" data-source="system"><span class="log-time">12:31:02</span><span class="log-source system">system</span><span class="log-text">Agent status: working</span></div>
+          <div class="log-line" data-source="implementer"><span class="log-time">12:31:07</span><span class="log-source">implementer</span><span class="log-text">Waiting for test result...</span></div>
+        </div></section>
+      </div></main>
+    </div>
+
+    <script>
+      const details = {
+        login: { title: "登录流程", id: "run_abc123", status: "RUNNING", statusClass: "running", phase: "implement", issues: "1 / 4", implementer: "working", implementerClass: "running", elapsed: "02:31" },
+        sync: { title: "数据同步", id: "run_def456", status: "NEEDS INPUT", statusClass: "needs-input", phase: "review", issues: "2", implementer: "needs_input", implementerClass: "needs-input", elapsed: "07:12" },
+      };
+
+      const updateDetail = (key) => {
+        const detail = details[key];
+        document.querySelectorAll("[id^=detail], #phase, #issues, #implementer, #elapsed").forEach((element) => {
+          const field = element.id.replace("detail-", "");
+          if (detail[field]) element.textContent = detail[field];
+        });
+        const detailStatus = document.getElementById("detail-status");
+        detailStatus.className = `detail-status ${detail.statusClass}`;
+        detailStatus.innerHTML = `<span class="status-dot"></span> ${detail.status}`;
+        document.getElementById("implementer").className = `signal-value status-${detail.implementerClass}`;
+        document.querySelectorAll(".workflow-item").forEach((item) => item.classList.toggle("selected", item.dataset.workflow === key));
+      };
+
+      document.querySelectorAll(".workflow-item").forEach((item) => item.addEventListener("click", () => updateDetail(item.dataset.workflow)));
+      document.querySelectorAll(".filter-button").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll(".filter-button").forEach((item) => item.classList.toggle("active", item === button));
+        document.querySelectorAll(".workflow-item").forEach((item) => {
+          const visible = button.dataset.filter === "all" || item.dataset.state === button.dataset.filter;
+          item.hidden = !visible;
+        });
+      }));
+      document.querySelectorAll(".log-filter").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll(".log-filter").forEach((item) => item.classList.toggle("active", item === button));
+        document.querySelectorAll(".log-line").forEach((line) => { line.hidden = button.dataset.logFilter !== "all" && line.dataset.source !== button.dataset.logFilter; });
+      }));
+    </script>
+  </body>
+</html>

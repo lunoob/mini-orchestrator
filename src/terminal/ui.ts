@@ -7,6 +7,7 @@
 
 import type { WorkflowEventBus, WorkflowSnapshot, InteractionRequest, InteractionResult } from "../workflow/events.js"
 import { calculateLayout, formatElapsed } from "./layout.js"
+import { colorizeLogMessage } from "./log-style.js"
 
 export type LogSink = {
   log: (message: string) => void
@@ -81,11 +82,15 @@ export const createBlessedUI = (
     top: 0,
     left: 0,
     width: "100%",
-    height: "100%-1",
+    height: "100%-2",
     scrollable: true,
     alwaysScroll: false,
     scrollbar: {
-      ch: " ",
+      ch: "▐",
+      style: {
+        fg: "#8b929e",
+        bg: "#2b2f36",
+      },
     },
     tags: false,
   })
@@ -201,6 +206,8 @@ export const createBlessedUI = (
       freezeTimer()
     }
 
+    screen.title = snap.workflowTitle ? `mini-orch — ${snap.workflowTitle}` : "mini-orch"
+
     const layout = calculateLayout(snap, screen.cols, screen.rows, currentRequest)
 
     // 更新状态面板内容和高度
@@ -208,7 +215,7 @@ export const createBlessedUI = (
     statusBox.height = layout.lines.length
 
     // 更新日志区高度
-    logWidget.height = Math.max(0, screen.rows - layout.lines.length)
+    logWidget.height = layout.logHeight
 
     screen.render()
   }
@@ -232,7 +239,7 @@ export const createBlessedUI = (
   const sink: LogSink = {
     log: (message: string) => {
       logHistory.push({ text: message, stream: "stdout" })
-      logWidget.log(message)
+      logWidget.log(colorizeLogMessage(message))
       if (following) {
         logWidget.setScrollPerc(100)
       }
@@ -240,7 +247,7 @@ export const createBlessedUI = (
     },
     logStderr: (message: string) => {
       logHistory.push({ text: message, stream: "stderr" })
-      logWidget.log(message)
+      logWidget.log(colorizeLogMessage(message))
       if (following) {
         logWidget.setScrollPerc(100)
       }

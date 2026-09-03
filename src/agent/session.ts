@@ -50,7 +50,8 @@ export const createSession = async (
   const shortHash = fullHash.slice(0, 8)
   const specName = path.basename(resolvedSpecPath, path.extname(resolvedSpecPath))
   const sessionId = `${specName}-${shortHash}`
-  const sessionDir = path.join(projectDir, ".orchestrator", sessionId)
+  const workflowName = path.basename(resolvedConfigPath, path.extname(resolvedConfigPath))
+  const sessionDir = path.join(projectDir, ".orchestrator", workflowName, sessionId)
 
   await mkdir(sessionDir, { recursive: true })
 

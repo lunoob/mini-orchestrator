@@ -2,7 +2,7 @@
 name: run-issue
 description: >-
   基于已讨论完成的上下文与 issue 文档，生成编排器 issue 模式配置草案供用户确认，
-  确认后保存配置, 输出执行命令, 启询问是否启动编排器。编排器暂停或结束时向用户报告结果。
+  确认后保存配置文件并输出执行命令。
 disable-model-invocation: true
 ---
 
@@ -10,13 +10,27 @@ disable-model-invocation: true
 
 ## 概述
 
-根据当前上下文中的 issue 文档路径与讨论结论，整理出编排器的 `issue` 模式配置，供用户确认后使用。确认后保存配置文件，并自动启动编排器执行。
+根据当前上下文中的 issue 文档路径与讨论结论，整理出编排器的 `issue` 模式配置，供用户确认后使用。确认后保存配置文件并输出执行命令，由用户自行启动编排器。
 
 ## 输入
 
 - 当前上下文中已讨论完成的一个或多个 issue 文档路径（`.md` 或其他可读格式）
 - 讨论过程中确定的实施顺序
-- 用户在讨论中约定的共同配置项（projectDir、implementer、reviewer 等）
+- 用户在讨论中约定的共同配置项（projectDir、agents、maxRounds 等）
+
+## finalGate 策略
+
+根据 `issues` 数量自动决定 `enableFinalGate`：
+
+| `issues.length` | `enableFinalGate` | `agents` |
+|-----------------|-------------------|----------|
+| 1 | `false` | 仅 `implementer`、`reviewer` |
+| ≥ 2 | `true` | 还需 `gateReviewer`、`gateFixer` |
+
+- 单 issue：各 issue 阶段的 review + post-check 已足够，无需全局终审；acceptance 复用 issue reviewer session
+- 多 issue：全部 issue 完成后需全局 finalGate 审查，再跑 acceptance（复用 gateReviewer session）
+
+用户若在确认阶段明确要求覆盖默认策略，可按用户要求调整。
 
 ## 输出
 
@@ -24,47 +38,65 @@ disable-model-invocation: true
 
 ```json
 {
+  "title": "<本次任务描述>",
   "projectDir": "<项目目录>",
-  "mode": "issue",
   "issues": [
     {
       "title": "<Issue 标题>",
       "specPath": "<issue 文档绝对路径>"
     }
   ],
-  "maxReviewRounds": 30,
-  "implementer": {
-    "name": "implementer",
-    "agent": "cursor",
-    "model": "composer-2.5"
+  "maxRounds": {
+    "workflow": 30,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.6-terra",
-    "effort": "high"
+  "enableFinalGate": "<见 finalGate 策略：1 个 issue 为 false，≥2 个为 true>",
+  "enableAcceptanceReport": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "xhigh"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "cursor",
+      "model": "cursor-grok-4.6-high"
+    },
+    "gateReviewer": "<仅 enableFinalGate 为 true 时填写>",
+    "gateFixer": "<仅 enableFinalGate 为 true 时填写>"
   }
 }
 ```
 
+- `title`：描述本次 workflow 任务，用于终端展示和系统通知
 - `issues[]` 按顺序排列，对应编排器的串行执行顺序
-- `title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
+- `issues[].title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
 - `projectDir` 使用当前的项目目录
-- 如出现配置项没提供，可以采用上述的配置做 fallback
+- `enableFinalGate`：按 [finalGate 策略](#finalgate-策略) 填写，不要自行根据复杂度判断
+- `enableAcceptanceReport`：默认 `true`；关闭后 workflow 结束时不生成验收报告
+- `agents.gateReviewer` / `agents.gateFixer`：仅当 `enableFinalGate: true` 时出现在配置中
+- 如出现其他配置项没提供，可以采用上述的配置做 fallback
 
 ## 工作流
 
-生成配置草案 → 展示给用户确认 → 用户确认后保存配置 -> 输出执行命令 → 询问用户是否启动编排器
+生成配置草案 → 展示给用户确认（含 finalGate 说明）→ 用户确认后保存配置 → 输出执行命令
 
 ### 1. 展示草案并确认
 
-向用户展示完整的配置草案，并**询问是否确认**。允许用户请求修改。
+向用户展示完整的配置草案，并**说明 finalGate 开启/关闭的原因**（issue 数量与是否需要全局终审），然后**询问是否确认**。允许用户请求修改。
+
+说明示例：
+
+- 单 issue：`本次仅 1 个 issue，已关闭 finalGate；单 issue 的 review + acceptance 即可覆盖验收。`
+- 多 issue：`本次共 N 个 issue，已开启 finalGate；全部 issue 完成后需做全局审查，再输出验收报告。`
 
 | 用户回答 | 行为 |
 |----------|------|
 | 需要修改 | 按用户要求修改后重新展示确认 |
-| 确认 | 进入下一步——保存配置并启动编排器 |
+| 确认 | 进入下一步——保存配置并输出执行命令 |
 
 ### 2. 保存配置
 
@@ -74,41 +106,23 @@ disable-model-invocation: true
 > 例：若 `issues[0].specPath` 为 `/home/user/my-project/specs/db-schema.md`，则配置保存至 `/home/user/my-project/specs/db-schema_workflow.issue.json`。
 
 记录 `CONFIG_PATH` = 已保存配置文件的**绝对路径**。
-输出执行命令
 
 ### 3. 输出执行命令
 
-输出执行命令:
+向用户输出以下命令，由用户自行在终端执行；本 skill 不代为启动编排器：
 
 ```bash
 mini-orch --config "'"$CONFIG_PATH"'"
 ```
 
-### 4. 询问是否启动编排器
-
-用户要启动的话就使用 `mini-orch` 启动编排器，传入已保存的配置文件：
-
-> `mini-orch` 在 implement / review 阶段会通过 herdr **阻塞等待** Herdr pane 内的 implementer / reviewer agent 完成；此期间脚本**几乎不向 stdout 输出**。这是正常行为，**不等于卡住**。
-
-等待期间**不要**向用户反复发送状态旁白，**不要**去读项目文件探查进度；仅以 exit code 为准。若用户主动询问，简短说明即可。
-
-#### 退出码处理
-
-`mini-orch` 退出后，根据 exit code 在 chat 中向用户报告结果：
-
-| exit code | 含义 | 报告方式 |
-|-----------|------|----------|
-| 0 | 编排正常完成 | 告诉用户"编排完成，所有 issue 已处理完毕" |
-| 1 | 编排失败 | 显示编排器的错误消息 |
-
 ## 示例
 
-### 输出草案
+### 输出草案（多 issue）
 
 ```json
 {
+  "title": "用户认证功能开发",
   "projectDir": "/home/user/my-project",
-  "mode": "issue",
   "issues": [
     {
       "title": "数据库 Schema 搭建",
@@ -123,19 +137,40 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "specPath": "/home/user/my-project/specs/frontend.md"
     }
   ],
-  "maxReviewRounds": 8,
-  "implementer": {
-    "name": "implementer",
-    "agent": "claude",
-    "model": "haiku"
+  "maxRounds": {
+    "workflow": 8,
+    "finalGate": 20
   },
-  "reviewer": {
-    "name": "reviewer",
-    "agent": "codex",
-    "model": "gpt-5.4"
+  "enableFinalGate": true,
+  "enableAcceptanceReport": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    }
   }
 }
 ```
+
+配套说明：`本次共 3 个 issue，已开启 finalGate；全部 issue 完成后做全局审查，再生成验收报告。`
 
 ### 保存路径示例
 
@@ -148,4 +183,4 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 - issues 按数组顺序串行执行，不做并行调度
 - 任一 issue 进入 `REVIEW_FAIL` 耗尽轮数后，后续 issue 不执行
-- 共用配置字段（projectDir、implementer、reviewer）在讨论中应一次性约定，skill 不会逐项提示
+- 共用配置字段（projectDir、agents、maxRounds）在讨论中应一次性约定，skill 不会逐项提示
