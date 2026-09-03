@@ -12,6 +12,7 @@ import type { AgentSessionHandle, AgentStatus, TranscriptEvent } from "./transcr
 import { createTranscriptMonitor } from "./transcript/monitor.js"
 import { getErrorMessage, splitCommand } from "../lib/utils.js"
 import {
+  formatAgentStart,
   formatIntegrationFailure,
   formatIntegrationStart,
   formatUpdateFailure,
@@ -76,6 +77,7 @@ const startAgentWithName = async (projectDir: string, agent: AgentConfig, name: 
     "--pane", paneId,
     ...(agentArgs.length > 0 ? ["--", ...agentArgs] : []),
   ]
+  console.log(formatAgentStart(name, agent.command))
   const output = await runHerdr(startArgs)
   const parsed = JSON.parse(output) as AgentStartResult
   return parsed.result.agent.pane_id
@@ -350,6 +352,7 @@ const startAgentWithResumeId = async (
     "--pane", paneId,
     ...(agentArgs.length > 0 ? ["--", ...agentArgs] : []),
   ]
+  console.log(formatAgentStart(name, resumeCommand))
   const output = await runHerdr(startArgs)
   const parsed = JSON.parse(output) as AgentStartResult
   return parsed.result.agent.pane_id

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  formatAgentStart,
   formatIntegrationFailure,
   formatIntegrationStart,
   formatUpdateFailure,
@@ -31,6 +32,15 @@ describe("agent log messages", () => {
   it("describes integration failures without a role name", () => {
     expect(formatIntegrationFailure(1)).toBe(
       "[Agent] Integration failed (exit code 1), continuing anyway.",
+    )
+  })
+
+  it("describes an agent start command with the agent name", () => {
+    expect(formatAgentStart(
+      "implementer",
+      "cursor-agent --trust --yolo --resume abc123 --model composer-2.5-high",
+    )).toBe(
+      '[Agent] Starting "implementer": cursor-agent --trust --yolo --resume abc123 --model composer-2.5-high',
     )
   })
 })
