@@ -3,6 +3,8 @@ import { createWriteStream } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 
+import { applyLogDecoration } from "../terminal/log-style.js"
+
 /**
  * 将 console.log/warn/error 同时写入文件，输出行为透传给原有 console（保留屏幕渲染）。
  * 通过保存并链式调用当前 console 函数，可叠加在 main.ts 的 blessed sink 代理之上。
@@ -19,17 +21,20 @@ export const startConsoleFileLog = async (projectDir: string, workflowName: stri
 
   const write = (message: string) => stream.write(message + "\n")
 
+  const forward = (message: string, original: (...args: unknown[]) => void) => {
+    const decorated = applyLogDecoration(message)
+    write(decorated)
+    original(decorated)
+  }
+
   console.log = (...args) => {
-    write(format(...args))
-    originalLog(...args)
+    forward(format(...args), originalLog)
   }
   console.warn = (...args) => {
-    write(format(...args))
-    originalWarn(...args)
+    forward(format(...args), originalWarn)
   }
   console.error = (...args) => {
-    write(format(...args))
-    originalError(...args)
+    forward(format(...args), originalError)
   }
 
   return {

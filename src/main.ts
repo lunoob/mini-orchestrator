@@ -11,6 +11,7 @@ import { AgentFailError, ImplementAskAbortError } from "./workflow/implement-ask
 import { WorkflowFinishedError, runWorkflow } from "./workflow/index.js"
 import { runTestStatus } from "./workflow/test-status.js"
 import { createWorkflowEventBus } from "./workflow/events.js"
+import { applyLogDecoration } from "./terminal/log-style.js"
 import { createTerminalUI, isInteractiveTTY, type LogSink } from "./terminal/ui.js"
 
 /**
@@ -25,9 +26,9 @@ const proxyConsoleToSink = (sink: LogSink): (() => void) => {
   const originalWarn = console.warn
   const originalError = console.error
 
-  console.log = (...args: any[]) => { sink.log(format(...args)) }
-  console.warn = (...args: any[]) => { sink.logStderr(format(...args)) }
-  console.error = (...args: any[]) => { sink.logStderr(format(...args)) }
+  console.log = (...args: any[]) => { sink.log(applyLogDecoration(format(...args))) }
+  console.warn = (...args: any[]) => { sink.logStderr(applyLogDecoration(format(...args))) }
+  console.error = (...args: any[]) => { sink.logStderr(applyLogDecoration(format(...args))) }
 
   return () => {
     console.log = originalLog
@@ -78,10 +79,7 @@ export const main = async (testStatusMode = false, argv = process.argv.slice(2))
   const logSink = ui.getLogSink()
 
   try {
-    let restoreConsole: (() => void) | undefined
-    if (isInteractiveTTY()) {
-      restoreConsole = proxyConsoleToSink(logSink)
-    }
+    const restoreConsole = proxyConsoleToSink(logSink)
 
     try {
       if (testStatusMode) {
@@ -92,7 +90,7 @@ export const main = async (testStatusMode = false, argv = process.argv.slice(2))
         notifySuccess(workflowTitle)
       }
     } finally {
-      restoreConsole?.()
+      restoreConsole()
     }
   } catch (error) {
     const workflowTitle = eventBus.getSnapshot().workflowTitle || undefined
