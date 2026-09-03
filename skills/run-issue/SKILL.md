@@ -18,6 +18,20 @@ disable-model-invocation: true
 - 讨论过程中确定的实施顺序
 - 用户在讨论中约定的共同配置项（projectDir、agents、maxRounds 等）
 
+## finalGate 策略
+
+根据 `issues` 数量自动决定 `enableFinalGate`：
+
+| `issues.length` | `enableFinalGate` | `agents` |
+|-----------------|-------------------|----------|
+| 1 | `false` | 仅 `implementer`、`reviewer` |
+| ≥ 2 | `true` | 还需 `gateReviewer`、`gateFixer` |
+
+- 单 issue：各 issue 阶段的 review + post-check 已足够，无需全局终审；acceptance 复用 issue reviewer session
+- 多 issue：全部 issue 完成后需全局 finalGate 审查，再跑 acceptance（复用 gateReviewer session）
+
+用户若在确认阶段明确要求覆盖默认策略，可按用户要求调整。
+
 ## 输出
 
 输出一版编排器 `issue` 模式配置 JSON，格式如下：
@@ -36,7 +50,8 @@ disable-model-invocation: true
     "workflow": 30,
     "finalGate": 20
   },
-  "enableFinalGate": true,
+  "enableFinalGate": "<见 finalGate 策略：1 个 issue 为 false，≥2 个为 true>",
+  "enableAcceptanceReport": true,
   "agents": {
     "implementer": {
       "name": "implementer",
@@ -49,16 +64,8 @@ disable-model-invocation: true
       "agent": "cursor",
       "model": "cursor-grok-4.6-high"
     },
-    "gateReviewer": {
-      "name": "final-reviewer",
-      "agent": "cursor",
-      "model": "cursor-grok-4.6-high"
-    },
-    "gateFixer": {
-      "name": "final-fixer",
-      "agent": "cursor",
-      "model": "composer-2.5"
-    }
+    "gateReviewer": "<仅 enableFinalGate 为 true 时填写>",
+    "gateFixer": "<仅 enableFinalGate 为 true 时填写>"
   }
 }
 ```
@@ -68,15 +75,23 @@ disable-model-invocation: true
 - `issues[].title` 使用讨论中确定的 issue 名称（通常与 spec 文档标题一致）
 - `specPath` 指向 issue 所对应的 spec 文档
 - `projectDir` 使用当前的项目目录
-- 如出现配置项没提供，可以采用上述的配置做 fallback
+- `enableFinalGate`：按 [finalGate 策略](#finalgate-策略) 填写，不要自行根据复杂度判断
+- `enableAcceptanceReport`：默认 `true`；关闭后 workflow 结束时不生成验收报告
+- `agents.gateReviewer` / `agents.gateFixer`：仅当 `enableFinalGate: true` 时出现在配置中
+- 如出现其他配置项没提供，可以采用上述的配置做 fallback
 
 ## 工作流
 
-生成配置草案 → 展示给用户确认 → 用户确认后保存配置 → 输出执行命令
+生成配置草案 → 展示给用户确认（含 finalGate 说明）→ 用户确认后保存配置 → 输出执行命令
 
 ### 1. 展示草案并确认
 
-向用户展示完整的配置草案，并**询问是否确认**。允许用户请求修改。
+向用户展示完整的配置草案，并**说明 finalGate 开启/关闭的原因**（issue 数量与是否需要全局终审），然后**询问是否确认**。允许用户请求修改。
+
+说明示例：
+
+- 单 issue：`本次仅 1 个 issue，已关闭 finalGate；单 issue 的 review + acceptance 即可覆盖验收。`
+- 多 issue：`本次共 N 个 issue，已开启 finalGate；全部 issue 完成后需做全局审查，再输出验收报告。`
 
 | 用户回答 | 行为 |
 |----------|------|
@@ -102,7 +117,7 @@ mini-orch --config "'"$CONFIG_PATH"'"
 
 ## 示例
 
-### 输出草案
+### 输出草案（多 issue）
 
 ```json
 {
@@ -127,6 +142,7 @@ mini-orch --config "'"$CONFIG_PATH"'"
     "finalGate": 20
   },
   "enableFinalGate": true,
+  "enableAcceptanceReport": true,
   "agents": {
     "implementer": {
       "name": "implementer",
@@ -149,9 +165,12 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "name": "final-fixer",
       "agent": "cursor",
       "model": "composer-2.5"
+    }
   }
 }
 ```
+
+配套说明：`本次共 3 个 issue，已开启 finalGate；全部 issue 完成后做全局审查，再生成验收报告。`
 
 ### 保存路径示例
 
