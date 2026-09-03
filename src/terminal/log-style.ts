@@ -30,7 +30,7 @@ export const resetLogDateState = () => {
 const decorateStructuredLogLine = (line: string, date: Date) => {
   const day = formatLogDay(date)
   const segments: string[] = []
-  if (lastLogDay !== null && lastLogDay !== day) segments.push(day)
+  if (lastLogDay !== day) segments.push(day)
   lastLogDay = day
   segments.push(`${formatLogTime(date)} ${line}`)
   return segments.join("\n")

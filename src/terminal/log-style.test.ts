@@ -18,7 +18,7 @@ describe("decorateLogMessage", () => {
     vi.setSystemTime(new Date("2026-09-03T10:49:03"))
 
     expect(decorateLogMessage('[Agent] Starting "implementer"')).toBe(
-      '10:49:03 [Agent] Starting "implementer"',
+      '2026-09-03\n10:49:03 [Agent] Starting "implementer"',
     )
   })
 
@@ -38,11 +38,11 @@ describe("decorateLogMessage", () => {
     )
   })
 
-  it("does not insert a date line for the first structured log", () => {
+  it("inserts a date line for the first structured log", () => {
     vi.setSystemTime(new Date("2026-09-04T00:05:00"))
 
     expect(decorateLogMessage("[Agent] Bootstrap OK")).toBe(
-      "00:05:00 [Agent] Bootstrap OK",
+      "2026-09-04\n00:05:00 [Agent] Bootstrap OK",
     )
   })
 
