@@ -10,7 +10,7 @@ import {
 } from "../config/agents.js"
 import type { AgentSessionHandle, AgentStatus, TranscriptEvent } from "./transcript/types.js"
 import { createTranscriptMonitor } from "./transcript/monitor.js"
-import { splitCommand } from "../lib/utils.js"
+import { getErrorMessage, splitCommand } from "../lib/utils.js"
 import {
   formatIntegrationFailure,
   formatIntegrationStart,
@@ -19,11 +19,17 @@ import {
 } from "./log-messages.js"
 import { runHerdr, tryRunHerdr } from "./subprocess.js"
 import { waitForAgentReady } from "./readiness.js"
+import { waitForJsonlReady } from "./jsonl-ready.js"
 import type { OutputCallback } from "./subprocess.js"
 export type { OutputCallback }
 
 const DEFAULT_MONITOR_POLL_MS = 10_000
 const DEFAULT_MONITOR_TIMEOUT_MS = 10_800_000
+
+// ── Startup retry ──
+const MAX_BOOTSTRAP_ATTEMPTS = 3
+const MAX_START_ATTEMPTS = 3
+const RETRY_DELAY_MS = 2_000
 
 // ── Agent listing / naming ──
 
@@ -49,7 +55,7 @@ export const resolveUniqueAgentName = async (baseName: string) => {
   return generateUniqueAgentName(baseName, takenNames)
 }
 
-export type StartAgentOptions = { ensureUniqueName?: boolean }
+export type StartAgentOptions = { ensureUniqueName?: boolean; retryDelayMs?: number }
 
 // ── Agent pane / start ──
 
@@ -216,32 +222,6 @@ const execHeadless = async (shellCommand: string, cwd: string): Promise<{ stdout
   })
 }
 
-/**
- * 等待 JSONL 文件就绪（最多 15 秒）。
- */
-const waitForJsonlReady = async (jsonlPath: string, agentName: string): Promise<number> => {
-  const { open } = await import("node:fs/promises")
-  const deadline = Date.now() + 15_000
-
-  while (Date.now() < deadline) {
-    try {
-      const fh = await open(jsonlPath, "r")
-      const stat = await fh.stat()
-      if (stat.size > 0) {
-        const buffer = Buffer.alloc(stat.size)
-        const { bytesRead } = await fh.read(buffer, 0, stat.size, 0)
-        if (buffer.toString("utf8", 0, bytesRead).includes("\n")) {
-          await fh.close()
-          return stat.size
-        }
-      }
-      await fh.close()
-    } catch { /* JSONL not ready */ }
-    await new Promise((r) => setTimeout(r, 500))
-  }
-
-  throw new Error(`[Agent] Bootstrap failed for "${agentName}": JSONL not ready within 15s: ${jsonlPath}`)
-}
 
 /**
  * Claude bootstrap 的两步流程：
@@ -299,45 +279,59 @@ const bootstrapClaudeSession = async (
     )
   }
 
-  // 等待 JSONL 就绪
-  handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
-
-  console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
   return handle
 }
 
 export const bootstrapSession = async (
   projectDir: string, agent: AgentConfig, metaPrompt?: string,
+  options: { retryDelayMs?: number } = {},
 ): Promise<AgentSessionHandle> => {
+  const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS
   // codex 沿用旧 prompt，claude/cursor 使用注入 cwd 的新 prompt
   const prompt = metaPrompt ?? (agent.agent === "codex" ? BOOTSTRAP_META_PROMPT : buildBootstrapMetaPrompt(projectDir))
 
-  let handle: AgentSessionHandle
-  if (agent.agent === "claude") {
-    // Claude 使用两步 bootstrap 流程
-    handle = await bootstrapClaudeSession(projectDir, agent, prompt)
-  } else {
-    // 其他 agent 使用单步 bootstrap 流程
-    const shellCommand = buildBootstrapCommand(agent, prompt)
-    console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
+  // 执行 + 解析失败（非零退出 / 输出不符合预期）整轮重跑，最多 MAX_BOOTSTRAP_ATTEMPTS 次
+  let handle: AgentSessionHandle | undefined
+  let lastError: unknown
+  for (let attempt = 1; attempt <= MAX_BOOTSTRAP_ATTEMPTS; attempt += 1) {
+    try {
+      if (agent.agent === "claude") {
+        // Claude 使用两步 bootstrap 流程
+        handle = await bootstrapClaudeSession(projectDir, agent, prompt)
+      } else {
+        // 其他 agent 使用单步 bootstrap 流程
+        const shellCommand = buildBootstrapCommand(agent, prompt)
+        console.log(`[Agent] Bootstrapping session for "${agent.name}" (${agent.agent})...`)
 
-    const { stdout, code } = await execHeadless(shellCommand, projectDir)
-    if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
+        const { stdout, code } = await execHeadless(shellCommand, projectDir)
+        if (code !== 0) throw new Error(`[Agent] Bootstrap failed for "${agent.name}" (exit ${code})`)
 
-    const parsed = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])
-    if (!parsed) {
-      throw new Error(
-        `[Agent] Bootstrap failed for "${agent.name}": could not parse { resumeId, jsonl } from stdout. ` +
-        `stdout was: ${stdout.slice(0, 500)}`,
+        const parsed = parseBootstrapOutput(stdout, agent.agent as AgentSessionHandle["provider"])
+        if (!parsed) {
+          throw new Error(
+            `[Agent] Bootstrap failed for "${agent.name}": could not parse { resumeId, jsonl } from stdout. ` +
+            `stdout was: ${stdout.slice(0, 500)}`,
+          )
+        }
+        handle = parsed
+      }
+      break
+    } catch (error) {
+      lastError = error
+      if (attempt === MAX_BOOTSTRAP_ATTEMPTS) break
+      const reason = getErrorMessage(error).split("\n")[0]
+      console.log(
+        `[Agent] Bootstrap failed for "${agent.name}" on attempt ${attempt}/${MAX_BOOTSTRAP_ATTEMPTS}: ${reason}. ` +
+        `Retrying in ${retryDelayMs}ms...`,
       )
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
     }
-    handle = parsed
-
-    // 等待 JSONL 就绪
-    handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
-
-    console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
   }
+  if (!handle) throw lastError
+
+  // 解析成功但 JSONL 未及时落盘：同会话续等，不重建会话
+  handle.offset = await waitForJsonlReady(handle.jsonl, agent.name)
+  console.log(`[Agent] Bootstrap OK: resumeId=${handle.resumeId}, jsonl=${handle.jsonl}, offset=${handle.offset}`)
 
   // 延迟 5s 返回，确保 JSONL 稳定落盘后再启动 agent
   await new Promise((resolve) => setTimeout(resolve, 5_000))
@@ -361,24 +355,42 @@ const startAgentWithResumeId = async (
   return parsed.result.agent.pane_id
 }
 
+/**
+ * 启动失败（start 命令报错 / ready 检测超时）时关闭旧 pane 重建，
+ * 复用同一 session 重试，最多 MAX_START_ATTEMPTS 次。名字每轮重新解析，避免撞上残留占用。
+ */
 export const startAgentResumed = async (
   projectDir: string, agent: AgentConfig,
   session: Pick<AgentSessionHandle, "resumeId" | "jsonl">,
   options: StartAgentOptions = {},
 ) => {
-  let name = agent.name
-  if (options.ensureUniqueName) {
-    name = await resolveUniqueAgentName(agent.name)
-    if (name !== agent.name) console.log(`[Agent] Name "${agent.name}" is taken; using "${name}" instead.`)
+  const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS
+
+  let lastError: unknown
+  for (let attempt = 1; attempt <= MAX_START_ATTEMPTS; attempt += 1) {
+    let paneId = ""
+    try {
+      let name = agent.name
+      if (options.ensureUniqueName) {
+        name = await resolveUniqueAgentName(agent.name)
+        if (name !== agent.name) console.log(`[Agent] Name "${agent.name}" is taken; using "${name}" instead.`)
+      }
+      paneId = await startAgentWithResumeId(projectDir, agent, name, session)
+      await waitForAgentReady(paneId, session, { read: readAgentOutput })
+      return paneId
+    } catch (error) {
+      lastError = error
+      if (paneId) await stopAgent(paneId)
+      if (attempt === MAX_START_ATTEMPTS) break
+      const reason = getErrorMessage(error).split("\n")[0]
+      console.log(
+        `[Agent] Agent start failed for "${agent.name}" on attempt ${attempt}/${MAX_START_ATTEMPTS}: ${reason}. ` +
+        `Restarting in ${retryDelayMs}ms...`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+    }
   }
-  const paneId = await startAgentWithResumeId(projectDir, agent, name, session)
-  try {
-    await waitForAgentReady(paneId, session, { read: readAgentOutput })
-    return paneId
-  } catch (error) {
-    await stopAgent(paneId)
-    throw error
-  }
+  throw lastError
 }
 
 // ── Transcript monitor ──
