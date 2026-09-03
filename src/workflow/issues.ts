@@ -19,10 +19,26 @@ import { render } from "../lib/utils.js"
 import { parseStatus } from "../lib/status-parser.js"
 import { notifyIssueComplete } from "../notify/index.js"
 import { handleNeedsInputGate, ensureStatusRetry, defaultImplementAskDeps, type ImplementAskDeps } from "./implement-ask.js"
-import { createFinalSessionDir, runFinalGate } from "./final-gate.js"
+import { runAcceptance, shouldRunAcceptance } from "./acceptance.js"
+import { closeFinalGatePanes, createFinalSessionDir, runFinalGate } from "./final-gate.js"
 import { advanceBaseline } from "./review-context.js"
 import { runReviewLoop } from "./review-loop.js"
 import type { WorkflowRuntime } from "./types.js"
+
+const shouldKeepReviewerForAcceptance = (runtime: WorkflowRuntime, issueCount: number) =>
+  shouldRunAcceptance(runtime) && !runtime.config.enableFinalGate && issueCount === 1
+
+const closeIssueAgentPanes = async (runtime: WorkflowRuntime, keepReviewer = false) => {
+  const ip = runtime.implementerPane
+  const rp = runtime.reviewerPane
+  if (ip) { runtime.implementerPane = ""; await stopAgent(ip).catch(() => {}) }
+  if (rp && !keepReviewer) { runtime.reviewerPane = ""; await stopAgent(rp).catch(() => {}) }
+}
+
+const closeRemainingAgentPanes = async (runtime: WorkflowRuntime) => {
+  await closeIssueAgentPanes(runtime)
+  await closeFinalGatePanes(runtime)
+}
 
 export const shouldSkipIssue = (issue: IssueConfig) => (issue.state ?? "ready") === "finish"
 export const shouldSkipImplement = (issue: IssueConfig) => (issue.state ?? "ready") === "review"
@@ -217,19 +233,22 @@ export const runIssueQueueFromIndex = async (
         notifyIssueComplete(issue.title, runtime.config.title)
       }
     } finally {
-      const ip = runtime.implementerPane
-      const rp = runtime.reviewerPane
-      if (ip) { runtime.implementerPane = ""; await stopAgent(ip).catch(() => {}) }
-      if (rp) { runtime.reviewerPane = ""; await stopAgent(rp).catch(() => {}) }
+      await closeIssueAgentPanes(runtime, shouldKeepReviewerForAcceptance(runtime, issues.length))
     }
   }
 
-  // 所有 issue 成功完成：若启用 final gate 则先做全局审查，通过后才发布 workflow complete
   if (runtime.config.enableFinalGate) {
     const finalSessionDir = await createFinalSessionDir(runtime)
     await setWorkflowStatus(configPath, "reviewing", runtime.config)
     await runFinalGate(runtime, finalSessionDir)
   }
+
+  if (shouldRunAcceptance(runtime)) {
+    const source = runtime.config.enableFinalGate ? "gateReviewer" : "issueReviewer"
+    await runAcceptance(runtime, source)
+  }
+
+  await closeRemainingAgentPanes(runtime)
 
   await setWorkflowStatus(configPath, "finish", runtime.config)
   publishCompleteWhenDone()

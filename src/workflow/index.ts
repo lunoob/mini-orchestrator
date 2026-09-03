@@ -59,6 +59,7 @@ export const runWorkflow = async (args: ParsedArgs, options?: WorkflowOptions): 
     config,
     configPath,
     eventBus,
+    finalFixerTouched: false,
     finalFixerPane: "",
     finalReviewerPane: "",
     hasGit,

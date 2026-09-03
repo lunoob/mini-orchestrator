@@ -38,6 +38,7 @@ const buildConfig = (overrides: Partial<WorkflowConfig> = {}): WorkflowConfig =>
     implementer: { name: "impl", agent: "codex", command: "codex", integrationAgent: "codex" },
     reviewer: { name: "rev", agent: "codex", command: "codex", integrationAgent: "codex" },
   },
+  enableAcceptanceReport: false,
   enableFinalGate: false,
   maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: "/tmp/project",

@@ -20,13 +20,17 @@ export type AgentConfig = AgentInputConfig & {
 export type PromptConfig = {
   controllerImplementer?: string
   controllerReReview?: string
+  acceptance?: string
   finalFix?: string
+  finalPostCheck?: string
   finalReview?: string
   implement: string
   /** 自定义 implement 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/implement-output.md` */
   outputFormatImplement?: string
   /** 自定义 review 类 prompt 的输出格式 partial，省略时用默认 `prompts/partials/review-output.md` */
   outputFormatReview?: string
+  /** post-review / final-post-check 共用任务正文 partial */
+  postCheckBody?: string
   postReviewCheck?: string
   reReview?: string
   review: string
@@ -60,6 +64,7 @@ export type IssueConfig = {
 
 export type WorkflowConfig = {
   agents: WorkflowAgents
+  enableAcceptanceReport: boolean
   enableFinalGate: boolean
   maxRounds: MaxRoundsConfig
   projectDir: string
@@ -116,9 +121,11 @@ export type AgentStartResult = {
 export type ParsedArgs = Record<string, string>
 
 export type LoadedPrompts = {
+  acceptance: string
   controllerImplementer: string
   controllerReReview: string
   finalFix: string
+  finalPostCheck: string
   finalReview: string
   implement: string
   postReviewCheck: string

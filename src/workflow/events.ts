@@ -102,7 +102,7 @@ export type AgentDisplayStatus = "idle" | "working" | "completed" | "failed" | "
 /** Workflow 阶段 */
 export type WorkflowPhase =
   | "idle" | "implement" | "review" | "revise" | "post-check" | "controller-revise"
-  | "final-review" | "final-fix"
+  | "final-review" | "final-fix" | "acceptance"
 
 /** 需要人工输入的详情 */
 export type NeedsInputDetail = {

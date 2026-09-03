@@ -9,6 +9,7 @@ import type { WorkflowConfig } from "../types.js"
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..")
 
 type ConfigOverrides = {
+  enableAcceptanceReport?: boolean
   implement?: string
   review?: string
   revise?: string
@@ -26,6 +27,7 @@ const buildMinimalConfig = (dir: string, overrides: ConfigOverrides = {}): Workf
     gateReviewer: { name: "final-rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
     gateFixer: { name: "final-fix", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
   },
+  enableAcceptanceReport: overrides.enableAcceptanceReport ?? true,
   enableFinalGate: overrides.enableFinalGate ?? true,
   maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: dir,
@@ -95,6 +97,12 @@ describe("loadPrompts", () => {
     expect(prompts.revise).toContain("{{reviewOutput}}")
     expect(prompts.controllerImplementer).toContain("{{controllerNotes}}")
     expect(prompts.postReviewCheck).toContain("{{reviewStatus}}")
+    expect(prompts.postReviewCheck).toContain("TypeScript 类型检查")
+    expect(prompts.postReviewCheck).not.toContain("{{postCheckBody}}")
+    expect(prompts.finalPostCheck).toContain("Final Fixer")
+    expect(prompts.finalPostCheck).not.toContain("{{postCheckBody}}")
+    expect(prompts.acceptance).toContain("{{reportPath}}")
+    expect(prompts.acceptance).not.toContain("{{outputFormat}}")
   })
 
   it("injects STATUS output partials into default final prompts", async () => {

@@ -43,8 +43,14 @@ vi.mock("./review-loop.js", () => ({
 }))
 
 vi.mock("./final-gate.js", () => ({
+  closeFinalGatePanes: vi.fn(async () => {}),
   createFinalSessionDir: vi.fn(async () => "/tmp/final-session"),
   runFinalGate: vi.fn(async () => {}),
+}))
+
+vi.mock("./acceptance.js", () => ({
+  runAcceptance: vi.fn(async () => {}),
+  shouldRunAcceptance: vi.fn(() => false),
 }))
 
 const AGENT_CONFIG = (name: string) => ({
@@ -63,12 +69,15 @@ const buildConfig = (dir: string, withFinalGate: boolean): WorkflowConfig => ({
       ? { gateReviewer: AGENT_CONFIG("final-rev"), gateFixer: AGENT_CONFIG("final-fix") }
       : {}),
   },
+  enableAcceptanceReport: false,
   enableFinalGate: withFinalGate,
   maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: dir,
   prompts: {
+    acceptance: "",
     implement: "", review: "", revise: "", reReview: "",
     controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
+    finalPostCheck: "", finalReview: "", finalFix: "",
   },
   issues: [{ title: "Issue One", specPath: path.join(dir, "spec.md") }],
 })
@@ -79,15 +88,17 @@ const buildRuntime = (config: WorkflowConfig, configPath: string): WorkflowRunti
   config,
   configPath,
   eventBus: createWorkflowEventBus(),
+  finalFixerTouched: false,
   finalFixerPane: "",
   finalReviewerPane: "",
   hasGit: false,
   implementerPane: "",
   issueIndex: 0,
   prompts: {
+    acceptance: "",
     implement: "", review: "", revise: "", reReview: "",
     controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
-    finalReview: "", finalFix: "",
+    finalPostCheck: "", finalReview: "", finalFix: "",
   },
   reviewerPane: "",
   startBaseSha: undefined,

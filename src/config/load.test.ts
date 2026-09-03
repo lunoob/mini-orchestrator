@@ -254,6 +254,24 @@ describe("loadConfig", () => {
   })
 })
 
+describe("acceptance report", () => {
+  it("is enabled by default", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir)
+
+    const config = await loadConfig(configPath)
+
+    expect(config.enableAcceptanceReport).toBe(true)
+  })
+
+  it("rejects a non-boolean enableAcceptanceReport", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))
+    const configPath = writeConfigWithSpec(dir, { enableAcceptanceReport: "true" })
+
+    await expect(loadConfig(configPath)).rejects.toThrow(/enableAcceptanceReport must be a boolean/)
+  })
+})
+
 describe("final gate", () => {
   it("is disabled by default", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "cfg-test-"))

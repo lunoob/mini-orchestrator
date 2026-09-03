@@ -25,6 +25,9 @@ const DEFAULT_REVISE_PROMPT = path.join(PROJECT_ROOT, "prompts/revise.md")
 const DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-implementer.md")
 const DEFAULT_CONTROLLER_RE_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/controller-re-review.md")
 const DEFAULT_POST_REVIEW_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/post-review-check.md")
+const DEFAULT_FINAL_POST_CHECK_PROMPT = path.join(PROJECT_ROOT, "prompts/final-post-check.md")
+const DEFAULT_POST_CHECK_BODY_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/post-check-body.md")
+const DEFAULT_ACCEPTANCE_PROMPT = path.join(PROJECT_ROOT, "prompts/acceptance.md")
 const DEFAULT_IMPLEMENT_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/implement-output.md")
 const DEFAULT_REVIEW_OUTPUT_PARTIAL = path.join(PROJECT_ROOT, "prompts/partials/review-output.md")
 const DEFAULT_FINAL_REVIEW_PROMPT = path.join(PROJECT_ROOT, "prompts/final-review.md")
@@ -111,13 +114,16 @@ export const loadConfig = async (configPath: string) => {
 
   const rawPrompts = (fileConfig.prompts ?? {}) as Partial<PromptConfig>
   const prompts: PromptConfig = {
+    acceptance: rawPrompts.acceptance ?? DEFAULT_ACCEPTANCE_PROMPT,
     controllerImplementer:
       rawPrompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT,
     controllerReReview:
       rawPrompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT,
     finalFix: rawPrompts.finalFix ?? DEFAULT_FINAL_FIX_PROMPT,
+    finalPostCheck: rawPrompts.finalPostCheck ?? DEFAULT_FINAL_POST_CHECK_PROMPT,
     finalReview: rawPrompts.finalReview ?? DEFAULT_FINAL_REVIEW_PROMPT,
     implement: rawPrompts.implement ?? DEFAULT_IMPLEMENT_PROMPT,
+    postCheckBody: rawPrompts.postCheckBody ?? DEFAULT_POST_CHECK_BODY_PARTIAL,
     postReviewCheck:
       rawPrompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT,
     outputFormatImplement:
@@ -149,6 +155,11 @@ export const loadConfig = async (configPath: string) => {
     throw new Error("[Config] enableFinalGate must be a boolean")
   }
 
+  const enableAcceptanceReport = fileConfig.enableAcceptanceReport ?? true
+  if (typeof enableAcceptanceReport !== "boolean") {
+    throw new Error("[Config] enableAcceptanceReport must be a boolean")
+  }
+
   const resolvedAgents = {
     implementer: resolveAgentInput(agents.implementer, "implementer"),
     reviewer: resolveAgentInput(agents.reviewer, "reviewer"),
@@ -172,6 +183,7 @@ export const loadConfig = async (configPath: string) => {
 
   return {
     agents: resolvedAgents,
+    enableAcceptanceReport,
     enableFinalGate,
     issues,
     maxRounds,
@@ -188,6 +200,19 @@ const readPrompt = async (configDir: string, file: string) =>
 const injectOutputFormat = (template: string, outputFormat: string) =>
   render(template, { outputFormat })
 
+const injectPostCheckBody = (template: string, postCheckBody: string) =>
+  render(template, { postCheckBody })
+
+const injectPromptPartials = (
+  template: string,
+  partials: { outputFormat: string, postCheckBody?: string },
+) => {
+  const withBody = partials.postCheckBody
+    ? injectPostCheckBody(template, partials.postCheckBody)
+    : template
+  return injectOutputFormat(withBody, partials.outputFormat)
+}
+
 const loadOutputFormat = async (
   configDir: string,
   partialPath: string,
@@ -196,7 +221,7 @@ const loadOutputFormat = async (
 }
 
 export const loadPrompts = async (config: WorkflowConfig, configDir: string): Promise<LoadedPrompts> => {
-  const [implementOutput, reviewOutput] = await Promise.all([
+  const [implementOutput, reviewOutput, postCheckBody] = await Promise.all([
     loadOutputFormat(
       configDir,
       config.prompts.outputFormatImplement ?? DEFAULT_IMPLEMENT_OUTPUT_PARTIAL,
@@ -205,9 +230,14 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
       configDir,
       config.prompts.outputFormatReview ?? DEFAULT_REVIEW_OUTPUT_PARTIAL,
     ),
+    loadOutputFormat(
+      configDir,
+      config.prompts.postCheckBody ?? DEFAULT_POST_CHECK_BODY_PARTIAL,
+    ),
   ])
 
   const [
+    acceptance,
     implement,
     reReview,
     review,
@@ -215,9 +245,11 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     controllerImplementer,
     controllerReReview,
     postReviewCheck,
+    finalPostCheck,
     finalReview,
     finalFix,
   ] = await Promise.all([
+    readPrompt(configDir, config.prompts.acceptance ?? DEFAULT_ACCEPTANCE_PROMPT),
     readPrompt(configDir, config.prompts.implement),
     readPrompt(configDir, config.prompts.reReview ?? DEFAULT_RE_REVIEW_PROMPT),
     readPrompt(configDir, config.prompts.review),
@@ -225,17 +257,22 @@ export const loadPrompts = async (config: WorkflowConfig, configDir: string): Pr
     readPrompt(configDir, config.prompts.controllerImplementer ?? DEFAULT_CONTROLLER_IMPLEMENTER_PROMPT),
     readPrompt(configDir, config.prompts.controllerReReview ?? DEFAULT_CONTROLLER_RE_REVIEW_PROMPT),
     readPrompt(configDir, config.prompts.postReviewCheck ?? DEFAULT_POST_REVIEW_CHECK_PROMPT),
+    readPrompt(configDir, config.prompts.finalPostCheck ?? DEFAULT_FINAL_POST_CHECK_PROMPT),
     readPrompt(configDir, config.prompts.finalReview ?? DEFAULT_FINAL_REVIEW_PROMPT),
     readPrompt(configDir, config.prompts.finalFix ?? DEFAULT_FINAL_FIX_PROMPT),
   ])
 
+  const postCheckPartials = { outputFormat: implementOutput, postCheckBody }
+
   return {
+    acceptance: injectOutputFormat(acceptance, reviewOutput),
     controllerImplementer: injectOutputFormat(controllerImplementer, implementOutput),
     controllerReReview: injectOutputFormat(controllerReReview, reviewOutput),
     finalFix: injectOutputFormat(finalFix, implementOutput),
+    finalPostCheck: injectPromptPartials(finalPostCheck, postCheckPartials),
     finalReview: injectOutputFormat(finalReview, reviewOutput),
     implement: injectOutputFormat(implement, implementOutput),
-    postReviewCheck: injectOutputFormat(postReviewCheck, implementOutput),
+    postReviewCheck: injectPromptPartials(postReviewCheck, postCheckPartials),
     reReview: injectOutputFormat(reReview, reviewOutput),
     review: injectOutputFormat(review, reviewOutput),
     revise: injectOutputFormat(revise, implementOutput),
