@@ -13,16 +13,21 @@ import {
 } from "./install-alias.js"
 
 const MAIN_TS_PATH = "/tmp/mini-orchestrator/src/main.ts"
+const TSX_BIN_PATH = "/tmp/mini-orchestrator/node_modules/.bin/tsx"
 
 describe("buildAliasBlock", () => {
   it("includes alias name and main.ts path", () => {
-    const block = buildAliasBlock(MAIN_TS_PATH)
+    const block = buildAliasBlock(MAIN_TS_PATH, TSX_BIN_PATH)
 
     expect(block).toContain(ALIAS_MARKER_START)
     expect(block).toContain(ALIAS_MARKER_END)
-    expect(block).toContain(`alias local-mini-orch='MINI_ORCH_COMMAND=local-mini-orch npx tsx ${MAIN_TS_PATH}'`)
+    expect(block).toContain(
+      `alias local-mini-orch='MINI_ORCH_COMMAND=local-mini-orch ${TSX_BIN_PATH} ${MAIN_TS_PATH}'`,
+    )
     expect(block).toContain(`alias ${ALIAS_NAME}=`)
     expect(block).toContain(MAIN_TS_PATH)
+    expect(block).toContain(TSX_BIN_PATH)
+    expect(block).not.toContain("npx tsx")
     expect(block).not.toContain("--config")
   })
 })
@@ -33,7 +38,7 @@ describe("installAlias", () => {
     const rcPath = path.join(tmp, ".zshrc")
     await writeFile(rcPath, "export PATH=$PATH\n", "utf8")
 
-    const result = await installAlias(MAIN_TS_PATH, rcPath)
+    const result = await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath)
 
     expect(result.success).toBe(true)
     const content = await readFile(rcPath, "utf8")
@@ -46,7 +51,7 @@ describe("installAlias", () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "install-alias-"))
     const rcPath = path.join(tmp, ".zshrc")
 
-    const result = await installAlias(MAIN_TS_PATH, rcPath)
+    const result = await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath)
 
     expect(result.success).toBe(true)
     const content = await readFile(rcPath, "utf8")
@@ -56,9 +61,9 @@ describe("installAlias", () => {
   it("returns error when alias already exists without force", async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "install-alias-"))
     const rcPath = path.join(tmp, ".zshrc")
-    await installAlias(MAIN_TS_PATH, rcPath)
+    await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath)
 
-    const result = await installAlias(MAIN_TS_PATH, rcPath)
+    const result = await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath)
 
     expect(result.success).toBe(false)
     expect(result.message).toContain("别名已存在")
@@ -67,9 +72,9 @@ describe("installAlias", () => {
   it("force mode replaces existing alias block", async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "install-alias-"))
     const rcPath = path.join(tmp, ".zshrc")
-    await installAlias("/old/main.ts", rcPath)
+    await installAlias("/old/main.ts", "/old/node_modules/.bin/tsx", rcPath)
 
-    const result = await installAlias(MAIN_TS_PATH, rcPath, { force: true })
+    const result = await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath, { force: true })
 
     expect(result.success).toBe(true)
     const content = await readFile(rcPath, "utf8")
@@ -84,7 +89,7 @@ describe("uninstallAlias", () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "install-alias-"))
     const rcPath = path.join(tmp, ".zshrc")
     await writeFile(rcPath, "export FOO=1\n", "utf8")
-    await installAlias(MAIN_TS_PATH, rcPath)
+    await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath)
 
     const result = await uninstallAlias(rcPath)
 

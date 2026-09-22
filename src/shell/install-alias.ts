@@ -14,8 +14,8 @@ export type InstallAliasResult = {
   message: string
 }
 
-export const buildAliasBlock = (mainTsPath: string): string => {
-  const aliasLine = `alias ${ALIAS_NAME}='${COMMAND_NAME_ENV}=${ALIAS_NAME} npx tsx ${mainTsPath}'`
+export const buildAliasBlock = (mainTsPath: string, tsxBinPath: string): string => {
+  const aliasLine = `alias ${ALIAS_NAME}='${COMMAND_NAME_ENV}=${ALIAS_NAME} ${tsxBinPath} ${mainTsPath}'`
   return `${ALIAS_MARKER_START}\n${aliasLine}\n${ALIAS_MARKER_END}`
 }
 
@@ -51,6 +51,7 @@ const readRcFile = async (rcPath: string): Promise<string> => {
 /** 在 shell rc 文件中安装 mini-orch 别名 */
 export const installAlias = async (
   mainTsPath: string,
+  tsxBinPath: string,
   rcPath: string,
   options?: { force?: boolean },
 ): Promise<InstallAliasResult> => {
@@ -66,7 +67,7 @@ export const installAlias = async (
       }
     }
 
-    const updated = `${removeAliasBlock(content)}\n\n${buildAliasBlock(mainTsPath)}\n`
+    const updated = `${removeAliasBlock(content)}\n\n${buildAliasBlock(mainTsPath, tsxBinPath)}\n`
     await writeFile(rcPath, updated, "utf8")
     return {
       success: true,
@@ -75,7 +76,7 @@ export const installAlias = async (
     }
   }
 
-  const block = buildAliasBlock(mainTsPath)
+  const block = buildAliasBlock(mainTsPath, tsxBinPath)
   if (!content) {
     await writeFile(rcPath, `${block}\n`, "utf8")
   } else {
