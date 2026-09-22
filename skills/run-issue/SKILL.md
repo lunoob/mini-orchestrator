@@ -62,7 +62,7 @@ disable-model-invocation: true
     "reviewer": {
       "name": "reviewer",
       "agent": "cursor",
-      "model": "cursor-grok-4.6-high"
+      "model": "cursor-grok-4.7-high"
     },
     "gateReviewer": "<仅 enableFinalGate 为 true 时填写>",
     "gateFixer": "<仅 enableFinalGate 为 true 时填写>"
@@ -157,9 +157,8 @@ mini-orch --config "'"$CONFIG_PATH"'"
     },
     "gateReviewer": {
       "name": "final-reviewer",
-      "agent": "codex",
-      "model": "gpt-5.6-terra",
-      "effort": "high"
+      "agent": "cursor",
+      "model": "cursor-grok-4.7-high"
     },
     "gateFixer": {
       "name": "final-fixer",
