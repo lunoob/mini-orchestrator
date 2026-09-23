@@ -56,7 +56,7 @@ disable-model-invocation: true
     "implementer": {
       "name": "implementer",
       "agent": "codex",
-      "model": "gpt-5.6-luna",
+      "model": "gpt-6-luna",
       "effort": "xhigh"
     },
     "reviewer": {
@@ -146,14 +146,14 @@ mini-orch --config "'"$CONFIG_PATH"'"
   "agents": {
     "implementer": {
       "name": "implementer",
-      "agent": "cursor",
-      "model": "composer-2.5"
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "xhigh"
     },
     "reviewer": {
       "name": "reviewer",
-      "agent": "codex",
-      "model": "gpt-5.6-luna",
-      "effort": "high"
+      "agent": "cursor",
+      "model": "grok-4.7-high"
     },
     "gateReviewer": {
       "name": "final-reviewer",
@@ -162,8 +162,9 @@ mini-orch --config "'"$CONFIG_PATH"'"
     },
     "gateFixer": {
       "name": "final-fixer",
-      "agent": "cursor",
-      "model": "composer-2.5"
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "xhigh"
     }
   }
 }
