@@ -10,6 +10,8 @@ export type WorkflowRuntime = {
   configPath: string
   eventBus: WorkflowEventBus
   /** Final Reviewer / Final Fixer 的 pane 与 session，仅在 final 阶段按需启动 */
+  /** Final Fixer 在本轮 final gate 中是否修改过代码 */
+  finalFixerTouched: boolean
   finalFixerPane: string
   finalFixerSession?: AgentSessionHandle
   finalReviewerPane: string

@@ -1,0 +1,50 @@
+{
+  "title": "IM 媒体 metadata 与渐进预览",
+  "projectDir": "/Users/mariashu/items/globus/monorepo-renji-G-5636",
+  "issues": [
+    {
+      "title": "IM 媒体 metadata 契约与五渠道接入",
+      "specPath": "/Users/mariashu/items/globus/monorepo-renji-G-5636/.agent-plans/im-media-metadata/01-contract-and-ingest.issue.md",
+      "state": "finish"
+    },
+    {
+      "title": "Atlas API 异步补全 IM 媒体派生资源",
+      "specPath": "/Users/mariashu/items/globus/monorepo-renji-G-5636/.agent-plans/im-media-metadata/02-atlas-media-enrichment.issue.md",
+      "state": "finish"
+    },
+    {
+      "title": "Atlas IM 媒体消息稳定布局与渐进预览",
+      "specPath": "/Users/mariashu/items/globus/monorepo-renji-G-5636/.agent-plans/im-media-metadata/03-atlas-media-rendering.issue.md",
+      "state": "finish"
+    }
+  ],
+  "maxRounds": {
+    "workflow": 30,
+    "finalGate": 20
+  },
+  "enableFinalGate": true,
+  "agents": {
+    "implementer": {
+      "name": "implementer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "high"
+    },
+    "gateReviewer": {
+      "name": "final-reviewer",
+      "agent": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "high"
+    },
+    "gateFixer": {
+      "name": "final-fixer",
+      "agent": "cursor",
+      "model": "composer-2.5"
+    }
+  }
+}

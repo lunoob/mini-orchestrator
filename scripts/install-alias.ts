@@ -1,3 +1,4 @@
+import { access, constants } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
@@ -5,6 +6,7 @@ import { getShellRcPath, installAlias, uninstallAlias } from "../src/shell/insta
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const MAIN_TS_PATH = path.resolve(__dirname, "../src/main.ts")
+const TSX_BIN_PATH = path.resolve(__dirname, "../node_modules/.bin/tsx")
 
 const showUsage = () => {
   console.log(`[Install]
@@ -45,7 +47,14 @@ const main = async () => {
     process.exit(result.success ? 0 : 1)
   }
 
-  const result = await installAlias(MAIN_TS_PATH, rcPath, { force })
+  try {
+    await access(TSX_BIN_PATH, constants.X_OK)
+  } catch {
+    console.error("[Install] 未找到 tsx，请先执行 pnpm install")
+    process.exit(1)
+  }
+
+  const result = await installAlias(MAIN_TS_PATH, TSX_BIN_PATH, rcPath, { force })
   console.log(`[Install] ${result.message}`)
   process.exit(result.success ? 0 : 1)
 }

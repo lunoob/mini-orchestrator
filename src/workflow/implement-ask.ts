@@ -23,6 +23,8 @@ export type ImplementAskDeps = {
   log: (message: string) => void
   /** 可选的 event bus，用于 terminal 面板交互 */
   eventBus?: WorkflowEventBus
+  /** workflow 任务标题，用于系统通知 */
+  workflowTitle?: string
 }
 
 export const defaultImplementAskDeps = (): ImplementAskDeps => ({
@@ -77,7 +79,7 @@ export const handleNeedsInputGate = async (
   deps.log(`可在 pane: ${paneId} 中处理后返回，选择继续或终止。`)
 
   // 始终发送系统通知（用户可能不盯着面板），去重由 turnId 保证
-  notifyNeedsInput(role, sessionHandle.provider, reason, sessionHandle.resumeId, paneId, String(sessionHandle.offset))
+  notifyNeedsInput(role, sessionHandle.provider, reason, sessionHandle.resumeId, paneId, String(sessionHandle.offset), deps.workflowTitle)
 
   if (deps.eventBus) {
     const result = await deps.eventBus.requestInteraction({

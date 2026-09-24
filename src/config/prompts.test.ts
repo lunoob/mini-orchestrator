@@ -4,22 +4,12 @@ import os from "node:os"
 import { describe, expect, it } from "vitest"
 
 import { loadPrompts } from "./load.js"
-import type { FinalGateConfig, WorkflowConfig } from "../types.js"
+import type { WorkflowConfig } from "../types.js"
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..")
 
-const buildFinalGateConfig = (overrides: Partial<FinalGateConfig> = {}): FinalGateConfig => ({
-  maxRounds: 3,
-  reviewer: { name: "final-rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
-  fixer: { name: "final-fix", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
-  prompts: {
-    review: path.join(PROJECT_ROOT, "prompts/final-review.md"),
-    fix: path.join(PROJECT_ROOT, "prompts/final-fix.md"),
-  },
-  ...overrides,
-})
-
 type ConfigOverrides = {
+  enableAcceptanceReport?: boolean
   implement?: string
   review?: string
   revise?: string
@@ -27,22 +17,24 @@ type ConfigOverrides = {
   outputFormatReview?: string
   finalReview?: string
   finalFix?: string
-  finalGate?: FinalGateConfig
+  enableFinalGate?: boolean
 }
 
 const buildMinimalConfig = (dir: string, overrides: ConfigOverrides = {}): WorkflowConfig => ({
-  implementer: { name: "impl", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
-  reviewer: { name: "rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
-  maxReviewRounds: 8,
+  agents: {
+    implementer: { name: "impl", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
+    reviewer: { name: "rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
+    gateReviewer: { name: "final-rev", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
+    gateFixer: { name: "final-fix", agent: "codex", model: "gpt-5.5", command: "codex --model gpt-5.5", integrationAgent: "codex" },
+  },
+  enableAcceptanceReport: overrides.enableAcceptanceReport ?? true,
+  enableFinalGate: overrides.enableFinalGate ?? true,
+  maxRounds: { workflow: 8, finalGate: 3 },
   projectDir: dir,
   issues: [{ title: "Test", specPath: path.join(dir, "spec.md") }],
-  finalGate: overrides.finalGate ?? buildFinalGateConfig({
-    prompts: {
-      review: overrides.finalReview ?? path.join(PROJECT_ROOT, "prompts/final-review.md"),
-      fix: overrides.finalFix ?? path.join(PROJECT_ROOT, "prompts/final-fix.md"),
-    },
-  }),
   prompts: {
+    finalReview: overrides.finalReview ?? path.join(PROJECT_ROOT, "prompts/final-review.md"),
+    finalFix: overrides.finalFix ?? path.join(PROJECT_ROOT, "prompts/final-fix.md"),
     implement: overrides.implement ?? path.join(PROJECT_ROOT, "prompts/implement.md"),
     review: overrides.review ?? path.join(PROJECT_ROOT, "prompts/review.md"),
     revise: overrides.revise ?? path.join(PROJECT_ROOT, "prompts/revise.md"),
@@ -105,6 +97,12 @@ describe("loadPrompts", () => {
     expect(prompts.revise).toContain("{{reviewOutput}}")
     expect(prompts.controllerImplementer).toContain("{{controllerNotes}}")
     expect(prompts.postReviewCheck).toContain("{{reviewStatus}}")
+    expect(prompts.postReviewCheck).toContain("TypeScript 类型检查")
+    expect(prompts.postReviewCheck).not.toContain("{{postCheckBody}}")
+    expect(prompts.finalPostCheck).toContain("Final Fixer")
+    expect(prompts.finalPostCheck).not.toContain("{{postCheckBody}}")
+    expect(prompts.acceptance).toContain("{{reportPath}}")
+    expect(prompts.acceptance).not.toContain("{{outputFormat}}")
   })
 
   it("injects STATUS output partials into default final prompts", async () => {
@@ -121,8 +119,8 @@ describe("loadPrompts", () => {
     expect(prompts.finalFix).not.toContain("{{outputFormat}}")
   })
 
-  it("loads default final prompts when finalGate is not configured", async () => {
-    const config = buildMinimalConfig(PROJECT_ROOT, { finalGate: undefined })
+  it("loads default final prompts when final gate is disabled", async () => {
+    const config = buildMinimalConfig(PROJECT_ROOT, { enableFinalGate: false })
 
     const prompts = await loadPrompts(config, PROJECT_ROOT)
 
@@ -164,11 +162,7 @@ describe("loadPrompts", () => {
     writeFileSync(customReview, "CUSTOM FINAL REVIEW BODY {{round}} {{specs}}", "utf8")
     writeFileSync(customFix, "CUSTOM FINAL FIX BODY {{round}} {{reviewOutput}}", "utf8")
 
-    const config = buildMinimalConfig(dir, {
-      finalGate: buildFinalGateConfig({
-        prompts: { review: customReview, fix: customFix },
-      }),
-    })
+    const config = buildMinimalConfig(dir, { finalReview: customReview, finalFix: customFix })
 
     const prompts = await loadPrompts(config, dir)
 

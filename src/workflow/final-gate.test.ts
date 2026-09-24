@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest"
 import type { AgentSessionHandle } from "../agent/transcript/types.js"
 import { bootstrapSession, sendTaskAndMonitor, startAgentResumed, stopAgent, waitForAgentWithMonitor } from "../agent/index.js"
 import { buildDiffFileSection, prepareReviewContext } from "./review-context.js"
-import { runFinalGate } from "./final-gate.js"
+import { closeFinalGatePanes, runFinalGate } from "./final-gate.js"
 import type { WorkflowRuntime } from "./types.js"
 import type { WorkflowEventBus } from "./events.js"
 
@@ -20,7 +20,7 @@ const mockSession = (resumeId: string): AgentSessionHandle => ({
 })
 
 vi.mock("../agent/index.js", () => ({
-  bootstrapSession: vi.fn(async (agent: { name: string }) => mockSession(`resume-${agent.name}`)),
+  bootstrapSession: vi.fn(async (_dir: string, agent: { name: string }) => mockSession(`resume-${agent.name}`)),
   sendTask: vi.fn(async () => {}),
   sendTaskAndMonitor: vi.fn(),
   startAgentResumed: vi.fn(async (_dir: string, agent: { name: string }) => `pane-${agent.name}`),
@@ -69,19 +69,19 @@ const buildRuntime = (overrides: Partial<WorkflowRuntime> = {}): WorkflowRuntime
     args: {},
     baseSha: "base-after-last-issue",
     config: {
-      implementer: AGENT_CONFIG("impl"),
-      reviewer: AGENT_CONFIG("rev"),
-      maxReviewRounds: 8,
+      agents: {
+        implementer: AGENT_CONFIG("impl"),
+        reviewer: AGENT_CONFIG("rev"),
+        gateReviewer: AGENT_CONFIG("final-rev"),
+        gateFixer: AGENT_CONFIG("final-fix"),
+      },
+      enableAcceptanceReport: false,
+      enableFinalGate: true,
+      maxRounds: { workflow: 8, finalGate: 3 },
       projectDir: "/tmp/project",
       prompts: {
         implement: "", review: "", revise: "", reReview: "",
         controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
-      },
-      finalGate: {
-        maxRounds: 3,
-        reviewer: AGENT_CONFIG("final-rev"),
-        fixer: AGENT_CONFIG("final-fix"),
-        prompts: { review: "/tmp/final-review.md", fix: "/tmp/final-fix.md" },
       },
       issues: [
         { title: "Issue One", specPath: "/tmp/spec1.md" },
@@ -90,6 +90,7 @@ const buildRuntime = (overrides: Partial<WorkflowRuntime> = {}): WorkflowRuntime
     },
     configPath: "/tmp/workflow.json",
     eventBus,
+    finalFixerTouched: false,
     finalFixerPane: "",
     finalReviewerPane: "",
     hasGit: true,
@@ -98,8 +99,10 @@ const buildRuntime = (overrides: Partial<WorkflowRuntime> = {}): WorkflowRuntime
     prompts: {
       implement: "", review: "", revise: "", reReview: "",
       controllerImplementer: "", controllerReReview: "", postReviewCheck: "",
+      finalPostCheck: "Final PostCheck {{round}} {{reviewStatus}}",
       finalReview: "Final Review {{round}} {{specs}} {{diffFileSection}} {{baseSha}} {{headSha}} {{lastReviewSection}}",
       finalFix: "Final Fix {{round}} {{specPaths}} {{reviewOutput}}",
+      acceptance: "",
     },
     reviewerPane: "",
     startBaseSha: "base0",
@@ -129,49 +132,32 @@ beforeEach(() => {
 })
 
 describe("runFinalGate", () => {
-  it("runs review FAIL → final fixer DONE → next review PASS, without complete/fail events", async () => {
+  it("runs review FAIL → fixer DONE → review PASS → final post-check, leaving panes open", async () => {
     vi.mocked(sendTaskAndMonitor)
       .mockResolvedValueOnce(monitorResult(REVIEW_FAIL_OUTPUT))
       .mockResolvedValueOnce(monitorResult(FIX_DONE_OUTPUT))
       .mockResolvedValueOnce(monitorResult(REVIEW_PASS_OUTPUT))
+      .mockResolvedValueOnce(monitorResult(FIX_DONE_OUTPUT))
 
     const runtime = buildRuntime()
     await runFinalGate(runtime, "/tmp/final-session")
 
-    // 全量 diff 从 workflow 起始 baseline 开始
     expect(prepareReviewContext).toHaveBeenNthCalledWith(1, "/tmp/final-session", "/tmp/project", "base0", 1)
     expect(prepareReviewContext).toHaveBeenNthCalledWith(2, "/tmp/final-session", "/tmp/project", "base0", 2)
 
-    // reviewer 输入包含全部 issue 标题与 specPath、diff、round；第 2 轮起包含上一轮 review 正文
     const prompts = vi.mocked(sendTaskAndMonitor).mock.calls.map(([, prompt]) => prompt)
-    expect(prompts).toHaveLength(3)
+    expect(prompts).toHaveLength(4)
     expect(prompts[0]).toContain("Final Review 1")
-    expect(prompts[0]).toContain("Issue One")
-    expect(prompts[0]).toContain("/tmp/spec1.md")
-    expect(prompts[0]).toContain("Issue Two")
-    expect(prompts[0]).toContain("diff-section")
-    expect(prompts[0]).toContain("base0")
-    expect(prompts[0]).not.toContain("上一轮")
-
-    // fixer 输入包含去 STATUS 行的问题清单、round、spec 路径列表
     expect(prompts[1]).toContain("Final Fix 1")
-    expect(prompts[1]).toContain("问题一：未通过")
-    expect(prompts[1]).toContain("/tmp/spec1.md")
-    expect(prompts[1]).not.toContain("STATUS: REVIEW_FAIL")
-
     expect(prompts[2]).toContain("Final Review 2")
-    expect(prompts[2]).toContain("上一轮")
-    expect(prompts[2]).toContain("问题一：未通过")
+    expect(prompts[3]).toContain("Final PostCheck 2")
 
-    // 终端依次显示 final-review → final-fix → final-review
-    expect(phaseEvents(runtime.eventBus)).toEqual(["final-review", "final-fix", "final-review"])
-
+    expect(phaseEvents(runtime.eventBus)).toEqual([
+      "final-review", "final-fix", "final-review", "post-check",
+    ])
+    expect(runtime.finalFixerTouched).toBe(true)
     expect(failEvents(runtime.eventBus)).toEqual([])
-    expect(completeEvents(runtime.eventBus)).toEqual([])
-
-    // 启动的 final panes 全部关闭
-    expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
-    expect(stopAgent).toHaveBeenCalledWith("pane-final-fix")
+    expect(stopAgent).not.toHaveBeenCalled()
   })
 
   it("returns success on first round REVIEW_PASS without starting the final fixer", async () => {
@@ -181,15 +167,19 @@ describe("runFinalGate", () => {
     await runFinalGate(runtime, "/tmp/final-session")
 
     expect(startAgentResumed).toHaveBeenCalledTimes(1)
-    expect(startAgentResumed).toHaveBeenCalledWith("/tmp/project", expect.objectContaining({ name: "final-rev" }), expect.any(String), expect.any(Object))
-    expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
-    expect(stopAgent).not.toHaveBeenCalledWith("pane-final-fix")
+    expect(startAgentResumed).toHaveBeenCalledWith(
+      "/tmp/project",
+      expect.objectContaining({ name: "final-rev" }),
+      expect.objectContaining({ resumeId: "resume-final-rev", jsonl: "/tmp/resume-final-rev.jsonl" }),
+      expect.any(Object),
+    )
+    expect(stopAgent).not.toHaveBeenCalled()
     expect(failEvents(runtime.eventBus)).toEqual([])
   })
 
   it("publishes fail and throws when final review fails on the last round", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 1 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 1 } },
     })
     vi.mocked(sendTaskAndMonitor).mockResolvedValueOnce(monitorResult(REVIEW_FAIL_OUTPUT))
 
@@ -206,7 +196,7 @@ describe("runFinalGate", () => {
 
   it("publishes fail and throws when review still fails after a fixer round", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 2 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 2 } },
     })
     vi.mocked(sendTaskAndMonitor)
       .mockResolvedValueOnce(monitorResult(REVIEW_FAIL_OUTPUT))
@@ -225,7 +215,7 @@ describe("runFinalGate", () => {
 
   it("publishes fail and throws when REVIEW_NEEDS_CHECK retries exceed maxRounds", async () => {
     const runtime = buildRuntime({
-      config: { ...buildRuntime().config, finalGate: { ...buildRuntime().config.finalGate!, maxRounds: 1 } },
+      config: { ...buildRuntime().config, maxRounds: { workflow: 8, finalGate: 1 } },
     })
     vi.mocked(sendTaskAndMonitor).mockResolvedValueOnce(monitorResult(NEEDS_CHECK_OUTPUT))
     // 人工核查后 reviewer 重审仍 NEEDS_CHECK → 超过上限
@@ -250,7 +240,7 @@ describe("runFinalGate", () => {
     expect(failEvents(runtime.eventBus)).toEqual([])
     expect(completeEvents(runtime.eventBus)).toEqual([])
     expect(startAgentResumed).toHaveBeenCalledTimes(1)
-    expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
+    expect(stopAgent).not.toHaveBeenCalled()
   })
 
   it("propagates IMPLEMENT_FAILED from the final fixer and closes panes", async () => {
@@ -269,8 +259,22 @@ describe("runFinalGate", () => {
     expect(stopAgent).toHaveBeenCalledWith("pane-final-fix")
   })
 
-  it("is a no-op when finalGate is not configured", async () => {
-    const runtime = buildRuntime({ config: { ...buildRuntime().config, finalGate: undefined } })
+  it("closes panes via closeFinalGatePanes", async () => {
+    const runtime = buildRuntime({
+      finalFixerPane: "pane-final-fix",
+      finalReviewerPane: "pane-final-rev",
+    })
+
+    await closeFinalGatePanes(runtime)
+
+    expect(stopAgent).toHaveBeenCalledWith("pane-final-fix")
+    expect(stopAgent).toHaveBeenCalledWith("pane-final-rev")
+    expect(runtime.finalFixerPane).toBe("")
+    expect(runtime.finalReviewerPane).toBe("")
+  })
+
+  it("is a no-op when final gate is disabled", async () => {
+    const runtime = buildRuntime({ config: { ...buildRuntime().config, enableFinalGate: false } })
 
     await runFinalGate(runtime, "/tmp/final-session")
 

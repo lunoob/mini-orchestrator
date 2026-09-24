@@ -37,6 +37,7 @@ export const handleMonitorResult = async (
   context: string,
   session: AgentSessionHandle,
   eventBus?: import("./events.js").WorkflowEventBus,
+  workflowTitle?: string,
 ): Promise<string> => {
   const agentKey = role === "implementer" ? "implementer" : "reviewer"
 
@@ -53,7 +54,7 @@ export const handleMonitorResult = async (
   }
 
   const depsWithBus = eventBus
-    ? { ...defaultImplementAskDeps(), eventBus }
+    ? { ...defaultImplementAskDeps(), eventBus, workflowTitle }
     : undefined
 
   // monitor 级 needs_input（原生提问）→ 门卫，循环处理 gate 后的新状态
@@ -160,12 +161,12 @@ const settleAgentStatus = async (
 const ensureImplementer = async (runtime: WorkflowRuntime): Promise<AgentSessionHandle> => {
   if (runtime.implementerPane) return runtime.implementerSession!
   if (!runtime.implementerSession) {
-    runtime.implementerSession = await bootstrapSession(runtime.config.implementer)
+    runtime.implementerSession = await bootstrapSession(runtime.config.projectDir, runtime.config.agents.implementer)
   }
   runtime.implementerPane = await startAgentResumed(
     runtime.config.projectDir,
-    runtime.config.implementer,
-    runtime.implementerSession.resumeId,
+    runtime.config.agents.implementer,
+    runtime.implementerSession,
     { ensureUniqueName: true },
   )
   console.log(`[Review] Started implementer on demand for repair: ${runtime.implementerPane}`)
@@ -190,7 +191,7 @@ export const sendControllerRevise = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `controller revise round ${round}`, session, runtime.eventBus,
+    `controller revise round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -202,7 +203,7 @@ const conductReview = async (
 ) => {
   if (!runtime.reviewerSession) throw new Error("[Review] Missing reviewer session")
 
-  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds: runtime.config.maxReviewRounds })
+  runtime.eventBus.publish({ type: "review_round_change", round, maxRounds: runtime.config.maxRounds.workflow })
   runtime.eventBus.publish({ type: "agent_state_change", agent: "reviewer", status: "working" })
 
   const reviewContext = await prepareReviewContext(sessionDir, runtime.config.projectDir, runtime.baseSha, round)
@@ -226,7 +227,7 @@ const conductReview = async (
 
   const final = await handleMonitorResult(
     "reviewer", runtime.reviewerPane, finalText, status, question,
-    `review round ${round}`, runtime.reviewerSession, runtime.eventBus,
+    `review round ${round}`, runtime.reviewerSession, runtime.eventBus, runtime.config.title,
   )
 
   const parsed = parseStatus(final, "reviewer")
@@ -258,6 +259,7 @@ export const handleNeedsCheck = async (
     "Review 需要人工核查",
     session.resumeId, pane,
     String(session.offset),
+    runtime.config.title,
   )
 
   const yes = await promptNeedsCheckGate(round, runtime.eventBus)
@@ -272,7 +274,7 @@ export const handleNeedsCheck = async (
   session.offset = result.finalOffset
   resetNotifyDedup()
 
-  const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus }
+  const depsWithBus = { ...defaultImplementAskDeps(), eventBus: runtime.eventBus, workflowTitle: runtime.config.title }
   let finalText = result.finalText
   let currentStatus = result.status
   let currentQuestion = result.lastEvent?.question
@@ -328,7 +330,7 @@ export const sendPostReviewCheck = async (
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `post-review check round ${round}`, session, runtime.eventBus,
+    `post-review check round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -349,7 +351,7 @@ export const sendReviseAfterFail = async (runtime: WorkflowRuntime, round: numbe
 
   await handleMonitorResult(
     "implementer", runtime.implementerPane, finalText, status, question,
-    `revise round ${round}`, session, runtime.eventBus,
+    `revise round ${round}`, session, runtime.eventBus, runtime.config.title,
   )
 
   runtime.eventBus.publish({ type: "agent_state_change", agent: "implementer", status: "completed" })
@@ -363,12 +365,12 @@ export const runReviewLoop = async (
 
   if (runtime.reviewerSession && !runtime.reviewerPane) {
     runtime.reviewerPane = await startAgentResumed(
-      runtime.config.projectDir, runtime.config.reviewer,
-      runtime.reviewerSession.resumeId, { ensureUniqueName: true },
+      runtime.config.projectDir, runtime.config.agents.reviewer,
+      runtime.reviewerSession, { ensureUniqueName: true },
     )
   }
 
-  for (let round = startRound; round <= runtime.config.maxReviewRounds; round += 1) {
+  for (let round = startRound; round <= runtime.config.maxRounds.workflow; round += 1) {
     let activeLoopOptions: ReviewLoopOptions | undefined = round === startRound ? initialOptions : undefined
     let retrySameRound = true
 
@@ -395,9 +397,9 @@ export const runReviewLoop = async (
         let needsCheckRound = 0
         while (true) {
           needsCheckRound++
-          if (needsCheckRound > runtime.config.maxReviewRounds) {
-            runtime.eventBus.publish({ type: "fail", reason: `Review needs_check exceeded ${runtime.config.maxReviewRounds} rounds` })
-            throw new Error(`[Review] needs_check exceeded ${runtime.config.maxReviewRounds} rounds.`)
+          if (needsCheckRound > runtime.config.maxRounds.workflow) {
+            runtime.eventBus.publish({ type: "fail", reason: `Review needs_check exceeded ${runtime.config.maxRounds.workflow} rounds` })
+            throw new Error(`[Review] needs_check exceeded ${runtime.config.maxRounds.workflow} rounds.`)
           }
           const decision = await handleNeedsCheck(runtime, round, runtime.reviewerSession!, runtime.reviewerPane)
           if (decision.action === "approved") return
@@ -411,9 +413,9 @@ export const runReviewLoop = async (
           }
           if (reParsed.status === "REVIEW_FAIL") {
             // 重审 fail → 进入 revise 修复
-            if (round === runtime.config.maxReviewRounds) {
-              runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxReviewRounds} rounds` })
-              throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
+            if (round === runtime.config.maxRounds.workflow) {
+              runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxRounds.workflow} rounds` })
+              throw new Error(`[Review] Review failed after ${runtime.config.maxRounds.workflow} rounds.`)
             }
             await sendReviseAfterFail(runtime, round, needsCheckOutput)
             break
@@ -428,9 +430,9 @@ export const runReviewLoop = async (
       }
 
       // REVIEW_FAIL 或 failed → 进入 revise 流程
-      if (round === runtime.config.maxReviewRounds) {
-        runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxReviewRounds} rounds` })
-        throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
+      if (round === runtime.config.maxRounds.workflow) {
+        runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxRounds.workflow} rounds` })
+        throw new Error(`[Review] Review failed after ${runtime.config.maxRounds.workflow} rounds.`)
       }
 
       await sendReviseAfterFail(runtime, round, reviewOutput)
@@ -438,6 +440,6 @@ export const runReviewLoop = async (
     }
   }
 
-  runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxReviewRounds} rounds` })
-  throw new Error(`[Review] Review failed after ${runtime.config.maxReviewRounds} rounds.`)
+  runtime.eventBus.publish({ type: "fail", reason: `Review failed after ${runtime.config.maxRounds.workflow} rounds` })
+  throw new Error(`[Review] Review failed after ${runtime.config.maxRounds.workflow} rounds.`)
 }

@@ -4,6 +4,7 @@ import type { WorkflowSnapshot } from "../workflow/events.js"
 import { calculateLayout, formatStatusLine, getStringDisplayWidth } from "./layout.js"
 
 const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnapshot => ({
+  workflowTitle: "",
   issueIndex: 0,
   issueCount: 3,
   issueTitle: "Auth",
@@ -188,7 +189,13 @@ describe("calculateLayout", () => {
     const snap = createSnapshot()
     const layout = calculateLayout(snap, 80, 24)
 
-    expect(layout.logHeight).toBe(24 - layout.panelHeight)
+    expect(layout.logHeight).toBe(24 - layout.panelHeight - 1)
+  })
+
+  it("reserves one row between the log area and status panel", () => {
+    const layout = calculateLayout(createSnapshot(), 80, 24)
+
+    expect(layout.logHeight + layout.panelHeight).toBe(23)
   })
 
   it("adjusts panel height for needs_input details", () => {
