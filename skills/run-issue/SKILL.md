@@ -57,7 +57,7 @@ disable-model-invocation: true
       "name": "implementer",
       "agent": "codex",
       "model": "gpt-6-luna",
-      "effort": "xhigh"
+      "effort": "max"
     },
     "reviewer": {
       "name": "reviewer",
@@ -148,7 +148,7 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "name": "implementer",
       "agent": "codex",
       "model": "gpt-6-luna",
-      "effort": "xhigh"
+      "effort": "max"
     },
     "reviewer": {
       "name": "reviewer",
@@ -164,7 +164,7 @@ mini-orch --config "'"$CONFIG_PATH"'"
       "name": "final-fixer",
       "agent": "codex",
       "model": "gpt-6-luna",
-      "effort": "xhigh"
+      "effort": "max"
     }
   }
 }
