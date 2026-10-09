@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest"
 
 import { extractStatus } from "../lib/status-parser.js"
-import { buildTestStatusPrompt, loadImplementOutputFormat } from "./test-status.js"
+import { buildTestStatusPrompt, loadImplementOutputFormat, TEST_STATUS_CONFIG } from "./test-status.js"
 
 describe("testStatus prompt and output parsing", () => {
+  it("defines the built-in agent config", () => {
+    expect(TEST_STATUS_CONFIG.agents.implementer).toEqual({
+      agent: "codex",
+      model: "gpt-5.6-luna",
+      name: "test-status",
+    })
+  })
+
   it("appends implement-output format with STATUS instructions", async () => {
     const outputFormat = await loadImplementOutputFormat()
     const prompt = buildTestStatusPrompt(outputFormat)

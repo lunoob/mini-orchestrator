@@ -17,7 +17,6 @@ import { resolveAgentConfig } from "../config/agents.js"
 import { parseStatus } from "../lib/status-parser.js"
 import { printSection, stripStatus } from "../lib/utils.js"
 import { CONTINUATION_PROMPT } from "./implement-ask.js"
-import type { ParsedArgs } from "../types.js"
 import type { WorkflowEventBus } from "./events.js"
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
@@ -33,6 +32,17 @@ const TEST_PROMPT = `#任务
 - 若 review 驳回，根据反馈修改后再次输出 \`completed\` outcome
 - 禁止自动执行 git commit 完成代码提交`
 
+export const TEST_STATUS_CONFIG = {
+  projectDir: process.cwd(),
+  agents: {
+    implementer: {
+      agent: "codex",
+      model: "gpt-5.6-luna",
+      name: "test-status",
+    },
+  },
+} as const
+
 export const loadImplementOutputFormat = async () => {
   const template = await readFile(IMPLEMENT_OUTPUT_PARTIAL, "utf8")
   // 不再使用分隔线占位符；直接返回模板内容
@@ -42,19 +52,9 @@ export const loadImplementOutputFormat = async () => {
 export const buildTestStatusPrompt = (outputFormat: string) =>
   `${TEST_PROMPT}\n\n${outputFormat}`
 
-export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBus) => {
-  const projectDir = args.projectDir ?? process.cwd()
-  const agent = resolveAgentConfig({
-    agent: "codex",
-    model: "gpt-5.6-luna",
-
-    // agent: "claude",
-    // model: "haiku",
-
-    // agent: "cursor",
-    // model: "composer-2.5",
-    name: "test-status",
-  })
+export const runTestStatus = async (eventBus?: WorkflowEventBus) => {
+  const projectDir = TEST_STATUS_CONFIG.projectDir
+  const agent = resolveAgentConfig(TEST_STATUS_CONFIG.agents.implementer)
 
   // 发布初始状态事件
   eventBus?.publish({ type: "issue_change", issueIndex: 0, issueCount: 1, issueTitle: "test-status" })
@@ -72,18 +72,18 @@ export const runTestStatus = async (args: ParsedArgs, eventBus?: WorkflowEventBu
   }
 
   try {
-    console.log("[TestStatus] Starting herdr status test with claude agent")
+    console.log("[TestStatus] Starting herdr status test with configured agent")
     console.log(`[TestStatus] Project dir: ${projectDir}`)
     console.log(`[TestStatus] Command: ${agent.command}`)
 
     await Promise.all([
-      runAgentUpdate(projectDir, agent, agentOutput),
+      runAgentUpdate(projectDir, agent),
       runAgentIntegration(agent, agentOutput),
     ])
 
     // 使用 JSONL-based monitoring 流程
     const sessionHandle = await bootstrapSession(agent)
-    paneId = await startAgentResumed(projectDir, agent, sessionHandle.resumeId, {
+    paneId = await startAgentResumed(projectDir, agent, sessionHandle, {
       ensureUniqueName: true,
     })
     started = true

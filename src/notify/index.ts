@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 
-type NotifyLevel = "success" | "warning" | "error"
+type NotifyLevel = "success" | "warning" | "error" | "info"
 type NotificationCommand = {
   args: string[]
   command: string
@@ -10,6 +10,7 @@ const SUBTITLES: Record<NotifyLevel, string> = {
   success: "✅ 工作流完成",
   warning: "⚠️ 需要人工 Review",
   error: "❌ 错误",
+  info: "📋 Issue 完成",
 }
 
 const escapeAppleScriptString = (value: string) => {
@@ -20,6 +21,13 @@ const escapeAppleScriptString = (value: string) => {
     .replaceAll("\n", "\\n")
 
   return `"${escaped}"`
+}
+
+const DEFAULT_NOTIFY_TITLE = "编排器"
+
+const resolveNotifyTitle = (workflowTitle?: string) => {
+  const trimmed = workflowTitle?.trim()
+  return trimmed ? trimmed : DEFAULT_NOTIFY_TITLE
 }
 
 export const buildNotificationCommand = (
@@ -58,19 +66,19 @@ const notify = (title: string, message: string, level: NotifyLevel) => {
   }
 }
 
-export const notifySuccess = () => {
+export const notifySuccess = (workflowTitle?: string) => {
   notify(
-    "编排器",
+    resolveNotifyTitle(workflowTitle),
     "所有 issue 已处理完毕，请查看结果。",
     "success",
   )
 }
 
-export const notifyIssueComplete = (title: string) => {
+export const notifyIssueComplete = (issueTitle: string, workflowTitle?: string) => {
   notify(
-    "编排器",
-    `Issue 已完成：${title}`,
-    "success",
+    resolveNotifyTitle(workflowTitle),
+    `Issue 已完成：${issueTitle}`,
+    "info",
   )
 }
 
@@ -82,13 +90,13 @@ export const notifyTestStatusComplete = () => {
   )
 }
 
-export const notifyError = (errorMessage: string) => {
+export const notifyError = (errorMessage: string, workflowTitle?: string) => {
   const shortMsg = errorMessage.length > 200
     ? `${errorMessage.slice(0, 197)}...`
     : errorMessage
 
   notify(
-    "编排器",
+    resolveNotifyTitle(workflowTitle),
     shortMsg,
     "error",
   )
@@ -135,12 +143,13 @@ export const notifyNeedsInput = (
   paneId?: string,
   /** turn 序号或偏移，确保同一 turn 只通知一次 */
   turnId?: string,
+  workflowTitle?: string,
 ) => {
   const key = `needs_input:${role}:${provider}:${resumeId ?? "unknown"}:${turnId ?? "0"}`
   globalDedup.notifyOnce(key, () => {
     const paneInfo = paneId ? ` (pane: ${paneId})` : ""
     notify(
-      "编排器",
+      resolveNotifyTitle(workflowTitle),
       `[${role}/${provider}]${paneInfo} 需要人工输入: ${reason}`,
       "warning",
     )

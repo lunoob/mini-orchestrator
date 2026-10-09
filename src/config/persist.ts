@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises"
 
-import type { IssueConfig, IssueState } from "../types.js"
+import type { IssueConfig, IssueState, WorkflowConfig, WorkflowStatus } from "../types.js"
 
 const markIssueState = async (
   configPath: string,
@@ -38,3 +38,22 @@ export const markIssueFinished = async (
   issueIndex: number,
   issues?: IssueConfig[],
 ) => markIssueState(configPath, issueIndex, "finish", issues)
+
+/** 回写 workflow 顶层 status，并同步更新内存中的 config（若传入） */
+export const setWorkflowStatus = async (
+  configPath: string,
+  status: WorkflowStatus,
+  config?: WorkflowConfig,
+) => {
+  const content = await readFile(configPath, "utf8")
+  const raw = JSON.parse(content) as Record<string, unknown>
+
+  raw.status = status
+  await writeFile(configPath, `${JSON.stringify(raw, null, 2)}\n`, "utf8")
+
+  if (config) {
+    config.status = status
+  }
+
+  console.log(`[Config] Workflow status → ${status}`)
+}

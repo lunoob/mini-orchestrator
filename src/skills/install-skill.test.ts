@@ -1,13 +1,17 @@
 import { access, constants, lstat, mkdtemp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { describe, expect, it } from "vitest"
+import { checkbox } from "@inquirer/prompts"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("@inquirer/prompts", () => ({ checkbox: vi.fn() }))
 
 import {
   getSkillInfos,
   installSkill,
   listAvailableSkills,
-  parseSkillSelection,
+  promptAgentSelection,
+  promptSkillSelection,
   uninstallSkill,
 } from "./install-skill.js"
 
@@ -18,6 +22,43 @@ const createSource = async (dir: string): Promise<string> => {
   await writeFile(path.join(source, "SKILL.md"), "# Test Skill\n", "utf8")
   return source
 }
+
+afterEach(() => {
+  vi.mocked(checkbox).mockReset()
+})
+
+describe("prompt selection summaries", () => {
+  it("uses only the skill name after skill selection", async () => {
+    vi.mocked(checkbox).mockResolvedValue([])
+
+    await promptSkillSelection([
+      { name: "run-issue", installedAgents: ["codex", "cursor"] },
+    ], "uninstall")
+
+    expect(checkbox).toHaveBeenCalledWith(expect.objectContaining({
+      choices: [{
+        name: "run-issue（已安装到 codex、cursor）",
+        value: "run-issue",
+        short: "run-issue",
+      }],
+    }))
+  })
+
+  it("uses only the agent name after agent selection", async () => {
+    vi.mocked(checkbox).mockResolvedValue([])
+
+    await promptAgentSelection(["run-issue"], "install", path.join(os.tmpdir(), "prompt-summary-home"))
+
+    expect(checkbox).toHaveBeenCalledWith(expect.objectContaining({
+      choices: expect.arrayContaining([
+        expect.objectContaining({
+          name: expect.stringContaining("Codex (~/.codex/skills)"),
+          short: "Codex",
+        }),
+      ]),
+    }))
+  })
+})
 
 describe("listAvailableSkills", () => {
   it("lists directories that contain SKILL.md", async () => {
@@ -44,52 +85,20 @@ describe("getSkillInfos", () => {
   it("marks installed skills", async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "skill-infos-"))
     const sourceDir = path.join(tmp, "source")
-    const targetBaseDir = path.join(tmp, "target")
+    const homeDir = path.join(tmp, "home")
 
     await mkdir(path.join(sourceDir, "alpha"), { recursive: true })
     await mkdir(path.join(sourceDir, "beta"), { recursive: true })
     await writeFile(path.join(sourceDir, "alpha", "SKILL.md"), "# Alpha\n", "utf8")
     await writeFile(path.join(sourceDir, "beta", "SKILL.md"), "# Beta\n", "utf8")
 
-    await installSkill(path.join(sourceDir, "alpha"), path.join(targetBaseDir, "alpha"))
+    await installSkill(path.join(sourceDir, "alpha"), path.join(homeDir, ".codex", "skills", "alpha"))
 
-    const infos = await getSkillInfos(sourceDir, targetBaseDir)
+    const infos = await getSkillInfos(sourceDir, ["codex"], homeDir)
     expect(infos).toEqual([
-      { name: "alpha", installed: true },
-      { name: "beta", installed: false },
+      { name: "alpha", installedAgents: ["codex"] },
+      { name: "beta", installedAgents: [] },
     ])
-  })
-})
-
-describe("parseSkillSelection", () => {
-  const skills = ["run-issue", "evaluate-integration-tests"]
-
-  it("parses comma-separated indices", () => {
-    expect(parseSkillSelection("1,2", skills)).toEqual({
-      ok: true,
-      selected: ["run-issue", "evaluate-integration-tests"],
-    })
-  })
-
-  it("supports all", () => {
-    expect(parseSkillSelection("all", skills)).toEqual({
-      ok: true,
-      selected: skills,
-    })
-  })
-
-  it("returns empty selection for blank input", () => {
-    expect(parseSkillSelection("   ", skills)).toEqual({
-      ok: true,
-      selected: [],
-    })
-  })
-
-  it("rejects invalid indices", () => {
-    expect(parseSkillSelection("9", skills)).toEqual({
-      ok: false,
-      message: "无效选择：9",
-    })
   })
 })
 
@@ -103,6 +112,7 @@ describe("installSkill", () => {
 
     expect(result.success).toBe(true)
     expect(result.path).toBe(target)
+    expect(result.message).toBe(`安装成功，路径：${target}`)
 
     // 验证目标是软链接
     const stats = await lstat(target)
@@ -118,6 +128,7 @@ describe("installSkill", () => {
 
     expect(result.success).toBe(true)
     expect(result.path).toBe(target)
+    expect(result.message).toBe(`安装成功，路径：${target}`)
 
     // 验证目标有文件且不是软链接
     const files = await readdir(target)

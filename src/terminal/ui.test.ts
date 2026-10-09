@@ -36,6 +36,7 @@ const createMockBlessed = () => {
   })
 
   const screen = vi.fn().mockReturnValue({
+    title: "mini-orch",
     append: vi.fn(),
     render: vi.fn(),
     destroy: vi.fn(),
@@ -67,6 +68,7 @@ const createMockBlessed = () => {
 // ── Helper ──
 
 const createSnapshot = (overrides: Partial<WorkflowSnapshot> = {}): WorkflowSnapshot => ({
+  workflowTitle: "",
   issueIndex: 0,
   issueCount: 3,
   issueTitle: "Auth",
@@ -126,6 +128,42 @@ describe("TerminalUI", () => {
 
       expect(blessed.log).toHaveBeenCalled()
       expect(blessed.box).toHaveBeenCalled()
+    })
+
+    it("updates screen title from workflow snapshot", () => {
+      const blessed = createMockBlessed()
+      const eventBus = createEventBus()
+      const ui = createBlessedUI(eventBus, blessed)
+      const screen = blessed.screen.mock.results[0].value
+
+      expect(screen.title).toBe("mini-orch")
+
+      ui.updateStatus(createSnapshot({ workflowTitle: "实现用户登录功能" }))
+      expect(screen.title).toBe("mini-orch — 实现用户登录功能")
+    })
+
+    it("configures a visible scrollbar for overflowing logs", () => {
+      const blessed = createMockBlessed()
+      const eventBus = createEventBus()
+      createBlessedUI(eventBus, blessed)
+
+      const options = blessed.log.mock.calls[0][0]
+      expect(options.scrollable).toBe(true)
+      expect(options.scrollbar.ch).not.toBe(" ")
+    })
+
+    it("leaves one row between the log area and status panel", () => {
+      const blessed = createMockBlessed()
+      const logWidget = {
+        log: vi.fn(), height: 50, focus: vi.fn(), key: vi.fn(), scroll: vi.fn(),
+        setScrollPerc: vi.fn(), getScrollPerc: vi.fn().mockReturnValue(100),
+        getScrollHeight: vi.fn().mockReturnValue(100), childBase: 0,
+      }
+      blessed.log.mockReturnValue(logWidget)
+
+      createBlessedUI(createEventBus(), blessed)
+
+      expect(logWidget.height).toBe(21)
     })
 
     it("subscribes to workflow events", () => {

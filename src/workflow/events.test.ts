@@ -88,6 +88,14 @@ describe("createWorkflowEventBus", () => {
     expect(snap.issueTitle).toBe("Auth")
   })
 
+  it("updates snapshot on workflow_init", () => {
+    const bus = createWorkflowEventBus()
+
+    bus.publish({ type: "workflow_init", title: "实现用户登录功能" })
+
+    expect(bus.getSnapshot().workflowTitle).toBe("实现用户登录功能")
+  })
+
   it("updates snapshot on phase_change", () => {
     const bus = createWorkflowEventBus()
 
@@ -438,6 +446,7 @@ describe("WorkflowSnapshot", () => {
 
     // spec §11 必须包含的字段
     const requiredFields = [
+      "workflowTitle",
       "issueIndex",
       "issueCount",
       "issueTitle",

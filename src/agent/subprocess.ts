@@ -3,7 +3,7 @@ import { spawn } from "node:child_process"
 /** 子进程输出回调：(消息, 流类型) => void */
 export type OutputCallback = (message: string, stream: "stdout" | "stderr") => void
 
-const DELAY_MS = 800
+const DELAY_MS = 1500
 
 export const run = async (command: string, args: string[], onOutput?: OutputCallback) => {
   await new Promise(resolve => setTimeout(resolve, DELAY_MS))
